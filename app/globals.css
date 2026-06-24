@@ -2,17 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --accent: #be5b1d;
+* {
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
 }
 
-/* Remove tap highlight on mobile */
-* { -webkit-tap-highlight-color: transparent; }
-
-/* Mono utility */
-.font-mono-sm {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.7rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+html, body {
+  background-color: #1c1917;
+  color: #ece6db;
+  margin: 0;
+  padding: 0;
 }
