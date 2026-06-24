@@ -11,13 +11,24 @@ import ExportPanel    from '@/components/ExportPanel'
 
 const TABS = ['Entries', 'Site Notes', 'Priorities', 'Export']
 
-export default function Home() {
-  const [property,    setProperty]    = useState(null)   // selected property object
-  const [activeTab,   setActiveTab]   = useState('Entries')
-  const [entries,     setEntries]     = useState([])
-  const [refreshKey,  setRefreshKey]  = useState(0)      // bump to re-fetch entries
+const s = {
+  page:      { maxWidth: 640, margin: '0 auto', minHeight: '100vh', paddingBottom: 48 },
+  header:    { position: 'sticky', top: 0, zIndex: 20, background: '#1b1917', borderBottom: '1px solid #3a352f', padding: '18px 16px 14px' },
+  eyebrow:   { fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#be5b1d', marginBottom: 4, fontFamily: 'monospace', display: 'block' },
+  h1:        { fontSize: 22, fontWeight: 700, letterSpacing: '0.02em', textTransform: 'uppercase', margin: '0 0 12px', color: '#ece6db' },
+  nav:       { position: 'sticky', top: 88, zIndex: 10, background: '#1b1917', borderBottom: '1px solid #3a352f', display: 'flex' },
+  tab:       { flex: 1, padding: '12px 4px', fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', background: 'transparent', border: 'none', borderBottom: '2px solid transparent', color: '#9a9285', cursor: 'pointer' },
+  tabActive: { flex: 1, padding: '12px 4px', fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', background: 'transparent', border: 'none', borderBottom: '2px solid #be5b1d', color: '#ece6db', cursor: 'pointer' },
+  main:      { flex: 1, padding: '16px 16px 64px' },
+  empty:     { color: '#9a9285', fontSize: 13, textAlign: 'center', marginTop: 48 },
+}
 
-  // Fetch entries whenever the property changes or a new entry is saved
+export default function Home() {
+  const [property,   setProperty]   = useState(null)
+  const [activeTab,  setActiveTab]  = useState('Entries')
+  const [entries,    setEntries]    = useState([])
+  const [refreshKey, setRefreshKey] = useState(0)
+
   useEffect(() => {
     if (!property) { setEntries([]); return }
     supabase
@@ -31,61 +42,31 @@ export default function Home() {
   const onEntrySaved = () => setRefreshKey(k => k + 1)
 
   return (
-    <div className="max-w-2xl mx-auto flex flex-col min-h-screen">
-
-      {/* ── Top bar ── */}
-      <header className="sticky top-0 z-20 bg-stone-950 border-b border-stone-800 px-4 pt-5 pb-3">
-        <p className="text-orange-600 text-[10px] font-mono tracking-widest uppercase mb-1">
-          Field Notes · Wildfire Inspection
-        </p>
-        <h1 className="font-bold text-xl tracking-wide uppercase mb-3">Site Intake</h1>
+    <div style={s.page}>
+      <header style={s.header}>
+        <span style={s.eyebrow}>Field Notes · Wildfire Inspection</span>
+        <h1 style={s.h1}>Site Intake</h1>
         <PropertySelector selected={property} onSelect={setProperty} />
       </header>
 
-      {/* ── Tab bar ── */}
-      <nav className="sticky top-[88px] z-10 bg-stone-950 border-b border-stone-800 flex">
+      <nav style={s.nav}>
         {TABS.map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-3 text-[10px] font-mono tracking-wider uppercase transition-colors
-              ${activeTab === tab
-                ? 'text-stone-100 border-b-2 border-orange-600'
-                : 'text-stone-500 border-b-2 border-transparent'}`}
+            style={activeTab === tab ? s.tabActive : s.tab}
           >
             {tab}
           </button>
         ))}
       </nav>
 
-      {/* ── Tab content ── */}
-      <main className="flex-1 p-4 pb-16">
-
-        {!property && (
-          <p className="text-stone-500 text-sm text-center mt-12">
-            Select or create a property above to begin.
-          </p>
-        )}
-
-        {property && activeTab === 'Entries' && (
-          <>
-            <EntryForm propertyId={property.id} onSaved={onEntrySaved} />
-            <EntriesList entries={entries} onDeleted={onEntrySaved} />
-          </>
-        )}
-
-        {property && activeTab === 'Site Notes' && (
-          <SiteNotes propertyId={property.id} />
-        )}
-
-        {property && activeTab === 'Priorities' && (
-          <Priorities propertyId={property.id} />
-        )}
-
-        {property && activeTab === 'Export' && (
-          <ExportPanel property={property} entries={entries} />
-        )}
-
+      <main style={s.main}>
+        {!property && <p style={s.empty}>Select or create a property above to begin.</p>}
+        {property && activeTab === 'Entries'    && <><EntryForm propertyId={property.id} onSaved={onEntrySaved} /><EntriesList entries={entries} onDeleted={onEntrySaved} /></>}
+        {property && activeTab === 'Site Notes' && <SiteNotes propertyId={property.id} />}
+        {property && activeTab === 'Priorities' && <Priorities propertyId={property.id} />}
+        {property && activeTab === 'Export'     && <ExportPanel property={property} entries={entries} />}
       </main>
     </div>
   )
