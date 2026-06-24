@@ -13,3 +13,14 @@ html, body {
   margin: 0;
   padding: 0;
 }
+
+select, input, textarea, button {
+  background-color: #292524;
+  color: #ece6db;
+  border-color: #44403c;
+}
+
+option {
+  background-color: #292524;
+  color: #ece6db;
+}
