@@ -3,7 +3,15 @@
 import { useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 
-// Resize + compress a File to a JPEG data URL under targetBytes
+const c = {
+  surface: '#242220',
+  line:    '#3a352f',
+  accent:  '#be5b1d',
+  text:    '#ece6db',
+  muted:   '#9a9285',
+  warn:    '#b5483a',
+}
+
 function compressImage(file, maxDim = 800, targetBytes = 700_000) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -18,10 +26,7 @@ function compressImage(file, maxDim = 800, targetBytes = 700_000) {
         canvas.getContext('2d').drawImage(img, 0, 0, w, h)
         let q = 0.65
         let url = canvas.toDataURL('image/jpeg', q)
-        while (url.length > targetBytes && q > 0.2) {
-          q -= 0.1
-          url = canvas.toDataURL('image/jpeg', q)
-        }
+        while (url.length > targetBytes && q > 0.2) { q -= 0.1; url = canvas.toDataURL('image/jpeg', q) }
         resolve(url)
       }
       img.onerror = reject
@@ -32,20 +37,17 @@ function compressImage(file, maxDim = 800, targetBytes = 700_000) {
   })
 }
 
-// Upload a base64 data URL to Supabase Storage, return the public URL
 async function uploadToSupabase(dataUrl, propertyId) {
   const blob = await (await fetch(dataUrl)).blob()
   const filename = `${propertyId}/${Date.now()}.jpg`
-  const { error } = await supabase.storage
-    .from('entry-photos')
-    .upload(filename, blob, { contentType: 'image/jpeg', upsert: false })
+  const { error } = await supabase.storage.from('entry-photos').upload(filename, blob, { contentType: 'image/jpeg', upsert: false })
   if (error) throw error
   const { data } = supabase.storage.from('entry-photos').getPublicUrl(filename)
   return data.publicUrl
 }
 
 export default function PhotoUpload({ propertyId, onPhotoUrl }) {
-  const [preview,   setPreview]   = useState(null)   // local data URL for preview
+  const [preview,   setPreview]   = useState(null)
   const [uploading, setUploading] = useState(false)
   const inputRef = useRef()
 
@@ -67,16 +69,13 @@ export default function PhotoUpload({ propertyId, onPhotoUrl }) {
     setUploading(false)
   }
 
-  function remove() {
-    setPreview(null)
-    onPhotoUrl(null)
-  }
+  function remove() { setPreview(null); onPhotoUrl(null) }
 
   if (preview) {
     return (
       <div>
-        <img src={preview} alt="Entry photo" className="rounded border border-stone-700 max-h-48 w-auto" />
-        <button onClick={remove} className="mt-2 text-red-500 text-xs font-mono uppercase tracking-wide">
+        <img src={preview} alt="Entry photo" style={{ borderRadius: 4, border: `1px solid ${c.line}`, maxHeight: 192, width: 'auto' }} />
+        <button onClick={remove} style={{ marginTop: 8, fontSize: 11, fontFamily: 'monospace', color: c.warn, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Remove photo
         </button>
       </div>
@@ -85,18 +84,12 @@ export default function PhotoUpload({ propertyId, onPhotoUrl }) {
 
   return (
     <>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleFile}
-      />
+      <input ref={inputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
       <button
         type="button"
         onClick={() => inputRef.current.click()}
         disabled={uploading}
-        className="w-full border border-dashed border-stone-700 rounded py-3 text-stone-500 text-xs font-mono uppercase tracking-wide hover:border-orange-600 hover:text-orange-600 transition-colors disabled:opacity-50"
+        style={{ width: '100%', background: c.surface, border: `1px dashed ${c.line}`, borderRadius: 4, padding: 14, textAlign: 'center', fontFamily: 'monospace', fontSize: 12, letterSpacing: '0.04em', textTransform: 'uppercase', color: c.muted, cursor: 'pointer' }}
       >
         {uploading ? 'Uploading…' : '+ Take / Upload Photo'}
       </button>
