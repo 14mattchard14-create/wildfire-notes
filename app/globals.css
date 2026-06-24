@@ -2,44 +2,89 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg:           #1b1917;
+  --surface:      #242220;
+  --surface-2:    #2d2a27;
+  --line:         #3a352f;
+  --accent:       #be5b1d;
+  --accent-dim:   #8c5530;
+  --text:         #ece6db;
+  --text-muted:   #9a9285;
+  --ok:           #6b8e63;
+  --warn:         #b5483a;
+  --info:         #7d8fa6;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
 }
 
 html, body {
-  background-color: #1c1917 !important;
-  color: #ece6db !important;
   margin: 0;
   padding: 0;
+  background: var(--bg) !important;
+  color: var(--text) !important;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
 }
 
-select, input, textarea {
-  background-color: #292524 !important;
-  color: #ece6db !important;
-  border: 1px solid #44403c !important;
-  border-radius: 4px !important;
-  padding: 8px 12px !important;
+h1 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin: 0 0 12px;
+  color: var(--text);
+}
+
+select,
+input[type="text"],
+input[type="date"],
+textarea {
   width: 100% !important;
-  font-size: 14px !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 4px !important;
+  color: var(--text) !important;
+  font-size: 15px !important;
+  padding: 10px 12px !important;
+  font-family: inherit !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  outline: none !important;
+}
+
+select:focus,
+input:focus,
+textarea:focus {
+  border-color: var(--accent) !important;
+}
+
+textarea {
+  resize: vertical !important;
+  min-height: 72px !important;
+  line-height: 1.5 !important;
 }
 
 option {
-  background-color: #292524 !important;
-  color: #ece6db !important;
+  background: var(--surface) !important;
+  color: var(--text) !important;
+}
+
+label {
+  display: block !important;
+  font-size: 10.5px !important;
+  font-family: monospace !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  color: var(--text-muted) !important;
+  margin-bottom: 6px !important;
 }
 
 button {
   cursor: pointer;
-}
-
-nav {
-  background-color: #1c1917 !important;
-  border-bottom: 1px solid #44403c !important;
-}
-
-header {
-  background-color: #1c1917 !important;
-  border-bottom: 1px solid #44403c !important;
 }
