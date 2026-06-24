@@ -3,18 +3,29 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
-const STATUS_BORDER = {
-  'Compliant':          'border-l-green-600',
-  'Non-Compliant':      'border-l-red-600',
-  'Needs Verification': 'border-l-blue-600',
-  'Not Applicable':     'border-l-stone-600',
+const c = {
+  surface: '#242220',
+  line:    '#3a352f',
+  accent:  '#be5b1d',
+  text:    '#ece6db',
+  muted:   '#9a9285',
+  ok:      '#6b8e63',
+  warn:    '#b5483a',
+  info:    '#7d8fa6',
 }
 
-const STATUS_TEXT = {
-  'Compliant':          'text-green-400',
-  'Non-Compliant':      'text-red-400',
-  'Needs Verification': 'text-blue-400',
-  'Not Applicable':     'text-stone-400',
+const BORDER = {
+  'Compliant':          c.ok,
+  'Non-Compliant':      c.warn,
+  'Needs Verification': c.info,
+  'Not Applicable':     c.muted,
+}
+
+const STATUS_COLOR = {
+  'Compliant':          c.ok,
+  'Non-Compliant':      c.warn,
+  'Needs Verification': c.info,
+  'Not Applicable':     c.muted,
 }
 
 export default function EntriesList({ entries, onDeleted }) {
@@ -27,75 +38,72 @@ export default function EntriesList({ entries, onDeleted }) {
   }
 
   if (!entries.length) {
-    return <p className="text-stone-600 text-sm text-center py-8 italic">No entries logged yet.</p>
+    return <p style={{ color: c.muted, fontSize: 13, textAlign: 'center', padding: '32px 0', fontStyle: 'italic' }}>No entries logged yet.</p>
   }
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-3">
-        <h2 className="text-[10px] font-mono text-stone-500 tracking-widest uppercase">Logged Entries</h2>
-        <span className="text-[10px] font-mono text-stone-600">{entries.length}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <span style={{ fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted }}>Logged Entries</span>
+        <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: c.muted }}>{entries.length}</span>
       </div>
 
-      <div className="space-y-3">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
         {entries.map(entry => (
-          <div
-            key={entry.id}
-            className={`bg-stone-900 border border-stone-800 border-l-4 rounded-lg p-3 ${STATUS_BORDER[entry.status] ?? 'border-l-stone-700'}`}
-          >
+          <div key={entry.id} style={{
+            background: c.surface,
+            border: `1px solid ${c.line}`,
+            borderLeft: `4px solid ${BORDER[entry.status] ?? c.muted}`,
+            borderRadius: 4,
+            padding: '12px 13px',
+          }}>
             {/* Top row */}
-            <div className="flex justify-between items-start mb-1">
-              <span className="text-[10px] font-mono text-orange-600 tracking-wide uppercase">{entry.zone}</span>
-              <span className={`text-[10px] font-mono tracking-wide uppercase ${STATUS_TEXT[entry.status] ?? 'text-stone-400'}`}>
-                {entry.status}
-              </span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: c.accent, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{entry.zone}</span>
+              <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: STATUS_COLOR[entry.status] ?? c.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{entry.status}</span>
             </div>
 
             {/* Category */}
-            <p className="font-semibold text-sm mb-1">{entry.category}</p>
+            <p style={{ fontWeight: 600, fontSize: 15, margin: '0 0 4px', color: c.text }}>{entry.category}</p>
 
             {/* Distance */}
             {entry.distance && (
-              <p className="text-[11px] font-mono text-stone-500 mb-1">{entry.distance}</p>
+              <p style={{ fontSize: 11, fontFamily: 'monospace', color: c.muted, margin: '0 0 4px' }}>{entry.distance}</p>
             )}
 
             {/* Note */}
-            <p className="text-sm text-stone-200">{entry.note}</p>
+            <p style={{ fontSize: 14, color: c.text, margin: 0 }}>{entry.note}</p>
 
-            {/* Detail (expandable) */}
+            {/* Detail toggle */}
             {entry.detail && (
               <button
                 onClick={() => setExpanded(expanded === entry.id ? null : entry.id)}
-                className="mt-1 text-[11px] font-mono text-orange-500 tracking-wide"
+                style={{ marginTop: 6, fontSize: 11, fontFamily: 'monospace', color: c.accent, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
               >
                 {expanded === entry.id ? '− Hide details' : '+ Show details'}
               </button>
             )}
             {expanded === entry.id && entry.detail && (
-              <p className="mt-2 text-sm text-stone-400 border-t border-dashed border-stone-800 pt-2">
-                {entry.detail}
-              </p>
+              <p style={{ marginTop: 8, fontSize: 13, color: c.muted, borderTop: `1px dashed ${c.line}`, paddingTop: 8 }}>{entry.detail}</p>
             )}
 
-            {/* Photo */}
+            {/* Photo - smaller thumbnail */}
             {entry.photo_url && (
               <img
                 src={entry.photo_url}
                 alt="Entry photo"
-                className="mt-3 rounded border border-stone-700 max-h-52 w-auto cursor-zoom-in"
                 onClick={() => window.open(entry.photo_url, '_blank')}
+                style={{ marginTop: 10, borderRadius: 4, border: `1px solid ${c.line}`, height: 80, width: 'auto', cursor: 'zoom-in', display: 'block' }}
               />
             )}
 
-            {/* Actions */}
-            <div className="mt-3 flex gap-4">
-              <button
-                onClick={() => deleteEntry(entry.id)}
-                className="text-[10px] font-mono text-stone-600 tracking-wide uppercase hover:text-red-500"
-              >
-                Delete
-              </button>
-            </div>
+            {/* Delete */}
+            <button
+              onClick={() => deleteEntry(entry.id)}
+              style={{ marginTop: 10, fontSize: 10.5, fontFamily: 'monospace', color: c.muted, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+            >
+              Delete
+            </button>
           </div>
         ))}
       </div>
