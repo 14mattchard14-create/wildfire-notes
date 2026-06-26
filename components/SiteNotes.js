@@ -3,20 +3,41 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
+const c = {
+  surface:  '#242220',
+  line:     '#3a352f',
+  accent:   '#be5b1d',
+  text:     '#ece6db',
+  muted:    '#9a9285',
+}
+
 const FIELDS = [
-  { key: 'slope',     label: 'Slope & Topography',                        placeholder: 'Grade, aspect, position on hillside…' },
-  { key: 'fuel',      label: 'Fuel Type / Vegetation',                    placeholder: 'Dominant vegetation, fuel continuity, ladder fuels…' },
-  { key: 'wind',      label: 'Prevailing Wind / Weather Exposure',         placeholder: 'Wind corridors, exposure, historical fire weather…' },
+  { key: 'slope',     label: 'Slope & Topography',                         placeholder: 'Grade, aspect, position on hillside…' },
+  { key: 'fuel',      label: 'Fuel Type / Vegetation',                     placeholder: 'Dominant vegetation, fuel continuity, ladder fuels…' },
+  { key: 'wind',      label: 'Prevailing Wind / Weather Exposure',          placeholder: 'Wind corridors, exposure, historical fire weather…' },
   { key: 'neighbors', label: 'Neighboring Properties / Conflagration Risk', placeholder: 'Adjacent structures, shared vegetation, spacing…' },
-  { key: 'other',     label: 'Other Geographic Considerations',            placeholder: 'Anything else relevant to overall site risk…' },
+  { key: 'other',     label: 'Other Geographic Considerations',             placeholder: 'Anything else relevant to overall site risk…' },
 ]
 
-const inputCls = 'w-full bg-stone-900 border border-stone-700 rounded px-3 py-2.5 text-sm text-stone-100 placeholder-stone-600 resize-y min-h-[72px] focus:outline-none focus:border-orange-600'
+const textareaStyle = {
+  width: '100%',
+  background: '#1b1917',
+  border: `1px solid ${c.line}`,
+  borderRadius: 4,
+  padding: '10px 12px',
+  fontSize: 14,
+  color: c.text,
+  fontFamily: 'inherit',
+  resize: 'vertical',
+  minHeight: 72,
+  outline: 'none',
+  boxSizing: 'border-box',
+}
 
 export default function SiteNotes({ propertyId }) {
-  const [notes,   setNotes]   = useState({ slope:'', fuel:'', wind:'', neighbors:'', other:'' })
-  const [saving,  setSaving]  = useState(false)
-  const [saved,   setSaved]   = useState(false)
+  const [notes,  setNotes]  = useState({ slope:'', fuel:'', wind:'', neighbors:'', other:'' })
+  const [saving, setSaving] = useState(false)
+  const [saved,  setSaved]  = useState(false)
 
   useEffect(() => {
     supabase
@@ -41,18 +62,18 @@ export default function SiteNotes({ propertyId }) {
 
   return (
     <div>
-      <p className="text-xs text-stone-500 mb-5 leading-relaxed">
+      <p style={{ fontSize: 12, color: c.muted, marginBottom: 20, lineHeight: 1.5 }}>
         Capture context that applies to the whole property — fill in after walking the site.
       </p>
 
-      <div className="space-y-4">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {FIELDS.map(f => (
           <div key={f.key}>
-            <label className="block text-[10px] font-mono text-orange-600 tracking-widest uppercase mb-1.5">
+            <label style={{ display: 'block', fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase', color: c.accent, marginBottom: 6 }}>
               {f.label}
             </label>
             <textarea
-              className={inputCls}
+              style={textareaStyle}
               placeholder={f.placeholder}
               value={notes[f.key] ?? ''}
               onChange={e => setNotes(n => ({ ...n, [f.key]: e.target.value }))}
@@ -64,7 +85,21 @@ export default function SiteNotes({ propertyId }) {
       <button
         onClick={save}
         disabled={saving}
-        className="mt-5 w-full bg-orange-700 text-stone-950 font-bold text-sm py-3 rounded uppercase tracking-wide disabled:opacity-50"
+        style={{
+          marginTop: 20,
+          width: '100%',
+          background: c.accent,
+          color: '#1b1917',
+          border: 'none',
+          borderRadius: 4,
+          fontSize: 13,
+          fontWeight: 700,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          padding: 13,
+          cursor: 'pointer',
+          opacity: saving ? 0.5 : 1,
+        }}
       >
         {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save Site Notes'}
       </button>
