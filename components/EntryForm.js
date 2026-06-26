@@ -2,12 +2,8 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { ZONES, CATEGORIES, STATUSES } from '@/lib/criteria'
-import InfoModal   from './InfoModal'
-import PhotoUpload from './PhotoUpload'
 
 const c = {
-  bg:      '#1b1917',
   surface: '#242220',
   line:    '#3a352f',
   accent:  '#be5b1d',
@@ -18,117 +14,101 @@ const c = {
   info:    '#7d8fa6',
 }
 
-const card  = { background: c.surface, border: `1px solid ${c.line}`, borderRadius: 6, padding: 16, marginBottom: 16 }
-const label = { display: 'block', fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted, marginBottom: 6 }
-const input = { width: '100%', background: c.surface, border: `1px solid ${c.line}`, borderRadius: 4, color: c.text, fontSize: 15, padding: '10px 12px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }
-const field = { marginBottom: 14 }
-
-const STATUS_STYLES = {
-  'Compliant':          { background: 'rgba(107,142,99,.18)', borderColor: c.ok,   color: c.ok   },
-  'Non-Compliant':      { background: 'rgba(181,72,58,.18)',  borderColor: c.warn, color: c.warn },
-  'Needs Verification': { background: 'rgba(125,143,166,.18)',borderColor: c.info, color: c.info },
-  'Not Applicable':     { background: c.surface,              borderColor: c.muted,color: c.text },
+const BORDER = {
+  'Base Compliant':     c.ok,
+  'Plus Compliant':     '#a3c49a',
+  'Non-Compliant':      c.warn,
+  'Needs Verification': c.info,
+  'Not Applicable':     c.muted,
 }
 
-export default function EntryForm({ propertyId, onSaved }) {
-  const [zone,       setZone]       = useState(ZONES[0])
-  const [category,   setCategory]   = useState(CATEGORIES[0])
-  const [status,     setStatus]     = useState(null)
-  const [distance,   setDistance]   = useState('')
-  const [note,       setNote]       = useState('')
-  const [detail,     setDetail]     = useState('')
-  const [photoUrl,   setPhotoUrl]   = useState(null)
-  const [showDetail, setShowDetail] = useState(false)
-  const [infoOpen,   setInfoOpen]   = useState(false)
-  const [saving,     setSaving]     = useState(false)
-  const [photoKey,   setPhotoKey]   = useState(0)
+const STATUS_COLOR = {
+  'Base Compliant':     c.ok,
+  'Plus Compliant':     '#a3c49a',
+  'Non-Compliant':      c.warn,
+  'Needs Verification': c.info,
+  'Not Applicable':     c.muted,
+}
 
-  async function save() {
-    if (!note.trim()) { alert('Add a finding before saving.'); return }
-    if (!status)      { alert('Select a status.'); return }
-    setSaving(true)
-    const { error } = await supabase.from('entries').insert({
-      property_id: propertyId,
-      zone, category, status,
-      distance: distance.trim() || null,
-      note:     note.trim(),
-      detail:   detail.trim() || null,
-      photo_url: photoUrl || null,
-    })
-    setSaving(false)
-    if (error) { alert('Save failed: ' + error.message); return }
-    setStatus(null); setDistance(''); setNote(''); setDetail('')
-    setPhotoUrl(null); setPhotoKey(k => k + 1); setShowDetail(false)
-    onSaved()
+export default function EntriesList({ entries, onDeleted }) {
+  const [expanded, setExpanded] = useState(null)
+
+  async function deleteEntry(id) {
+    if (!confirm('Delete this entry?')) return
+    await supabase.from('entries').delete().eq('id', id)
+    onDeleted()
+  }
+
+  if (!entries.length) {
+    return <p style={{ color: c.muted, fontSize: 13, textAlign: 'center', padding: '32px 0', fontStyle: 'italic' }}>No entries logged yet.</p>
   }
 
   return (
-    <>
-      {infoOpen && <InfoModal category={category} onClose={() => setInfoOpen(false)} />}
-
-      <div style={card}>
-        <div style={field}>
-          <label style={label}>Zone</label>
-          <select style={input} value={zone} onChange={e => setZone(e.target.value)}>
-            {ZONES.map(z => <option key={z}>{z}</option>)}
-          </select>
-        </div>
-
-        <div style={field}>
-          <label style={label}>Criteria / Category</label>
-          <select style={input} value={category} onChange={e => setCategory(e.target.value)}>
-            {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-          </select>
-          <button onClick={() => setInfoOpen(true)} style={{ marginTop: 6, fontSize: 11, fontFamily: 'monospace', color: c.accent, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-            ⓘ Read about this category
-          </button>
-        </div>
-
-        <div style={field}>
-          <label style={label}>Status</label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-            {STATUSES.map(s => (
-              <button key={s.value} onClick={() => setStatus(s.value)} style={{
-                padding: '9px 6px', border: `1px solid ${status === s.value ? (STATUS_STYLES[s.value]?.borderColor ?? c.line) : c.line}`,
-                borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontSize: 11,
-                letterSpacing: '0.04em', textTransform: 'uppercase',
-                color:      status === s.value ? (STATUS_STYLES[s.value]?.color      ?? c.muted) : c.muted,
-                background: status === s.value ? (STATUS_STYLES[s.value]?.background ?? 'transparent') : 'transparent',
-              }}>
-                {s.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div style={field}>
-          <label style={label}>Distance / Measurement</label>
-          <input style={input} type="text" placeholder="e.g. 8 ft from wall" value={distance} onChange={e => setDistance(e.target.value)} />
-        </div>
-
-        <div style={field}>
-          <label style={label}>Finding</label>
-          <input style={input} type="text" placeholder="Short description of what you observed" value={note} onChange={e => setNote(e.target.value)} />
-        </div>
-
-        <div style={{ marginBottom: 14 }}>
-          <button onClick={() => setShowDetail(d => !d)} style={{ fontSize: 11, fontFamily: 'monospace', color: c.accent, background: 'none', border: 'none', padding: 0, cursor: 'pointer', marginBottom: 8 }}>
-            {showDetail ? '– Hide details' : '+ Add longer details'}
-          </button>
-          {showDetail && (
-            <textarea style={{ ...input, minHeight: 80, resize: 'vertical' }} placeholder="Optional — additional context, conditions, recommendations…" value={detail} onChange={e => setDetail(e.target.value)} />
-          )}
-        </div>
-
-        <div style={field}>
-          <label style={label}>Photo</label>
-          <PhotoUpload key={photoKey} propertyId={propertyId} onPhotoUrl={setPhotoUrl} />
-        </div>
-
-        <button onClick={save} disabled={saving} style={{ width: '100%', background: c.accent, color: '#1b1917', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 13, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}>
-          {saving ? 'Saving…' : 'Save Entry'}
-        </button>
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <span style={{ fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted }}>Logged Entries</span>
+        <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: c.muted }}>{entries.length}</span>
       </div>
-    </>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+        {entries.map(entry => (
+          <div key={entry.id} style={{
+            background: c.surface,
+            border: `1px solid ${c.line}`,
+            borderLeft: `4px solid ${BORDER[entry.status] ?? c.muted}`,
+            borderRadius: 4,
+            padding: '12px 13px',
+          }}>
+            {/* Top row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: c.accent, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{entry.zone}</span>
+              <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: STATUS_COLOR[entry.status] ?? c.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{entry.status}</span>
+            </div>
+
+            {/* Category */}
+            <p style={{ fontWeight: 600, fontSize: 15, margin: '0 0 4px', color: c.text }}>{entry.category}</p>
+
+            {/* Distance */}
+            {entry.distance && (
+              <p style={{ fontSize: 11, fontFamily: 'monospace', color: c.muted, margin: '0 0 4px' }}>{entry.distance}</p>
+            )}
+
+            {/* Note */}
+            <p style={{ fontSize: 14, color: c.text, margin: 0 }}>{entry.note}</p>
+
+            {/* Detail toggle */}
+            {entry.detail && (
+              <button
+                onClick={() => setExpanded(expanded === entry.id ? null : entry.id)}
+                style={{ marginTop: 6, fontSize: 11, fontFamily: 'monospace', color: c.accent, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+              >
+                {expanded === entry.id ? '− Hide details' : '+ Show details'}
+              </button>
+            )}
+            {expanded === entry.id && entry.detail && (
+              <p style={{ marginTop: 8, fontSize: 13, color: c.muted, borderTop: `1px dashed ${c.line}`, paddingTop: 8 }}>{entry.detail}</p>
+            )}
+
+            {/* Photo - smaller thumbnail */}
+            {entry.photo_url && (
+              <img
+                src={entry.photo_url}
+                alt="Entry photo"
+                onClick={() => window.open(entry.photo_url, '_blank')}
+                style={{ marginTop: 10, borderRadius: 4, border: `1px solid ${c.line}`, height: 80, width: 'auto', cursor: 'zoom-in', display: 'block' }}
+              />
+            )}
+
+            {/* Delete */}
+            <button
+              onClick={() => deleteEntry(entry.id)}
+              style={{ marginTop: 10, fontSize: 10.5, fontFamily: 'monospace', color: c.muted, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+            >
+              Delete
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
