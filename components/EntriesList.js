@@ -15,14 +15,16 @@ const c = {
 }
 
 const BORDER = {
-  'Compliant':          c.ok,
+  'Base Compliant':     c.ok,
+  'Plus Compliant':     '#a3c49a',
   'Non-Compliant':      c.warn,
   'Needs Verification': c.info,
   'Not Applicable':     c.muted,
 }
 
 const STATUS_COLOR = {
-  'Compliant':          c.ok,
+  'Base Compliant':     c.ok,
+  'Plus Compliant':     '#a3c49a',
   'Non-Compliant':      c.warn,
   'Needs Verification': c.info,
   'Not Applicable':     c.muted,
