@@ -9,25 +9,21 @@ const c = {
   accent:  '#be5b1d',
   text:    '#ece6db',
   muted:   '#9a9285',
-  ok:      '#6b8e63',
 }
 
 export default function ExportPanel({ property, entries }) {
-  const [tab,     setTab]     = useState('raw')   // 'raw' | 'report'
+  const [tab,     setTab]     = useState('raw')
   const [text,    setText]    = useState('')
   const [report,  setReport]  = useState('')
   const [copied,  setCopied]  = useState(false)
   const [loading, setLoading] = useState(false)
   const [genning, setGenning] = useState(false)
 
-  async function generateRaw() {
-    setLoading(true)
-
+  async function buildRaw() {
     const [{ data: site }, { data: priorities }] = await Promise.all([
       supabase.from('site_notes').select('*').eq('property_id', property.id).maybeSingle(),
       supabase.from('priorities').select('*').eq('property_id', property.id).order('rank'),
     ])
-
     const lines = []
     lines.push(`FIELD NOTES — ${property.address}`)
     lines.push(`Visit date: ${property.visit_date ?? '—'}`)
@@ -39,18 +35,12 @@ export default function ExportPanel({ property, entries }) {
       if (site.wind)      lines.push(`Wind / Weather Exposure: ${site.wind}`)
       if (site.neighbors) lines.push(`Neighboring Properties: ${site.neighbors}`)
       if (site.other)     lines.push(`Other: ${site.other}`)
-    } else {
-      lines.push('(none recorded)')
-    }
+    } else { lines.push('(none recorded)') }
     lines.push('')
     lines.push('--- PRIORITIES ---')
     if (priorities?.length) {
-      priorities.forEach((p, i) => {
-        if (p.text) lines.push(`${i + 1}. ${p.text}${p.why ? ' — ' + p.why : ''}`)
-      })
-    } else {
-      lines.push('(none set)')
-    }
+      priorities.forEach((p, i) => { if (p.text) lines.push(`${i + 1}. ${p.text}${p.why ? ' — ' + p.why : ''}`) })
+    } else { lines.push('(none set)') }
     lines.push('')
     lines.push('--- ENTRIES ---')
     if (entries.length) {
@@ -63,11 +53,13 @@ export default function ExportPanel({ property, entries }) {
         if (en.photo_url) lines.push(`  Photo: ${en.photo_url}`)
         lines.push('')
       })
-    } else {
-      lines.push('(no entries logged)')
-    }
+    } else { lines.push('(no entries logged)') }
+    return lines.join('\n')
+  }
 
-    const raw = lines.join('\n')
+  async function generateRaw() {
+    setLoading(true)
+    const raw = await buildRaw()
     setText(raw)
     setLoading(false)
     return raw
@@ -75,11 +67,10 @@ export default function ExportPanel({ property, entries }) {
 
   async function generateReport() {
     setGenning(true)
-    let raw = text
-    if (!raw) raw = await generateRaw()
-
+    const raw = text || await buildRaw()
+    if (!text) setText(raw)
     try {
-      const res = await fetch('/api/report', {
+      const res = await fetch('/api/report-docx', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fieldNotes: raw, property }),
@@ -87,26 +78,46 @@ export default function ExportPanel({ property, entries }) {
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       setReport(data.report)
-      setTab('report')
+      // Auto-download the DOCX
+      downloadDocx(data.docx)
     } catch (err) {
       alert('Report generation failed: ' + err.message)
     }
     setGenning(false)
   }
 
-  async function copy() {
-    const content = tab === 'report' ? report : text
-    try { await navigator.clipboard.writeText(content) }
-    catch { const el = document.querySelector('#export-text'); el.select(); document.execCommand('copy') }
+  function downloadDocx(base64) {
+    const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+    const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${property.address ?? 'wildfire-report'}.docx`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function downloadTxt(content, filename) {
+    const blob = new Blob([content], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function copy(content) {
+    try { await navigator.clipboard.writeText(content) } catch { /* silent */ }
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
   const btnBase = { flex: 1, border: 'none', borderRadius: 4, fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', padding: '8px', cursor: 'pointer', fontWeight: 600 }
+  const outlineBtn = { background: 'transparent', border: `1px solid ${c.line}`, borderRadius: 4, color: c.muted, fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.04em', textTransform: 'uppercase', padding: '10px', cursor: 'pointer' }
 
   return (
     <div>
-      {/* Tab switcher */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
         <button onClick={() => setTab('raw')} style={{ ...btnBase, background: tab === 'raw' ? c.accent : 'transparent', color: tab === 'raw' ? '#1b1917' : c.muted, border: `1px solid ${tab === 'raw' ? c.accent : c.line}` }}>
           Raw Notes
@@ -118,25 +129,20 @@ export default function ExportPanel({ property, entries }) {
 
       {tab === 'raw' && (
         <>
-          <button
-            onClick={generateRaw}
-            disabled={loading}
-            style={{ width: '100%', background: c.accent, color: '#1b1917', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 13, cursor: 'pointer', opacity: loading ? 0.5 : 1, marginBottom: 14 }}
-          >
+          <button onClick={generateRaw} disabled={loading} style={{ width: '100%', background: c.accent, color: '#1b1917', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 13, cursor: 'pointer', opacity: loading ? 0.5 : 1, marginBottom: 14 }}>
             {loading ? 'Generating…' : 'Generate Raw Notes'}
           </button>
-
           {text && (
             <>
-              <textarea
-                id="export-text"
-                readOnly
-                value={text}
-                style={{ width: '100%', background: '#1b1917', border: `1px solid ${c.line}`, borderRadius: 4, padding: '10px 12px', fontSize: 12, fontFamily: 'monospace', color: c.muted, minHeight: 280, resize: 'vertical', outline: 'none', boxSizing: 'border-box', marginBottom: 10 }}
-              />
-              <button onClick={copy} style={{ width: '100%', background: 'transparent', border: `1px solid ${copied ? c.accent : c.line}`, borderRadius: 4, color: copied ? c.accent : c.muted, fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.04em', textTransform: 'uppercase', padding: '10px', cursor: 'pointer' }}>
-                {copied ? '✓ Copied' : 'Copy to Clipboard'}
-              </button>
+              <textarea readOnly value={text} style={{ width: '100%', background: '#1b1917', border: `1px solid ${c.line}`, borderRadius: 4, padding: '10px 12px', fontSize: 12, fontFamily: 'monospace', color: c.muted, minHeight: 280, resize: 'vertical', outline: 'none', boxSizing: 'border-box', marginBottom: 10, scrollbarWidth: 'thin', scrollbarColor: `${c.line} transparent` }} />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => copy(text)} style={{ ...outlineBtn, flex: 1, borderColor: copied ? c.accent : c.line, color: copied ? c.accent : c.muted }}>
+                  {copied ? '✓ Copied' : 'Copy'}
+                </button>
+                <button onClick={() => downloadTxt(text, `${property.address ?? 'field-notes'}.txt`)} style={{ ...outlineBtn, flex: 1 }}>
+                  ↓ Download .txt
+                </button>
+              </div>
             </>
           )}
         </>
@@ -144,24 +150,20 @@ export default function ExportPanel({ property, entries }) {
 
       {tab === 'report' && (
         <>
-          <button
-            onClick={generateReport}
-            disabled={genning}
-            style={{ width: '100%', background: c.accent, color: '#1b1917', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 13, cursor: 'pointer', opacity: genning ? 0.5 : 1, marginBottom: 14 }}
-          >
-            {genning ? 'Generating Report…' : 'Generate Full Report'}
+          <button onClick={generateReport} disabled={genning} style={{ width: '100%', background: c.accent, color: '#1b1917', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 13, cursor: 'pointer', opacity: genning ? 0.5 : 1, marginBottom: 14 }}>
+            {genning ? 'Generating Report…' : 'Generate & Download Report'}
           </button>
-
           {report && (
             <>
-              <textarea
-                readOnly
-                value={report}
-                style={{ width: '100%', background: '#1b1917', border: `1px solid ${c.line}`, borderRadius: 4, padding: '10px 12px', fontSize: 12, fontFamily: 'monospace', color: c.muted, minHeight: 400, resize: 'vertical', outline: 'none', boxSizing: 'border-box', marginBottom: 10, scrollbarWidth: 'thin', scrollbarColor: `${c.line} transparent` }}
-              />
-              <button onClick={copy} style={{ width: '100%', background: 'transparent', border: `1px solid ${copied ? c.accent : c.line}`, borderRadius: 4, color: copied ? c.accent : c.muted, fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.04em', textTransform: 'uppercase', padding: '10px', cursor: 'pointer' }}>
-                {copied ? '✓ Copied' : 'Copy Report'}
-              </button>
+              <textarea readOnly value={report} style={{ width: '100%', background: '#1b1917', border: `1px solid ${c.line}`, borderRadius: 4, padding: '10px 12px', fontSize: 12, fontFamily: 'monospace', color: c.muted, minHeight: 400, resize: 'vertical', outline: 'none', boxSizing: 'border-box', marginBottom: 10, scrollbarWidth: 'thin', scrollbarColor: `${c.line} transparent` }} />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => copy(report)} style={{ ...outlineBtn, flex: 1, borderColor: copied ? c.accent : c.line, color: copied ? c.accent : c.muted }}>
+                  {copied ? '✓ Copied' : 'Copy'}
+                </button>
+                <button onClick={() => generateReport()} disabled={genning} style={{ ...outlineBtn, flex: 1 }}>
+                  ↓ Re-download .docx
+                </button>
+              </div>
             </>
           )}
         </>
