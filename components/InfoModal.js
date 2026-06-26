@@ -25,26 +25,24 @@ export default function InfoModal({ category, onClose }) {
         background: 'rgba(0,0,0,0.75)',
         backdropFilter: 'blur(2px)',
         display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        padding: '0 12px 20px',
       }}
     >
       <div
         onClick={e => e.stopPropagation()}
         style={{
           background: c.surface,
-          borderTop: `1px solid ${c.line}`,
-          borderLeft: `1px solid ${c.line}`,
-          borderRight: `1px solid ${c.line}`,
-          borderRadius: '14px 14px 0 0',
+          border: `1px solid ${c.line}`,
+          borderRadius: 14,
           width: '100%', maxWidth: 600,
-          maxHeight: '82vh',
+          maxHeight: '80vh',
           overflowY: 'auto',
-          padding: '20px 20px 32px',
-          boxShadow: '0 -8px 40px rgba(0,0,0,0.6)',
+          padding: '24px 24px 36px',
+          boxShadow: '0 8px 48px rgba(0,0,0,0.7)',
+          scrollbarWidth: 'thin',
+          scrollbarColor: `${c.line} transparent`,
         }}
       >
-        {/* Drag handle */}
-        <div style={{ width: 36, height: 4, background: c.line, borderRadius: 2, margin: '0 auto 18px' }} />
-
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
           <div>
