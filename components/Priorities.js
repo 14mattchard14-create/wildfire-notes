@@ -83,4 +83,45 @@ export default function Priorities({ propertyId }) {
   return (
     <div>
       <p style={{ fontSize: 12, color: c.muted, marginBottom: 20, lineHeight: 1.5 }}>
-        Pick up to
+        Pick up to 5 items to feature as top priorities in the final report. Order matters.
+      </p>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+        {items.map((item, idx) => (
+          <div key={item.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#1b1917', border: `1px solid ${c.line}`, borderRadius: 6, padding: 12 }}>
+            <span style={{ fontSize: 22, fontWeight: 700, color: c.accent, width: 24, textAlign: 'center', lineHeight: 1.2, marginTop: 4, flexShrink: 0 }}>{idx + 1}</span>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <input style={inputStyle} placeholder="Priority item" value={item.text ?? ''} onChange={e => update(item.id, 'text', e.target.value)} />
+              <input style={{ ...inputStyle, marginBottom: 0 }} placeholder="Why it's a priority" value={item.why ?? ''} onChange={e => update(item.id, 'why', e.target.value)} />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+              {[['▲', -1], ['▼', 1]].map(([arrow, dir]) => (
+                <button key={dir} onClick={() => move(item.id, dir)} style={{ width: 24, height: 24, border: `1px solid ${c.line}`, borderRadius: 4, background: 'transparent', color: c.muted, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{arrow}</button>
+              ))}
+              <button onClick={() => remove(item.id)} style={{ width: 24, height: 24, border: `1px solid ${c.line}`, borderRadius: 4, background: 'transparent', color: c.warn, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {items.length < 5 && (
+        <button
+          onClick={addItem}
+          style={{ width: '100%', background: 'transparent', border: `1px solid ${c.line}`, borderRadius: 4, color: c.muted, fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.04em', textTransform: 'uppercase', padding: '10px', cursor: 'pointer', marginBottom: 12 }}
+        >
+          + Add Priority
+        </button>
+      )}
+
+      <button
+        onClick={save}
+        disabled={saving}
+        style={{ width: '100%', background: c.accent, color: '#1b1917', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 13, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}
+      >
+        {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save Priorities'}
+      </button>
+    </div>
+  )
+}
