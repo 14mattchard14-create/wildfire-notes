@@ -3,15 +3,22 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
+const c = {
+  surface: '#242220',
+  line:    '#3a352f',
+  accent:  '#be5b1d',
+  text:    '#ece6db',
+  muted:   '#9a9285',
+}
+
 export default function ExportPanel({ property, entries }) {
-  const [text,     setText]     = useState('')
-  const [copied,   setCopied]   = useState(false)
-  const [loading,  setLoading]  = useState(false)
+  const [text,    setText]    = useState('')
+  const [copied,  setCopied]  = useState(false)
+  const [loading, setLoading] = useState(false)
 
   async function generate() {
     setLoading(true)
 
-    // Fetch site notes and priorities for this property
     const [{ data: site }, { data: priorities }] = await Promise.all([
       supabase.from('site_notes').select('*').eq('property_id', property.id).maybeSingle(),
       supabase.from('priorities').select('*').eq('property_id', property.id).order('rank'),
@@ -21,7 +28,6 @@ export default function ExportPanel({ property, entries }) {
     lines.push(`FIELD NOTES — ${property.address}`)
     lines.push(`Visit date: ${property.visit_date ?? '—'}`)
     lines.push('')
-
     lines.push('--- SITE NOTES ---')
     if (site) {
       if (site.slope)     lines.push(`Slope & Topography: ${site.slope}`)
@@ -33,7 +39,6 @@ export default function ExportPanel({ property, entries }) {
       lines.push('(none recorded)')
     }
     lines.push('')
-
     lines.push('--- PRIORITIES ---')
     if (priorities?.length) {
       priorities.forEach((p, i) => {
@@ -43,7 +48,6 @@ export default function ExportPanel({ property, entries }) {
       lines.push('(none set)')
     }
     lines.push('')
-
     lines.push('--- ENTRIES ---')
     if (entries.length) {
       const sorted = [...entries].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
@@ -66,28 +70,25 @@ export default function ExportPanel({ property, entries }) {
   async function copy() {
     try {
       await navigator.clipboard.writeText(text)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
     } catch {
-      // Fallback for browsers that block clipboard
       const el = document.querySelector('#export-text')
       el.select()
       document.execCommand('copy')
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
     }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   return (
     <div>
-      <p className="text-xs text-stone-500 mb-4 leading-relaxed">
+      <p style={{ fontSize: 12, color: c.muted, marginBottom: 16, lineHeight: 1.5 }}>
         Generate a plain-text summary of everything logged, then paste it into Claude to build the report.
       </p>
 
       <button
         onClick={generate}
         disabled={loading}
-        className="w-full bg-orange-700 text-stone-950 font-bold text-sm py-3 rounded uppercase tracking-wide disabled:opacity-50 mb-4"
+        style={{ width: '100%', background: c.accent, color: '#1b1917', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 13, cursor: 'pointer', opacity: loading ? 0.5 : 1, marginBottom: 14 }}
       >
         {loading ? 'Generating…' : 'Generate Summary'}
       </button>
@@ -98,11 +99,11 @@ export default function ExportPanel({ property, entries }) {
             id="export-text"
             readOnly
             value={text}
-            className="w-full bg-stone-900 border border-stone-700 rounded px-3 py-2.5 text-xs font-mono text-stone-300 min-h-[320px] resize-y mb-3 focus:outline-none"
+            style={{ width: '100%', background: '#1b1917', border: `1px solid ${c.line}`, borderRadius: 4, padding: '10px 12px', fontSize: 12, fontFamily: 'monospace', color: c.muted, minHeight: 320, resize: 'vertical', outline: 'none', boxSizing: 'border-box', marginBottom: 10 }}
           />
           <button
             onClick={copy}
-            className="w-full border border-stone-700 text-stone-400 text-xs font-mono uppercase tracking-wide py-2.5 rounded hover:border-orange-600 hover:text-orange-600 transition-colors"
+            style={{ width: '100%', background: 'transparent', border: `1px solid ${copied ? c.accent : c.line}`, borderRadius: 4, color: copied ? c.accent : c.muted, fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.04em', textTransform: 'uppercase', padding: '10px', cursor: 'pointer' }}
           >
             {copied ? '✓ Copied' : 'Copy to Clipboard'}
           </button>

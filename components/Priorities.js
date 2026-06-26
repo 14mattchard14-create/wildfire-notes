@@ -3,7 +3,28 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
-const inputCls = 'w-full bg-stone-900 border border-stone-700 rounded px-3 py-2 text-sm text-stone-100 placeholder-stone-600 focus:outline-none focus:border-orange-600 mb-1.5'
+const c = {
+  surface: '#242220',
+  line:    '#3a352f',
+  accent:  '#be5b1d',
+  text:    '#ece6db',
+  muted:   '#9a9285',
+  warn:    '#b5483a',
+}
+
+const inputStyle = {
+  width: '100%',
+  background: '#1b1917',
+  border: `1px solid ${c.line}`,
+  borderRadius: 4,
+  padding: '8px 10px',
+  fontSize: 14,
+  color: c.text,
+  fontFamily: 'inherit',
+  outline: 'none',
+  boxSizing: 'border-box',
+  marginBottom: 6,
+}
 
 export default function Priorities({ propertyId }) {
   const [items,  setItems]  = useState([])
@@ -46,7 +67,6 @@ export default function Priorities({ propertyId }) {
 
   async function save() {
     setSaving(true)
-    // Delete existing and re-insert (simplest approach for small datasets)
     await supabase.from('priorities').delete().eq('property_id', propertyId)
     if (items.filter(p => p.text?.trim()).length > 0) {
       const rows = items
@@ -62,58 +82,5 @@ export default function Priorities({ propertyId }) {
 
   return (
     <div>
-      <p className="text-xs text-stone-500 mb-5 leading-relaxed">
-        Pick up to 5 items to feature as top priorities in the final report. Order matters.
-      </p>
-
-      <div className="space-y-3 mb-4">
-        {items.map((item, idx) => (
-          <div key={item.id} className="flex gap-3 items-start bg-stone-900 border border-stone-800 rounded-lg p-3">
-            {/* Rank number */}
-            <span className="text-2xl font-bold text-orange-600 w-6 text-center leading-tight mt-1">{idx + 1}</span>
-
-            {/* Inputs */}
-            <div className="flex-1 min-w-0">
-              <input
-                className={inputCls}
-                placeholder="Priority item"
-                value={item.text ?? ''}
-                onChange={e => update(item.id, 'text', e.target.value)}
-              />
-              <input
-                className={inputCls}
-                placeholder="Why it's a priority"
-                value={item.why ?? ''}
-                onChange={e => update(item.id, 'why', e.target.value)}
-              />
-            </div>
-
-            {/* Controls */}
-            <div className="flex flex-col gap-1">
-              <button onClick={() => move(item.id, -1)} className="text-stone-500 text-xs border border-stone-700 rounded w-6 h-6 flex items-center justify-center">▲</button>
-              <button onClick={() => move(item.id,  1)} className="text-stone-500 text-xs border border-stone-700 rounded w-6 h-6 flex items-center justify-center">▼</button>
-              <button onClick={() => remove(item.id)}   className="text-red-800    text-xs border border-stone-700 rounded w-6 h-6 flex items-center justify-center">✕</button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {items.length < 5 && (
-        <button
-          onClick={addItem}
-          className="w-full border border-stone-700 text-stone-500 text-xs font-mono uppercase tracking-wide py-2.5 rounded mb-4 hover:border-orange-600 hover:text-orange-600 transition-colors"
-        >
-          + Add Priority
-        </button>
-      )}
-
-      <button
-        onClick={save}
-        disabled={saving}
-        className="w-full bg-orange-700 text-stone-950 font-bold text-sm py-3 rounded uppercase tracking-wide disabled:opacity-50"
-      >
-        {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save Priorities'}
-      </button>
-    </div>
-  )
-}
+      <p style={{ fontSize: 12, color: c.muted, marginBottom: 20, lineHeight: 1.5 }}>
+        Pick up to
