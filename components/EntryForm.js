@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { ZONES, CATEGORIES, STATUSES } from '@/lib/criteria'
+import { ZONES, CATEGORIES } from '@/lib/criteria'
 import InfoModal   from './InfoModal'
 import PhotoUpload from './PhotoUpload'
 
@@ -24,10 +24,39 @@ const input = { width: '100%', background: c.surface, border: `1px solid ${c.lin
 const field = { marginBottom: 14 }
 
 const STATUS_STYLES = {
-  'Compliant':          { background: 'rgba(107,142,99,.18)', borderColor: c.ok,   color: c.ok   },
-  'Non-Compliant':      { background: 'rgba(181,72,58,.18)',  borderColor: c.warn, color: c.warn },
-  'Needs Verification': { background: 'rgba(125,143,166,.18)',borderColor: c.info, color: c.info },
-  'Not Applicable':     { background: c.surface,              borderColor: c.muted,color: c.text },
+  'Base Compliant':     { background: 'rgba(107,142,99,.18)', borderColor: c.ok,        color: c.ok        },
+  'Plus Compliant':     { background: 'rgba(107,142,99,.30)', borderColor: '#a3c49a',   color: '#a3c49a'   },
+  'Non-Compliant':      { background: 'rgba(181,72,58,.18)',  borderColor: c.warn,      color: c.warn      },
+  'Needs Verification': { background: 'rgba(125,143,166,.18)',borderColor: c.info,      color: c.info      },
+  'Not Applicable':     { background: 'transparent',          borderColor: c.muted,     color: c.muted     },
+}
+
+const TOP_STATUSES = [
+  { value: 'Base Compliant',     label: 'Base ✓' },
+  { value: 'Plus Compliant',     label: 'Plus ✓' },
+  { value: 'Non-Compliant',      label: 'Non-Comp.' },
+  { value: 'Needs Verification', label: 'Verify' },
+]
+
+function StatusBtn({ value, label, status, setStatus }) {
+  const active = status === value
+  const s = STATUS_STYLES[value]
+  return (
+    <button
+      onClick={() => setStatus(value)}
+      style={{
+        padding: '9px 6px',
+        border: `1px solid ${active ? s.borderColor : c.line}`,
+        borderRadius: 4, cursor: 'pointer',
+        fontFamily: 'monospace', fontSize: 11,
+        letterSpacing: '0.04em', textTransform: 'uppercase',
+        color:      active ? s.color      : c.muted,
+        background: active ? s.background : 'transparent',
+      }}
+    >
+      {label}
+    </button>
+  )
 }
 
 export default function EntryForm({ propertyId, onSaved }) {
@@ -87,17 +116,14 @@ export default function EntryForm({ propertyId, onSaved }) {
         <div style={field}>
           <label style={label}>Status</label>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-            {STATUSES.map(s => (
-              <button key={s.value} onClick={() => setStatus(s.value)} style={{
-                padding: '9px 6px', border: `1px solid ${status === s.value ? (STATUS_STYLES[s.value]?.borderColor ?? c.line) : c.line}`,
-                borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontSize: 11,
-                letterSpacing: '0.04em', textTransform: 'uppercase',
-                color:      status === s.value ? (STATUS_STYLES[s.value]?.color      ?? c.muted) : c.muted,
-                background: status === s.value ? (STATUS_STYLES[s.value]?.background ?? 'transparent') : 'transparent',
-              }}>
-                {s.label}
-              </button>
+            {TOP_STATUSES.map(s => (
+              <StatusBtn key={s.value} value={s.value} label={s.label} status={status} setStatus={setStatus} />
             ))}
+            <StatusBtn
+              value="Not Applicable" label="N/A"
+              status={status} setStatus={setStatus}
+            />
+            <div /> {/* empty cell to keep grid even */}
           </div>
         </div>
 
