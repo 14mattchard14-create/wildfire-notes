@@ -1,3 +1,4 @@
+```jsx
 'use client'
 
 import { useState } from 'react'
@@ -81,10 +82,6 @@ export default function ExportPanel({ property, entries }) {
 
   return (
     <div>
-      <p style={{ fontSize: 12, color: c.muted, marginBottom: 16, lineHeight: 1.5 }}>
-        Generate a plain-text summary of everything logged, then paste it into Claude to build the report.
-      </p>
-
       <button
         onClick={generate}
         disabled={loading}
@@ -112,3 +109,4 @@ export default function ExportPanel({ property, entries }) {
     </div>
   )
 }
+```
