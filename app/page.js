@@ -70,7 +70,7 @@ export default function Home() {
             </button>
           </div>
         </div>
-        <PropertySelector selected={property} onSelect={setProperty} />
+        <PropertySelector selected={property} onSelect={setProperty} user={user} />
       </header>
 
       <nav style={s.nav}>

@@ -13,7 +13,7 @@ const c = {
 
 const input = { flex: 1, background: c.surface, border: `1px solid ${c.line}`, borderRadius: 4, color: c.text, fontSize: 14, padding: '9px 10px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }
 
-export default function PropertySelector({ selected, onSelect }) {
+export default function PropertySelector({ selected, onSelect, user }) {
   const [properties, setProperties] = useState([])
   const [creating,   setCreating]   = useState(false)
   const [address,    setAddress]    = useState('')
@@ -27,7 +27,13 @@ export default function PropertySelector({ selected, onSelect }) {
   async function createProperty() {
     if (!address.trim()) return
     setLoading(true)
-    const { data, error } = await supabase.from('properties').insert({ address: address.trim(), visit_date: visitDate || null }).select().single()
+    const userName = user?.user_metadata?.full_name || user?.email || 'Unknown'
+    const { data, error } = await supabase.from('properties').insert({
+      address: address.trim(),
+      visit_date: visitDate || null,
+      created_by: user?.id || null,
+      created_by_name: userName,
+    }).select().single()
     setLoading(false)
     if (error) { alert('Could not create property: ' + error.message); return }
     setProperties(prev => [data, ...prev])
