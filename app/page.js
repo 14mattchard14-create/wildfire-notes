@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/components/AuthProvider'
 import PropertySelector from '@/components/PropertySelector'
-import EntryForm      from '@/components/EntryForm'
-import EntriesList    from '@/components/EntriesList'
-import SiteNotes      from '@/components/SiteNotes'
-import Priorities     from '@/components/Priorities'
-import ExportPanel    from '@/components/ExportPanel'
+import EntryForm        from '@/components/EntryForm'
+import EntriesList      from '@/components/EntriesList'
+import SiteNotes        from '@/components/SiteNotes'
+import Priorities       from '@/components/Priorities'
+import ExportPanel      from '@/components/ExportPanel'
+import LoginPage        from '@/app/login/page'
 
 const TABS = ['Entries', 'Site Notes', 'Priorities', 'Export']
 
@@ -24,6 +26,7 @@ const s = {
 }
 
 export default function Home() {
+  const { user, loading } = useAuth()
   const [property,   setProperty]   = useState(null)
   const [activeTab,  setActiveTab]  = useState('Entries')
   const [entries,    setEntries]    = useState([])
@@ -41,21 +44,38 @@ export default function Home() {
 
   const onEntrySaved = () => setRefreshKey(k => k + 1)
 
+  if (loading) return (
+    <div style={{ minHeight: '100vh', background: '#1b1917', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span style={{ color: '#9a9285', fontFamily: 'monospace', fontSize: 13 }}>Loading…</span>
+    </div>
+  )
+
+  if (!user) return <LoginPage />
+
+  const userName = user.user_metadata?.full_name || user.email
+
   return (
     <div style={s.page}>
       <header style={s.header}>
         <span style={s.eyebrow}>Field Notes · Wildfire Inspection</span>
-        <h1 style={s.h1}>Site Intake</h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+          <h1 style={{ ...s.h1, margin: 0 }}>Site Intake</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#9a9285' }}>{userName}</span>
+            <button
+              onClick={() => supabase.auth.signOut()}
+              style={{ fontSize: 10.5, fontFamily: 'monospace', color: '#9a9285', background: 'none', border: '1px solid #3a352f', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
         <PropertySelector selected={property} onSelect={setProperty} />
       </header>
 
       <nav style={s.nav}>
         {TABS.map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            style={activeTab === tab ? s.tabActive : s.tab}
-          >
+          <button key={tab} onClick={() => setActiveTab(tab)} style={activeTab === tab ? s.tabActive : s.tab}>
             {tab}
           </button>
         ))}
@@ -63,10 +83,10 @@ export default function Home() {
 
       <main style={s.main}>
         {!property && <p style={s.empty}>Select or create a property above to begin.</p>}
-        {property && activeTab === 'Entries'    && <><EntryForm propertyId={property.id} onSaved={onEntrySaved} /><EntriesList entries={entries} onDeleted={onEntrySaved} /></>}
+        {property && activeTab === 'Entries'    && <><EntryForm propertyId={property.id} onSaved={onEntrySaved} user={user} /><EntriesList entries={entries} onDeleted={onEntrySaved} /></>}
         {property && activeTab === 'Site Notes' && <SiteNotes propertyId={property.id} />}
         {property && activeTab === 'Priorities' && <Priorities propertyId={property.id} />}
-        {property && activeTab === 'Export'     && <ExportPanel property={property} entries={entries} />}
+        {property && activeTab === 'Export'     && <ExportPanel property={property} entries={entries} user={user} />}
       </main>
     </div>
   )

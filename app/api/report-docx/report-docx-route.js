@@ -154,7 +154,7 @@ function parseMarkdown(markdown, property) {
 
 export async function POST(req) {
   try {
-    const { fieldNotes, property } = await req.json()
+    const { fieldNotes, property, inspectorName } = await req.json()
 
     // Generate report text from Claude
     const prompt = `You are an expert wildfire risk assessor. Using the field notes below, generate a complete Wildfire Risk Reduction Assessment report in Markdown format.
@@ -169,6 +169,7 @@ Use this structure:
 # WILDFIRE RISK REDUCTION ASSESSMENT
 
 **Property:** ${property.address}
+**Inspector:** ${inspectorName ?? 'Not recorded'}
 **Date of Assessment:** ${property.visit_date ?? 'Not recorded'}
 
 ---

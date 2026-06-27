@@ -11,7 +11,7 @@ const c = {
   muted:   '#9a9285',
 }
 
-export default function ExportPanel({ property, entries }) {
+export default function ExportPanel({ property, entries, user }) {
   const [tab,     setTab]     = useState('raw')
   const [text,    setText]    = useState('')
   const [report,  setReport]  = useState('')
@@ -73,7 +73,7 @@ export default function ExportPanel({ property, entries }) {
       const res = await fetch('/api/report-docx', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fieldNotes: raw, property }),
+        body: JSON.stringify({ fieldNotes: raw, property, inspectorName: user?.user_metadata?.full_name || user?.email || 'Unknown' }),
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)

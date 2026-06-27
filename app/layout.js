@@ -1,15 +1,18 @@
+import { AuthProvider } from '@/components/AuthProvider'
 import './globals.css'
 
 export const metadata = {
-  title: 'Field Notes — Wildfire Inspection',
-  description: 'WPH field inspection intake tool',
+  title: 'Wildfire Field Notes',
+  description: 'Site intake for wildfire inspections',
 }
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className="bg-stone-950 text-stone-100 min-h-screen antialiased">
-        {children}
+      <body>
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   )

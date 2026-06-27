@@ -59,7 +59,7 @@ function StatusBtn({ value, label, status, setStatus }) {
   )
 }
 
-export default function EntryForm({ propertyId, onSaved }) {
+export default function EntryForm({ propertyId, onSaved, user }) {
   const [zone,       setZone]       = useState(ZONES[0])
   const [category,   setCategory]   = useState(CATEGORIES[0])
   const [status,     setStatus]     = useState(null)
@@ -76,6 +76,7 @@ export default function EntryForm({ propertyId, onSaved }) {
     if (!note.trim()) { alert('Add a finding before saving.'); return }
     if (!status)      { alert('Select a status.'); return }
     setSaving(true)
+    const userName = user?.user_metadata?.full_name || user?.email || 'Unknown'
     const { error } = await supabase.from('entries').insert({
       property_id: propertyId,
       zone, category, status,
@@ -83,6 +84,8 @@ export default function EntryForm({ propertyId, onSaved }) {
       note:     note.trim(),
       detail:   detail.trim() || null,
       photo_url: photoUrl || null,
+      created_by: user?.id || null,
+      created_by_name: userName,
     })
     setSaving(false)
     if (error) { alert('Save failed: ' + error.message); return }
