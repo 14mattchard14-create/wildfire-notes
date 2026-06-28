@@ -75,13 +75,13 @@ export default function EntriesList({ entries, onDeleted }) {
 
   function startEdit(entry) {
     setEditingId(entry.id)
-    // Parse stored "Type: value" format back into parts
-    let distanceType = 'Distance from home'
+    // Parse stored "value — type" format back into parts
+    let distanceType = ''
     let distanceVal  = entry.distance ?? ''
-    if (distanceVal.includes(': ')) {
-      const idx = distanceVal.indexOf(': ')
-      distanceType = distanceVal.slice(0, idx)
-      distanceVal  = distanceVal.slice(idx + 2)
+    if (distanceVal.includes(' — ')) {
+      const idx = distanceVal.indexOf(' — ')
+      distanceVal  = distanceVal.slice(0, idx)
+      distanceType = distanceVal.slice(idx + 3)
     }
     setEditData({
       zone:         entry.zone,
@@ -101,7 +101,7 @@ export default function EntriesList({ entries, onDeleted }) {
       zone:     editData.zone,
       category: editData.category,
       status:   editData.status,
-      distance: editData.showDistance && editData.distance.trim() ? `${editData.distanceType}: ${editData.distance.trim()}` : null,
+      distance: editData.showDistance && editData.distance.trim() ? (editData.distanceType?.trim() ? `${editData.distance.trim()} — ${editData.distanceType.trim()}` : editData.distance.trim()) : null,
       note:     editData.note.trim(),
       detail:   editData.detail.trim() || null,
     }).eq('id', id)
@@ -202,22 +202,38 @@ export default function EntriesList({ entries, onDeleted }) {
               {/* Distance */}
               {DISTANCE_ZONES.includes(editData.zone) && (
                 <div style={{ marginBottom: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                     <label style={{ fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted }}>Distance</label>
                     <button
-                      onClick={() => setEditData(d => ({ ...d, showDistance: !d.showDistance, distance: '' }))}
-                      style={{ fontSize: 10.5, fontFamily: 'monospace', color: editData.showDistance ? c.accent : c.muted, background: 'none', border: `1px solid ${editData.showDistance ? c.accent : c.line}`, borderRadius: 4, padding: '3px 8px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+                      onClick={() => setEditData(d => ({ ...d, showDistance: !d.showDistance, distance: '', distanceType: '' }))}
+                      style={{
+                        fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase',
+                        background: editData.showDistance ? c.accent : 'transparent',
+                        color: editData.showDistance ? '#1b1917' : c.muted,
+                        border: `1px solid ${editData.showDistance ? c.accent : c.line}`,
+                        borderRadius: 20, padding: '2px 10px', cursor: 'pointer',
+                      }}
                     >
-                      {editData.showDistance ? 'On' : 'Off'}
+                      {editData.showDistance ? 'Added' : '+ Add'}
                     </button>
                   </div>
                   {editData.showDistance && (
-                    <>
-                      <select style={{ ...inputStyle, marginBottom: 6 }} value={editData.distanceType ?? 'Distance from home'} onChange={e => setEditData(d => ({ ...d, distanceType: e.target.value }))}>
-                        {DISTANCE_TYPES.map(t => <option key={t}>{t}</option>)}
-                      </select>
-                      <input style={inputStyle} type="text" placeholder="e.g. 8 ft" value={editData.distance} onChange={e => setEditData(d => ({ ...d, distance: e.target.value }))} />
-                    </>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        style={{ ...inputStyle, flex: '0 0 90px' }}
+                        type="text"
+                        placeholder="e.g. 8 ft"
+                        value={editData.distance}
+                        onChange={e => setEditData(d => ({ ...d, distance: e.target.value }))}
+                      />
+                      <input
+                        style={{ ...inputStyle, flex: 1 }}
+                        type="text"
+                        placeholder="between what?"
+                        value={editData.distanceType ?? ''}
+                        onChange={e => setEditData(d => ({ ...d, distanceType: e.target.value }))}
+                      />
+                    </div>
                   )}
                 </div>
               )}
