@@ -59,20 +59,30 @@ export default function PropertySelector({ selected, onSelect, user }) {
     setSuggestions([])
   }
 
-  async function locateMe() {
+  function locateMe() {
+    if (!navigator.geolocation) { alert('Geolocation not supported by your browser.'); return }
     setLocating(true)
-    navigator.geolocation.getCurrentPosition(async pos => {
-      const { latitude: lat, longitude: lng } = pos.coords
-      try {
-        const res = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`)
-        const data = await res.json()
-        if (data.address) setAddress(data.address)
-      } catch {}
-      setLocating(false)
-    }, () => {
-      alert('Could not get your location.')
-      setLocating(false)
-    })
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude: lat, longitude: lng } = pos.coords
+          const res = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`)
+          const data = await res.json()
+          if (data.address) {
+            setAddress(data.address)
+            setSuggestions([])
+          }
+        } catch (e) {
+          alert('Could not reverse geocode location.')
+        }
+        setLocating(false)
+      },
+      (err) => {
+        alert('Location access denied or unavailable.')
+        setLocating(false)
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    )
   }
 
   async function lookupFHSZ(addr) {
@@ -126,18 +136,36 @@ export default function PropertySelector({ selected, onSelect, user }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {/* Address with autocomplete */}
         <div style={{ position: 'relative' }}>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <input
-              style={{ ...input, flex: 'none', width: '100%' }}
+              style={{ ...input, flex: 'none', width: '100%', paddingRight: 40 }}
               type="text" placeholder="Property address"
               value={address} onChange={e => onAddressChange(e.target.value)} autoFocus
             />
             <button
               onClick={locateMe} disabled={locating}
-              style={{ flexShrink: 0, padding: '9px 12px', background: c.surface, border: `1px solid ${c.line}`, borderRadius: 4, color: locating ? c.muted : c.accent, fontSize: 16, cursor: 'pointer' }}
               title="Use current location"
+              style={{
+                position: 'absolute', right: 8,
+                background: 'none', border: 'none', padding: 4,
+                cursor: locating ? 'default' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                opacity: locating ? 0.4 : 1,
+              }}
             >
-              {locating ? '…' : '◎'}
+              {locating ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c.muted} strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" strokeDasharray="31.4" strokeDashoffset="10">
+                    <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/>
+                  </circle>
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+                  <circle cx="12" cy="12" r="8" strokeDasharray="4 2"/>
+                </svg>
+              )}
             </button>
           </div>
           {/* Suggestions dropdown */}
