@@ -16,6 +16,7 @@ const input = { flex: 1, background: c.surface, border: `1px solid ${c.line}`, b
 export default function PropertySelector({ selected, onSelect, user }) {
   const [properties, setProperties] = useState([])
   const [creating,   setCreating]   = useState(false)
+  const [editing,    setEditing]    = useState(false)
   const [address,    setAddress]    = useState('')
   const [visitDate,  setVisitDate]  = useState('')
   const [loading,    setLoading]    = useState(false)
@@ -43,7 +44,29 @@ export default function PropertySelector({ selected, onSelect, user }) {
     setVisitDate('')
   }
 
-  if (creating) {
+  async function saveEdit() {
+    if (!address.trim()) return
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('properties')
+      .update({ address: address.trim(), visit_date: visitDate || null })
+      .eq('id', selected.id)
+      .select()
+      .single()
+    setLoading(false)
+    if (error) { alert('Could not update property: ' + error.message); return }
+    setProperties(prev => prev.map(p => p.id === data.id ? data : p))
+    onSelect(data)
+    setEditing(false)
+  }
+
+  function startEditing() {
+    setAddress(selected.address)
+    setVisitDate(selected.visit_date ?? '')
+    setEditing(true)
+  }
+
+  if (creating || editing) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -51,10 +74,10 @@ export default function PropertySelector({ selected, onSelect, user }) {
           <input style={{ ...input, flex: 'none', width: 130 }} type="date" value={visitDate} onChange={e => setVisitDate(e.target.value)} />
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={createProperty} disabled={loading} style={{ flex: 1, background: c.accent, color: '#1b1917', border: 'none', borderRadius: 4, fontWeight: 700, fontSize: 13, padding: '9px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            {loading ? 'Saving…' : 'Create'}
+          <button onClick={editing ? saveEdit : createProperty} disabled={loading} style={{ flex: 1, background: c.accent, color: '#1b1917', border: 'none', borderRadius: 4, fontWeight: 700, fontSize: 13, padding: '9px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            {loading ? 'Saving…' : editing ? 'Save' : 'Create'}
           </button>
-          <button onClick={() => setCreating(false)} style={{ padding: '9px 16px', background: c.surface, border: `1px solid ${c.line}`, borderRadius: 4, color: c.muted, fontSize: 13, cursor: 'pointer' }}>
+          <button onClick={() => { setCreating(false); setEditing(false) }} style={{ padding: '9px 16px', background: c.surface, border: `1px solid ${c.line}`, borderRadius: 4, color: c.muted, fontSize: 13, cursor: 'pointer' }}>
             Cancel
           </button>
         </div>
@@ -68,6 +91,11 @@ export default function PropertySelector({ selected, onSelect, user }) {
         <option value="">— Select a property —</option>
         {properties.map(p => <option key={p.id} value={p.id}>{p.address}{p.visit_date ? ` (${p.visit_date})` : ''}</option>)}
       </select>
+      {selected && (
+        <button onClick={startEditing} style={{ padding: '9px 12px', background: c.surface, border: `1px solid ${c.line}`, borderRadius: 4, color: c.muted, fontSize: 13, cursor: 'pointer' }}>
+          ✎
+        </button>
+      )}
       <button onClick={() => setCreating(true)} style={{ padding: '9px 14px', background: c.surface, border: `1px solid ${c.line}`, borderRadius: 4, color: c.accent, fontSize: 18, cursor: 'pointer' }}>
         +
       </button>
