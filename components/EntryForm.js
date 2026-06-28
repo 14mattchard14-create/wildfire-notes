@@ -44,7 +44,7 @@ const STATUS_STYLES = {
 const TOP_STATUSES = [
   { value: 'Base Compliant',     label: 'Base ✓' },
   { value: 'Plus Compliant',     label: 'Plus ✓' },
-  { value: 'Non-Compliant',      label: 'Non-Comp.' },
+  { value: 'Non-Compliant',      label: 'Non-Comp' },
   { value: 'Needs Verification', label: 'Verify' },
 ]
 
@@ -131,15 +131,11 @@ export default function EntryForm({ propertyId, onSaved, user }) {
 
         <div style={field}>
           <label style={label}>Status</label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5 }}>
             {TOP_STATUSES.map(s => (
               <StatusBtn key={s.value} value={s.value} label={s.label} status={status} setStatus={setStatus} />
             ))}
-            <StatusBtn
-              value="Not Applicable" label="N/A"
-              status={status} setStatus={setStatus}
-            />
-            <div /> {/* empty cell to keep grid even */}
+            <StatusBtn value="Not Applicable" label="N/A" status={status} setStatus={setStatus} />
           </div>
         </div>
 
