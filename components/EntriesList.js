@@ -191,6 +191,15 @@ export default function EntriesList({ entries, onDeleted }) {
                 <textarea style={{ ...inputStyle, minHeight: 64, resize: 'vertical' }} value={editData.detail} onChange={e => setEditData(d => ({ ...d, detail: e.target.value }))} />
               </div>
 
+              {/* Photo preview in edit mode */}
+              {entry.photo_url && (
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ display: 'block', fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted, marginBottom: 4 }}>Photo</label>
+                  <img src={entry.photo_url} alt="Entry photo" onClick={() => setLightbox(entry.photo_url)}
+                    style={{ borderRadius: 4, border: `1px solid ${c.line}`, height: 80, width: 'auto', cursor: 'zoom-in', display: 'block' }} />
+                </div>
+              )}
+
               {/* Actions */}
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => saveEdit(entry.id)} disabled={saving} style={{ flex: 1, background: c.accent, color: '#1b1917', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: '9px', cursor: 'pointer', opacity: saving ? 0.5 : 1 }}>
