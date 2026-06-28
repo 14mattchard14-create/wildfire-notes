@@ -18,6 +18,16 @@ const c = {
   info:    '#7d8fa6',
 }
 
+const DISTANCE_ZONES = ['Zone 0 (0–5 ft)', 'Zone 1 (5–30 ft)', 'Zone 2 (30–100 ft)']
+
+const DISTANCE_TYPES = [
+  'Distance from home',
+  'Distance between objects',
+  'Distance between tree canopies',
+  'Distance between shrubs',
+  'Other',
+]
+
 const card  = { background: c.surface, border: `1px solid ${c.line}`, borderRadius: 6, padding: 16, marginBottom: 16 }
 const label = { display: 'block', fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted, marginBottom: 6 }
 const input = { width: '100%', background: c.surface, border: `1px solid ${c.line}`, borderRadius: 4, color: c.text, fontSize: 15, padding: '10px 12px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }
@@ -63,7 +73,9 @@ export default function EntryForm({ propertyId, onSaved, user }) {
   const [zone,       setZone]       = useState(ZONES[0])
   const [category,   setCategory]   = useState(CATEGORIES[0])
   const [status,     setStatus]     = useState(null)
-  const [distance,   setDistance]   = useState('')
+  const [distance,     setDistance]     = useState('')
+  const [distanceType,  setDistanceType]  = useState(DISTANCE_TYPES[0])
+  const [showDistance,  setShowDist]      = useState(false)
   const [note,       setNote]       = useState('')
   const [detail,     setDetail]     = useState('')
   const [photoUrl,   setPhotoUrl]   = useState(null)
@@ -80,7 +92,7 @@ export default function EntryForm({ propertyId, onSaved, user }) {
     const { error } = await supabase.from('entries').insert({
       property_id: propertyId,
       zone, category, status,
-      distance: distance.trim() || null,
+      distance: showDistance && distance.trim() ? `${distanceType}: ${distance.trim()}` : null,
       note:     note.trim(),
       detail:   detail.trim() || null,
       photo_url: photoUrl || null,
@@ -90,6 +102,7 @@ export default function EntryForm({ propertyId, onSaved, user }) {
     setSaving(false)
     if (error) { alert('Save failed: ' + error.message); return }
     setStatus(null); setDistance(''); setNote(''); setDetail('')
+    setDistanceType(DISTANCE_TYPES[0]); setShowDist(false)
     setPhotoUrl(null); setPhotoKey(k => k + 1); setShowDetail(false)
     onSaved()
   }
@@ -101,7 +114,7 @@ export default function EntryForm({ propertyId, onSaved, user }) {
       <div style={card}>
         <div style={field}>
           <label style={label}>Zone</label>
-          <select style={input} value={zone} onChange={e => setZone(e.target.value)}>
+          <select style={input} value={zone} onChange={e => { setZone(e.target.value); if (!DISTANCE_ZONES.includes(e.target.value)) { setShowDist(false); setDistance('') } }}>
             {ZONES.map(z => <option key={z}>{z}</option>)}
           </select>
         </div>
@@ -130,10 +143,27 @@ export default function EntryForm({ propertyId, onSaved, user }) {
           </div>
         </div>
 
-        <div style={field}>
-          <label style={label}>Distance / Measurement</label>
-          <input style={input} type="text" placeholder="e.g. 8 ft from wall" value={distance} onChange={e => setDistance(e.target.value)} />
-        </div>
+        {DISTANCE_ZONES.includes(zone) && (
+          <div style={field}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <label style={label}>Distance Measurement</label>
+              <button
+                onClick={() => { setShowDist(d => !d); if (showDistance) setDistance('') }}
+                style={{ fontSize: 10.5, fontFamily: 'monospace', color: showDistance ? c.accent : c.muted, background: 'none', border: `1px solid ${showDistance ? c.accent : c.line}`, borderRadius: 4, padding: '3px 8px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+              >
+                {showDistance ? 'On' : 'Off'}
+              </button>
+            </div>
+            {showDistance && (
+              <>
+                <select style={{ ...input, marginBottom: 8 }} value={distanceType} onChange={e => setDistanceType(e.target.value)}>
+                  {DISTANCE_TYPES.map(t => <option key={t}>{t}</option>)}
+                </select>
+                <input style={input} type="text" placeholder="e.g. 8 ft" value={distance} onChange={e => setDistance(e.target.value)} />
+              </>
+            )}
+          </div>
+        )}
 
         <div style={field}>
           <label style={label}>Finding</label>

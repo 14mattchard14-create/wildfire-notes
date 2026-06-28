@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ZONES, CATEGORIES } from '@/lib/criteria'
+import InfoModal from './InfoModal'
 
 const c = {
   surface: '#242220',
@@ -46,6 +47,16 @@ const TOP_STATUSES = [
   { value: 'Needs Verification', label: 'Verify' },
 ]
 
+const DISTANCE_ZONES = ['Zone 0 (0–5 ft)', 'Zone 1 (5–30 ft)', 'Zone 2 (30–100 ft)']
+
+const DISTANCE_TYPES = [
+  'Distance from home',
+  'Distance between objects',
+  'Distance between tree canopies',
+  'Distance between shrubs',
+  'Other',
+]
+
 const inputStyle = { width: '100%', background: '#1b1917', border: `1px solid ${c.line}`, borderRadius: 4, color: c.text, fontSize: 14, padding: '8px 10px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }
 
 export default function EntriesList({ entries, onDeleted }) {
@@ -54,6 +65,7 @@ export default function EntriesList({ entries, onDeleted }) {
   const [editingId, setEditingId] = useState(null)
   const [editData,  setEditData]  = useState({})
   const [saving,    setSaving]    = useState(false)
+  const [infoOpen,   setInfoOpen]  = useState(false)
 
   async function deleteEntry(id) {
     if (!confirm('Delete this entry?')) return
@@ -63,13 +75,23 @@ export default function EntriesList({ entries, onDeleted }) {
 
   function startEdit(entry) {
     setEditingId(entry.id)
+    // Parse stored "Type: value" format back into parts
+    let distanceType = 'Distance from home'
+    let distanceVal  = entry.distance ?? ''
+    if (distanceVal.includes(': ')) {
+      const idx = distanceVal.indexOf(': ')
+      distanceType = distanceVal.slice(0, idx)
+      distanceVal  = distanceVal.slice(idx + 2)
+    }
     setEditData({
-      zone:     entry.zone,
-      category: entry.category,
-      status:   entry.status,
-      distance: entry.distance ?? '',
-      note:     entry.note ?? '',
-      detail:   entry.detail ?? '',
+      zone:         entry.zone,
+      category:     entry.category,
+      status:       entry.status,
+      distance:     distanceVal,
+      distanceType: distanceType,
+      showDistance: !!entry.distance,
+      note:         entry.note ?? '',
+      detail:       entry.detail ?? '',
     })
   }
 
@@ -79,7 +101,7 @@ export default function EntriesList({ entries, onDeleted }) {
       zone:     editData.zone,
       category: editData.category,
       status:   editData.status,
-      distance: editData.distance.trim() || null,
+      distance: editData.showDistance && editData.distance.trim() ? `${editData.distanceType}: ${editData.distance.trim()}` : null,
       note:     editData.note.trim(),
       detail:   editData.detail.trim() || null,
     }).eq('id', id)
@@ -150,6 +172,10 @@ export default function EntriesList({ entries, onDeleted }) {
                 <select style={inputStyle} value={editData.category} onChange={e => setEditData(d => ({ ...d, category: e.target.value }))}>
                   {CATEGORIES.map(cat => <option key={cat}>{cat}</option>)}
                 </select>
+                <button onClick={() => setInfoOpen(true)} style={{ marginTop: 6, fontSize: 11, fontFamily: 'monospace', color: c.accent, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                  ⓘ Read about this category
+                </button>
+                {infoOpen && <InfoModal category={editData.category} onClose={() => setInfoOpen(false)} />}
               </div>
 
               {/* Status */}
@@ -174,10 +200,27 @@ export default function EntriesList({ entries, onDeleted }) {
               </div>
 
               {/* Distance */}
-              <div style={{ marginBottom: 10 }}>
-                <label style={{ display: 'block', fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted, marginBottom: 4 }}>Distance</label>
-                <input style={inputStyle} type="text" value={editData.distance} onChange={e => setEditData(d => ({ ...d, distance: e.target.value }))} />
-              </div>
+              {DISTANCE_ZONES.includes(editData.zone) && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <label style={{ fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted }}>Distance</label>
+                    <button
+                      onClick={() => setEditData(d => ({ ...d, showDistance: !d.showDistance, distance: '' }))}
+                      style={{ fontSize: 10.5, fontFamily: 'monospace', color: editData.showDistance ? c.accent : c.muted, background: 'none', border: `1px solid ${editData.showDistance ? c.accent : c.line}`, borderRadius: 4, padding: '3px 8px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+                    >
+                      {editData.showDistance ? 'On' : 'Off'}
+                    </button>
+                  </div>
+                  {editData.showDistance && (
+                    <>
+                      <select style={{ ...inputStyle, marginBottom: 6 }} value={editData.distanceType ?? 'Distance from home'} onChange={e => setEditData(d => ({ ...d, distanceType: e.target.value }))}>
+                        {DISTANCE_TYPES.map(t => <option key={t}>{t}</option>)}
+                      </select>
+                      <input style={inputStyle} type="text" placeholder="e.g. 8 ft" value={editData.distance} onChange={e => setEditData(d => ({ ...d, distance: e.target.value }))} />
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* Note */}
               <div style={{ marginBottom: 10 }}>
