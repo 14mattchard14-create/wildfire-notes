@@ -69,9 +69,9 @@ export default function PropertySelector({ selected, onSelect, user }) {
   if (creating || editing) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input style={input} type="text" placeholder="Property address" value={address} onChange={e => setAddress(e.target.value)} autoFocus />
-          <input style={{ ...input, flex: 'none', width: 130 }} type="date" value={visitDate} onChange={e => setVisitDate(e.target.value)} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <input style={{ ...input, flex: 'none', width: '100%' }} type="text" placeholder="Property address" value={address} onChange={e => setAddress(e.target.value)} autoFocus />
+          <input style={{ ...input, flex: 'none', width: '100%' }} type="date" value={visitDate} onChange={e => setVisitDate(e.target.value)} />
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={editing ? saveEdit : createProperty} disabled={loading} style={{ flex: 1, background: c.accent, color: '#1b1917', border: 'none', borderRadius: 4, fontWeight: 700, fontSize: 13, padding: '9px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
