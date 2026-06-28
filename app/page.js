@@ -84,7 +84,7 @@ export default function Home() {
       <main style={s.main}>
         {!property && <p style={s.empty}>Select or create a property above to begin.</p>}
         {property && activeTab === 'Entries'    && <><EntryForm propertyId={property.id} onSaved={onEntrySaved} user={user} /><EntriesList entries={entries} onDeleted={onEntrySaved} /></>}
-        {property && activeTab === 'Site Notes' && <SiteNotes propertyId={property.id} />}
+        {property && activeTab === 'Site Notes' && <SiteNotes propertyId={property.id} property={property} />}
         {property && activeTab === 'Priorities' && <Priorities propertyId={property.id} />}
         {property && activeTab === 'Export'     && <ExportPanel property={property} entries={entries} user={user} />}
       </main>
