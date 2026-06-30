@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { SITE_NOTE_SECTIONS } from '@/lib/criteria'
+import { SITE_NOTE_SECTIONS, SITE_NOTE_CRITERIA_KEY } from '@/lib/criteria'
+import InfoModal from './InfoModal'
 
 const c = {
   surface:  '#242220',
@@ -28,9 +29,10 @@ const textareaStyle = {
 }
 
 export default function SiteNotes({ propertyId, property }) {
-  const [notes,  setNotes]  = useState({})
-  const [saving, setSaving] = useState(false)
-  const [saved,  setSaved]  = useState(false)
+  const [notes,    setNotes]    = useState({})
+  const [saving,   setSaving]   = useState(false)
+  const [saved,    setSaved]    = useState(false)
+  const [infoOpen, setInfoOpen] = useState(null) // holds the criteria key string, or null
 
   useEffect(() => {
     supabase.from('site_notes').select('*').eq('property_id', propertyId).maybeSingle()
@@ -53,6 +55,8 @@ export default function SiteNotes({ propertyId, property }) {
 
   return (
     <div>
+      {infoOpen && <InfoModal category={infoOpen} onClose={() => setInfoOpen(null)} />}
+
       {/* FHSZ Info Card */}
       {(fhsz || sra || county) && (
         <div style={{ background: '#1b1917', border: `1px solid ${c.line}`, borderLeft: `4px solid ${FHSZ_COLOR[fhsz] ?? c.muted}`, borderRadius: 4, padding: '12px 14px', marginBottom: 24 }}>
@@ -100,19 +104,30 @@ export default function SiteNotes({ propertyId, property }) {
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {SITE_NOTE_SECTIONS.map(s => (
-          <div key={s.key}>
-            <label style={{ display: 'block', fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase', color: c.accent, marginBottom: 6 }}>
-              {s.label}
-            </label>
-            <textarea
-              style={textareaStyle}
-              placeholder={s.placeholder}
-              value={notes[s.key] ?? ''}
-              onChange={e => setNotes(n => ({ ...n, [s.key]: e.target.value }))}
-            />
-          </div>
-        ))}
+        {SITE_NOTE_SECTIONS.map(s => {
+          const criteriaKey = SITE_NOTE_CRITERIA_KEY[s.key]
+          return (
+            <div key={s.key}>
+              <label style={{ display: 'block', fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase', color: c.accent, marginBottom: 6 }}>
+                {s.label}
+              </label>
+              <textarea
+                style={textareaStyle}
+                placeholder={s.placeholder}
+                value={notes[s.key] ?? ''}
+                onChange={e => setNotes(n => ({ ...n, [s.key]: e.target.value }))}
+              />
+              {criteriaKey && (
+                <button
+                  onClick={() => setInfoOpen(criteriaKey)}
+                  style={{ marginTop: 6, fontSize: 11, fontFamily: 'monospace', color: c.accent, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                >
+                  ⓘ Read about this category
+                </button>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       <button onClick={save} disabled={saving} style={{ marginTop: 20, width: '100%', background: c.accent, color: '#1b1917', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 13, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}>
