@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
          HeadingLevel, AlignmentType, BorderStyle, WidthType, ShadingType,
-         LevelFormat, ImageRun } from 'docx'
+         LevelFormat, ImageRun, TableOfContents, PageBreak } from 'docx'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -52,10 +52,10 @@ async function buildPhotoStrip(entries) {
   const withPhotos = entries.filter(e => e.photo_url)
   if (withPhotos.length === 0) return []
 
-  const maxPerRow = 3
-  const CELL_DXA = 3120 // fixed cell width regardless of count, so Docs doesn't recompute differently than Word
-  const MAX_IMG_WIDTH_PX = 170
-  const MAX_IMG_HEIGHT_PX = 220
+  const maxPerRow = 2
+  const CELL_DXA = 4680 // fixed cell width regardless of count, so Docs doesn't recompute differently than Word
+  const MAX_IMG_WIDTH_PX = 260
+  const MAX_IMG_HEIGHT_PX = 280
 
   const rows = []
   for (let i = 0; i < withPhotos.length; i += maxPerRow) {
@@ -81,11 +81,11 @@ async function buildPhotoStrip(entries) {
       } else {
         cellChildren.push(new Paragraph({ children: [new TextRun({ text: '[image unavailable]', italics: true, size: 16, color: '9a9285' })] }))
       }
-      // Caption: short finding text
-      const caption = entry.note ? entry.note.slice(0, 60) + (entry.note.length > 60 ? '…' : '') : entry.category
+      // Caption: full finding text, allowed to wrap across multiple lines
+      const caption = entry.note || entry.category
       cellChildren.push(new Paragraph({
         alignment: AlignmentType.CENTER,
-        children: [new TextRun({ text: caption, italics: true, size: 16, color: '9a9285', font: 'Arial' })],
+        children: [new TextRun({ text: caption, italics: true, size: 15, color: '9a9285', font: 'Arial' })],
         spacing: { before: 60 },
       }))
       cells.push(new TableCell({
@@ -198,6 +198,74 @@ function buildTitlePage(property, inspectorName) {
       spacing: { after: 320 },
     }),
     new Paragraph({ children: [new TextRun('')], pageBreakBefore: false }),
+  ]
+}
+
+// Educational reference content for each inspection category/zone
+const ZONE_EDUCATION = [
+  {
+    name: 'Overall Site',
+    desc: 'A whole-property view of wildfire exposure, factoring in slope, prevailing wind, fuel load, and how neighboring properties could contribute to fire spread toward or away from the home.',
+  },
+  {
+    name: 'Home Hardening (Structure)',
+    desc: 'The home itself — roof, vents, siding, windows, doors, eaves, gutters, decks. These features determine whether embers and direct flame contact can ignite the structure, regardless of how well the surrounding landscape is managed.',
+  },
+  {
+    name: 'Zone 0 (0–5 ft)',
+    desc: 'The Immediate Zone. The 5 feet closest to the home and any attached structures. This zone requires the most aggressive ember protection — bare mineral soil or noncombustible hardscape, no vegetation, no combustible mulch or furniture.',
+  },
+  {
+    name: 'Zone 1 (5–30 ft)',
+    desc: 'The Intermediate Zone. Vegetation here must be widely spaced, well-maintained, and free of "ladder fuels" that could carry fire from the ground into tree canopies. Detached structures in this zone face additional placement requirements.',
+  },
+  {
+    name: 'Zone 2 (30–100 ft)',
+    desc: 'The Extended Zone. Focuses on reducing fuel continuity over a larger area — thinning vegetation, removing dead/dying plants, and maintaining spacing between tree canopies to slow an approaching fire before it reaches the home.',
+  },
+  {
+    name: 'Access & Address',
+    desc: 'Ensures fire crews can find and reach the property quickly — visible address numbers and a clear, navigable driveway/access route are essential during an active wildfire response.',
+  },
+]
+
+function buildZoneGuide() {
+  const children = [
+    new Paragraph({
+      heading: HeadingLevel.HEADING_1,
+      children: [new TextRun({ text: 'UNDERSTANDING THE ZONES', bold: true, font: 'Arial', size: 32, color: 'BE5B1D' })],
+      spacing: { before: 200, after: 160 },
+    }),
+    new Paragraph({
+      children: [new TextRun({ text: 'This assessment is organized around the defensible space zones used in California wildfire mitigation guidance. Each zone has distinct requirements based on its distance from the structure.', font: 'Arial', size: 21, color: '3A352F' })],
+      spacing: { after: 200 },
+    }),
+  ]
+
+  for (const zone of ZONE_EDUCATION) {
+    children.push(new Paragraph({
+      children: [new TextRun({ text: zone.name, bold: true, font: 'Arial', size: 22, color: '2F5496' })],
+      spacing: { before: 140, after: 40 },
+    }))
+    children.push(new Paragraph({
+      children: [new TextRun({ text: zone.desc, font: 'Arial', size: 20, color: '3A352F' })],
+      spacing: { after: 80 },
+    }))
+  }
+
+  children.push(new Paragraph({ children: [new PageBreak()] }))
+  return children
+}
+
+function buildTOC() {
+  return [
+    new Paragraph({
+      heading: HeadingLevel.HEADING_1,
+      children: [new TextRun({ text: 'TABLE OF CONTENTS', bold: true, font: 'Arial', size: 32, color: 'BE5B1D' })],
+      spacing: { before: 200, after: 160 },
+    }),
+    new TableOfContents('Table of Contents', { hyperlink: true, headingStyleRange: '1-3' }),
+    new Paragraph({ children: [new PageBreak()] }),
   ]
 }
 
@@ -423,7 +491,14 @@ Use this structure:
 
 ## 3. FINDINGS BY ZONE
 
-For each zone that has entries, create a heading using the EXACT zone name as it appears in the field notes (e.g. "### Zone 0 (0–5 ft)"), followed by a findings table and recommendations.
+For each zone that has entries, create a heading using the EXACT zone name as it appears in the field notes (e.g. "### Zone 0 (0–5 ft)"), followed by a findings table and recommendations. ALWAYS present "Overall Site" FIRST if it has any entries, before any other zone, since it sets whole-property context for everything that follows.
+
+### Overall Site
+| Category | Finding | Status | Distance |
+|---|---|---|---|
+[rows — only include this section if there are Overall Site entries]
+
+**Recommendations:** [list any non-compliant or verify items]
 
 ### Structure
 | Category | Finding | Status | Distance |
@@ -457,8 +532,8 @@ For each zone that has entries, create a heading using the EXACT zone name as it
 
 ## 4. PRIORITIZED ACTION PLAN
 
-| # | Action | Zone | Cost | Priority |
-|---|---|---|---|---|
+| # | Action | Zone | Priority |
+|---|---|---|---|
 [ranked recommendations]
 
 ---
@@ -467,7 +542,11 @@ For each zone that has entries, create a heading using the EXACT zone name as it
 
 This report reflects conditions observed on the date of assessment and is intended to provide risk-reduction guidance. It is not a guarantee against wildfire damage or loss, nor an official Wildfire Prepared Home designation.
 
-IMPORTANT: Use the exact zone names from the field notes as your ### headings in section 3 (e.g. if field notes say "[Zone 0 (0–5 ft)]", your heading must be "### Zone 0 (0–5 ft)"), so photos can be matched to the correct section.`
+IMPORTANT: Use the exact zone names from the field notes as your ### headings in section 3 (e.g. if field notes say "[Zone 0 (0–5 ft)]", your heading must be "### Zone 0 (0–5 ft)"), so photos can be matched to the correct section.
+
+IMPORTANT: Do not use any emoji or icon characters anywhere in the report (no checkmarks, warning symbols, circles, etc.). Use plain text only — e.g. write "Non-compliant" instead of using a warning emoji, and "Compliant" instead of a checkmark.
+
+IMPORTANT: Do not include cost estimates anywhere in the report, including the action plan table — omit the Cost column entirely.`
 
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
@@ -479,6 +558,8 @@ IMPORTANT: Use the exact zone names from the field notes as your ### headings in
 
     // Build DOCX (now async due to image fetching)
     const titlePageChildren = buildTitlePage(property, inspectorName)
+    const tocChildren = buildTOC()
+    const zoneGuideChildren = buildZoneGuide()
     // Strip the redundant H1 + Property/Inspector/Date lines + first --- from the markdown
     // since that info now lives in the title page table
     const bodyText = reportText
@@ -488,7 +569,7 @@ IMPORTANT: Use the exact zone names from the field notes as your ### headings in
       .replace(/^\*\*Date of Assessment:\*\*.*\n/m, '')
       .replace(/^---\s*\n/, '')
     const bodyChildren = await parseMarkdown(bodyText, entriesByZone)
-    const docChildren = [...titlePageChildren, ...bodyChildren]
+    const docChildren = [...titlePageChildren, ...tocChildren, ...zoneGuideChildren, ...bodyChildren]
 
     const doc = new Document({
       numbering: {
