@@ -85,6 +85,23 @@ export default function PropertySelector({ selected, onSelect, user }) {
     )
   }
 
+  async function refreshFHSZ() {
+    if (!selected) return
+    setFhszLoading(true)
+    const fhsz = await lookupFHSZ(selected.address)
+    setFhszLoading(false)
+    const { data, error } = await supabase.from('properties').update({
+      fhsz: fhsz?.fhsz ?? null,
+      fhsz_sra: fhsz?.sra ?? null,
+      fhsz_county: fhsz?.county ?? null,
+      lat: fhsz?.lat ?? null,
+      lng: fhsz?.lng ?? null,
+    }).eq('id', selected.id).select().single()
+    if (error) { alert('Refresh failed: ' + error.message); return }
+    setProperties(prev => prev.map(p => p.id === data.id ? data : p))
+    onSelect(data)
+  }
+
   async function lookupFHSZ(addr) {
     try {
       const res = await fetch('/api/fhsz', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ address: addr }) })
@@ -209,13 +226,26 @@ export default function PropertySelector({ selected, onSelect, user }) {
         <button onClick={() => setCreating(true)} style={{ padding: '9px 14px', background: c.surface, border: `1px solid ${c.line}`, borderRadius: 4, color: c.accent, fontSize: 18, cursor: 'pointer' }}>+</button>
       </div>
 
-      {selected?.fhsz && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted }}>Fire Hazard Zone:</span>
-          <span style={{ fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: FHSZ_COLOR[selected.fhsz] ?? c.muted, border: `1px solid ${FHSZ_COLOR[selected.fhsz] ?? c.muted}`, borderRadius: 20, padding: '2px 10px' }}>
-            {selected.fhsz}
-          </span>
-          {selected.fhsz_county && <span style={{ fontSize: 9.5, fontFamily: 'monospace', color: c.muted }}>{selected.fhsz_county} County</span>}
+      {selected && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {selected.fhsz && (
+            <>
+              <span style={{ fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted }}>Fire Hazard Zone:</span>
+              <span style={{ fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: FHSZ_COLOR[selected.fhsz] ?? c.muted, border: `1px solid ${FHSZ_COLOR[selected.fhsz] ?? c.muted}`, borderRadius: 20, padding: '2px 10px' }}>
+                {selected.fhsz}
+              </span>
+              {selected.fhsz_county && <span style={{ fontSize: 9.5, fontFamily: 'monospace', color: c.muted }}>{selected.fhsz_county} County</span>}
+            </>
+          )}
+          {!selected.lat && (
+            <button
+              onClick={refreshFHSZ}
+              disabled={fhszLoading}
+              style={{ fontSize: 10, fontFamily: 'monospace', color: c.accent, background: 'none', border: `1px solid ${c.line}`, borderRadius: 4, padding: '3px 8px', cursor: 'pointer' }}
+            >
+              {fhszLoading ? 'Looking up…' : '↻ Fetch fire data'}
+            </button>
+          )}
         </div>
       )}
     </div>
