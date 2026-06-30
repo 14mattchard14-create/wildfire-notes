@@ -33,11 +33,27 @@ export default function SiteNotes({ propertyId, property }) {
   const [saving,   setSaving]   = useState(false)
   const [saved,    setSaved]    = useState(false)
   const [infoOpen, setInfoOpen] = useState(null) // holds the criteria key string, or null
+  const [fireHistory, setFireHistory] = useState(null)
+  const [fireLoading, setFireLoading] = useState(false)
 
   useEffect(() => {
     supabase.from('site_notes').select('*').eq('property_id', propertyId).maybeSingle()
       .then(({ data }) => { if (data) setNotes(data) })
   }, [propertyId])
+
+  useEffect(() => {
+    if (!property?.lat || !property?.lng) { setFireHistory(null); return }
+    setFireLoading(true)
+    fetch('/api/fire-history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat: property.lat, lng: property.lng, radiusMiles: 5 }),
+    })
+      .then(res => res.json())
+      .then(data => setFireHistory(data.fires ?? []))
+      .catch(() => setFireHistory([]))
+      .finally(() => setFireLoading(false))
+  }, [property?.lat, property?.lng])
 
   async function save() {
     setSaving(true)
