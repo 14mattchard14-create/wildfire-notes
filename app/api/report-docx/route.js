@@ -73,7 +73,12 @@ async function buildPhotoStrip(entries, captionMap) {
           const drawH = Math.round(nativeH * scale)
           cellChildren.push(new Paragraph({
             alignment: AlignmentType.CENTER,
-            children: [new ImageRun({ data: buf, transformation: { width: drawW, height: drawH } })],
+            children: [new ImageRun({
+              type: 'jpg',
+              data: buf,
+              transformation: { width: drawW, height: drawH },
+              altText: { title: 'Inspection photo', description: 'Field inspection photo', name: 'photo' },
+            })],
           }))
         } catch {
           cellChildren.push(new Paragraph({ children: [new TextRun({ text: '[image unavailable]', italics: true, size: 16, color: '9a9285' })] }))
