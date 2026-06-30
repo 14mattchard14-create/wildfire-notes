@@ -439,10 +439,12 @@ export async function POST(req) {
 
     const prompt = `You are an expert wildfire risk assessor. Using the field notes below, generate a complete Wildfire Risk Reduction Assessment report in Markdown format.
 
+IMPORTANT CONTEXT ON THE FIELD NOTES: The "Finding" and "Details" text in each entry below is raw shorthand the inspector typed quickly on-site — not polished prose. Treat it as metadata describing what was observed, not as text to copy verbatim into the report. Your job is to interpret that shorthand and write clear, professional, complete sentences for the Finding column and the narrative/recommendation sections, using your wildfire expertise to fill in standard terminology and likely implications. For example, if a note says "vent no mesh," write something like "An attic vent was observed without the required 1/8-inch corrosion-resistant metal mesh, allowing ember entry." Use the Status (Base Compliant, Plus Compliant, Non-Compliant, Needs Verification, Not Applicable) and Distance fields as additional metadata to inform your assessment and recommendations — the distance value tells you spacing/clearance that matters for WPH compliance determinations.
+
 FIELD NOTES:
 ${fieldNotes}
 
-Fill in the report using only information from the field notes. Where data is missing, write "(not assessed)". Be specific and professional. For recommendations, be actionable and concise.
+Fill in the report using the information and shorthand from the field notes above, rewritten into clear professional language. Where data is missing, write "(not assessed)". Be specific and professional. For recommendations, be actionable and concise, and ground them in the actual finding described.
 
 Use this structure:
 
@@ -491,39 +493,39 @@ Use this structure:
 
 ## 3. FINDINGS BY ZONE
 
-For each zone that has entries, create a heading using the EXACT zone name as it appears in the field notes (e.g. "### Zone 0 (0–5 ft)"), followed by a findings table and recommendations. ALWAYS present "Overall Site" FIRST if it has any entries, before any other zone, since it sets whole-property context for everything that follows.
+For each zone that has entries, create a heading using the EXACT zone name as it appears in the field notes (e.g. "### Zone 0 (0–5 ft)"), followed by a findings table and recommendations. ALWAYS present "Overall Site" FIRST if it has any entries, before any other zone, since it sets whole-property context for everything that follows. Each table has only two columns: Category and Finding. If a distance measurement was recorded for an entry, weave it naturally into the Finding sentence (e.g. "Vegetation observed 3 ft from the structure" rather than a separate column) — do not create a Distance or Status column.
 
 ### Overall Site
-| Category | Finding | Status | Distance |
-|---|---|---|---|
+| Category | Finding |
+|---|---|
 [rows — only include this section if there are Overall Site entries]
 
 **Recommendations:** [list any non-compliant or verify items]
 
 ### Structure
-| Category | Finding | Status | Distance |
-|---|---|---|---|
+| Category | Finding |
+|---|---|
 [rows]
 
 **Recommendations:** [list any non-compliant or verify items]
 
 ### Zone 0 (0–5 ft)
-| Category | Finding | Status | Distance |
-|---|---|---|---|
+| Category | Finding |
+|---|---|
 [rows]
 
 **Recommendations:** [list]
 
 ### Zone 1 (5–30 ft)
-| Category | Finding | Status | Distance |
-|---|---|---|---|
+| Category | Finding |
+|---|---|
 [rows]
 
 **Recommendations:** [list]
 
 ### Zone 2 (30–100 ft)
-| Category | Finding | Status | Distance |
-|---|---|---|---|
+| Category | Finding |
+|---|---|
 [rows]
 
 **Recommendations:** [list]
