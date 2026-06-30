@@ -65,7 +65,8 @@ export default function EntriesList({ entries, onDeleted }) {
   const [editingId, setEditingId] = useState(null)
   const [editData,  setEditData]  = useState({})
   const [saving,    setSaving]    = useState(false)
-  const [infoOpen,   setInfoOpen]  = useState(false)
+  const [infoOpen,   setInfoOpen]  = useState(false) // edit-mode info modal
+  const [viewInfoOpen, setViewInfoOpen] = useState(null) // view-mode info modal: holds category string
 
   async function deleteEntry(id) {
     if (!confirm('Delete this entry?')) return
@@ -117,6 +118,8 @@ export default function EntriesList({ entries, onDeleted }) {
 
   return (
     <div>
+      {viewInfoOpen && <InfoModal category={viewInfoOpen} onClose={() => setViewInfoOpen(null)} />}
+
       {/* Lightbox */}
       {lightbox && (
         <div
@@ -279,6 +282,13 @@ export default function EntriesList({ entries, onDeleted }) {
               </div>
 
               <p style={{ fontWeight: 600, fontSize: 15, margin: '0 0 4px', color: c.text }}>{entry.category}</p>
+
+              <button
+                onClick={() => setViewInfoOpen(entry.category)}
+                style={{ fontSize: 10.5, fontFamily: 'monospace', color: c.accent, background: 'none', border: 'none', padding: 0, marginBottom: 6, cursor: 'pointer', display: 'block' }}
+              >
+                ⓘ Read about this category
+              </button>
 
               {entry.distance && (
                 <p style={{ fontSize: 11, fontFamily: 'monospace', color: c.muted, margin: '0 0 4px' }}>{entry.distance}</p>

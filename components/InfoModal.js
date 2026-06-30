@@ -1,6 +1,6 @@
 'use client'
 
-import { CRITERIA_INFO } from '@/lib/criteria'
+import { CRITERIA_INFO, WPH_SOURCE_URL } from '@/lib/criteria'
 
 const c = {
   surface: '#242220',
@@ -97,6 +97,19 @@ export default function InfoModal({ category, onClose }) {
             </li>
           ))}
         </ul>
+
+        {/* Source link */}
+        <a
+          href={WPH_SOURCE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'inline-block', fontSize: 12, fontFamily: 'monospace', color: c.accent,
+            textDecoration: 'underline', marginBottom: 16,
+          }}
+        >
+          ↗ View official WPH How-To Prepare Checklist (PDF)
+        </a>
 
         {/* Footnote */}
         <p style={{
