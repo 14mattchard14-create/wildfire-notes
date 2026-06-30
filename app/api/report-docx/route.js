@@ -17,15 +17,45 @@ async function fetchImageBuffer(url) {
   }
 }
 
+// Read actual pixel dimensions from JPEG/PNG buffer so images aren't stretched
+function getImageDimensions(buf) {
+  try {
+    // PNG
+    if (buf[0] === 0x89 && buf[1] === 0x50) {
+      const width = buf.readUInt32BE(16)
+      const height = buf.readUInt32BE(20)
+      return { width, height }
+    }
+    // JPEG — scan markers for SOF0/SOF2
+    if (buf[0] === 0xFF && buf[1] === 0xD8) {
+      let offset = 2
+      while (offset < buf.length) {
+        if (buf[offset] !== 0xFF) break
+        const marker = buf[offset + 1]
+        if (marker === 0xC0 || marker === 0xC2) {
+          const height = buf.readUInt16BE(offset + 5)
+          const width = buf.readUInt16BE(offset + 7)
+          return { width, height }
+        }
+        const segLength = buf.readUInt16BE(offset + 2)
+        offset += 2 + segLength
+      }
+    }
+  } catch {}
+  return { width: 800, height: 600 } // fallback assumption
+}
+
 // Build a horizontal "strip" of photos (as a borderless table row) for one category/zone group.
 // Each photo gets a small caption underneath (the entry's finding text, truncated).
+// Fixed-size cells (in DXA) keep Word AND Google Docs rendering consistent.
 async function buildPhotoStrip(entries) {
   const withPhotos = entries.filter(e => e.photo_url)
   if (withPhotos.length === 0) return []
 
   const maxPerRow = 3
-  const cellWidthDXA = Math.floor(9360 / Math.min(withPhotos.length, maxPerRow))
-  const imgWidthPx = withPhotos.length === 1 ? 380 : withPhotos.length === 2 ? 260 : 180
+  const CELL_DXA = 3120 // fixed cell width regardless of count, so Docs doesn't recompute differently than Word
+  const MAX_IMG_WIDTH_PX = 170
+  const MAX_IMG_HEIGHT_PX = 220
 
   const rows = []
   for (let i = 0; i < withPhotos.length; i += maxPerRow) {
@@ -36,9 +66,14 @@ async function buildPhotoStrip(entries) {
       const cellChildren = []
       if (buf) {
         try {
+          const { width: nativeW, height: nativeH } = getImageDimensions(buf)
+          // Scale to fit within the max box while preserving aspect ratio
+          const scale = Math.min(MAX_IMG_WIDTH_PX / nativeW, MAX_IMG_HEIGHT_PX / nativeH, 1)
+          const drawW = Math.round(nativeW * scale)
+          const drawH = Math.round(nativeH * scale)
           cellChildren.push(new Paragraph({
             alignment: AlignmentType.CENTER,
-            children: [new ImageRun({ data: buf, transformation: { width: imgWidthPx, height: Math.round(imgWidthPx * 0.75) } })],
+            children: [new ImageRun({ data: buf, transformation: { width: drawW, height: drawH } })],
           }))
         } catch {
           cellChildren.push(new Paragraph({ children: [new TextRun({ text: '[image unavailable]', italics: true, size: 16, color: '9a9285' })] }))
@@ -46,19 +81,29 @@ async function buildPhotoStrip(entries) {
       } else {
         cellChildren.push(new Paragraph({ children: [new TextRun({ text: '[image unavailable]', italics: true, size: 16, color: '9a9285' })] }))
       }
-      // Caption: zone + short finding
-      const caption = entry.note ? entry.note.slice(0, 70) + (entry.note.length > 70 ? '…' : '') : entry.category
+      // Caption: short finding text
+      const caption = entry.note ? entry.note.slice(0, 60) + (entry.note.length > 60 ? '…' : '') : entry.category
       cellChildren.push(new Paragraph({
         alignment: AlignmentType.CENTER,
         children: [new TextRun({ text: caption, italics: true, size: 16, color: '9a9285', font: 'Arial' })],
-        spacing: { before: 40 },
+        spacing: { before: 60 },
       }))
       cells.push(new TableCell({
-        width: { size: cellWidthDXA, type: WidthType.DXA },
+        width: { size: CELL_DXA, type: WidthType.DXA },
+        verticalAlign: 'center',
         borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
-        margins: { top: 60, bottom: 60, left: 60, right: 60 },
+        margins: { top: 80, bottom: 80, left: 80, right: 80 },
         children: cellChildren,
       }))
+    }
+    // Pad row with empty cells so column widths stay consistent across rows
+    while (cells.length < maxPerRow && group.length < maxPerRow) {
+      cells.push(new TableCell({
+        width: { size: CELL_DXA, type: WidthType.DXA },
+        borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+        children: [new Paragraph({ children: [new TextRun('')] })],
+      }))
+      break
     }
     rows.push(new TableRow({ children: cells }))
   }
@@ -66,10 +111,93 @@ async function buildPhotoStrip(entries) {
   return [
     new Table({
       width: { size: 9360, type: WidthType.DXA },
+      columnWidths: Array(maxPerRow).fill(CELL_DXA),
       borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE }, insideHorizontal: { style: BorderStyle.NONE }, insideVertical: { style: BorderStyle.NONE } },
       rows,
     }),
     new Paragraph({ children: [new TextRun('')], spacing: { after: 160 } }),
+  ]
+}
+
+// Build the title page: big heading, "Prepared for", field table, standard disclaimer
+function buildTitlePage(property, inspectorName) {
+  const border = { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' }
+  const borders = { top: border, bottom: border, left: border, right: border }
+  const cellMargins = { top: 100, bottom: 100, left: 140, right: 140 }
+
+  const today = new Date()
+  const reportDate = today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+
+  const ownerName = property.owner_name || property.created_by_name || inspectorName || 'Not recorded'
+
+  const fieldRows = [
+    ['Property Address', property.address ?? 'Not recorded'],
+    ['Date of Assessment', property.visit_date ?? 'Not recorded'],
+    ['Inspector', inspectorName ?? 'Not recorded'],
+    ['Report Date', reportDate],
+    ['Owner', ownerName],
+    ['Resident (if different)', property.resident_name ?? ownerName],
+  ]
+
+  const tableRows = fieldRows.map(([field, detail], idx) => new TableRow({
+    children: [
+      new TableCell({
+        width: { size: 3120, type: WidthType.DXA },
+        borders, margins: cellMargins,
+        shading: { fill: idx % 2 === 0 ? 'FFFFFF' : 'EEF0F2', type: ShadingType.CLEAR },
+        children: [new Paragraph({ children: [new TextRun({ text: field, bold: false, font: 'Arial', size: 21 })] })],
+      }),
+      new TableCell({
+        width: { size: 6240, type: WidthType.DXA },
+        borders, margins: cellMargins,
+        shading: { fill: idx % 2 === 0 ? 'FFFFFF' : 'EEF0F2', type: ShadingType.CLEAR },
+        children: [new Paragraph({ children: [new TextRun({ text: detail, font: 'Arial', size: 21 })] })],
+      }),
+    ],
+  }))
+
+  const headerRow = new TableRow({
+    children: [
+      new TableCell({
+        width: { size: 3120, type: WidthType.DXA }, borders, margins: cellMargins,
+        shading: { fill: '2C3E50', type: ShadingType.CLEAR },
+        children: [new Paragraph({ children: [new TextRun({ text: 'Field', bold: true, font: 'Arial', size: 21, color: 'FFFFFF' })] })],
+      }),
+      new TableCell({
+        width: { size: 6240, type: WidthType.DXA }, borders, margins: cellMargins,
+        shading: { fill: '2C3E50', type: ShadingType.CLEAR },
+        children: [new Paragraph({ children: [new TextRun({ text: 'Detail', bold: true, font: 'Arial', size: 21, color: 'FFFFFF' })] })],
+      }),
+    ],
+  })
+
+  const disclaimer = 'This report is intended to give homeowners a clear picture of their wildfire risk, while also outlining the gaps that would need to be addressed before the property could successfully obtain Wildfire Prepared Home certification (https://wildfireprepared.org/), should the owner wish to pursue certification; compliance and non-compliance determinations throughout this report are based on the Wildfire Prepared Home criteria, as outlined in the official checklist (https://wildfireprepared.org/wp-content/uploads/WPH-How-To-Prepare-My-Home-Checklist.pdf)'
+
+  return [
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: 'WILDFIRE RISK REDUCTION ASSESSMENT', bold: true, font: 'Arial', size: 40, color: '2C3E50' })],
+      spacing: { before: 200, after: 120 },
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: `Prepared for: ${ownerName}`, bold: true, font: 'Arial', size: 24, color: '5A6B7D' })],
+      spacing: { after: 200 },
+      border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: 'BE5B1D', space: 8 } },
+    }),
+    new Paragraph({ children: [new TextRun('')], spacing: { after: 200 } }),
+    new Table({
+      width: { size: 9360, type: WidthType.DXA },
+      columnWidths: [3120, 6240],
+      rows: [headerRow, ...tableRows],
+    }),
+    new Paragraph({ children: [new TextRun('')], spacing: { after: 240 } }),
+    new Paragraph({
+      shading: { fill: 'FDF1D3', type: ShadingType.CLEAR },
+      children: [new TextRun({ text: disclaimer, font: 'Arial', size: 20, color: '3A352F' })],
+      spacing: { after: 320 },
+    }),
+    new Paragraph({ children: [new TextRun('')], pageBreakBefore: false }),
   ]
 }
 
@@ -350,7 +478,17 @@ IMPORTANT: Use the exact zone names from the field notes as your ### headings in
     const reportText = message.content[0].text
 
     // Build DOCX (now async due to image fetching)
-    const docChildren = await parseMarkdown(reportText, entriesByZone)
+    const titlePageChildren = buildTitlePage(property, inspectorName)
+    // Strip the redundant H1 + Property/Inspector/Date lines + first --- from the markdown
+    // since that info now lives in the title page table
+    const bodyText = reportText
+      .replace(/^#\s+WILDFIRE RISK REDUCTION ASSESSMENT\s*\n+/i, '')
+      .replace(/^\*\*Property:\*\*.*\n/m, '')
+      .replace(/^\*\*Inspector:\*\*.*\n/m, '')
+      .replace(/^\*\*Date of Assessment:\*\*.*\n/m, '')
+      .replace(/^---\s*\n/, '')
+    const bodyChildren = await parseMarkdown(bodyText, entriesByZone)
+    const docChildren = [...titlePageChildren, ...bodyChildren]
 
     const doc = new Document({
       numbering: {
