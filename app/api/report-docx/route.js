@@ -1,12 +1,80 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
          HeadingLevel, AlignmentType, BorderStyle, WidthType, ShadingType,
-         LevelFormat } from 'docx'
+         LevelFormat, ImageRun } from 'docx'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-// Parse markdown into docx elements
-function parseMarkdown(markdown, property) {
+// ---- Image helpers ----
+async function fetchImageBuffer(url) {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const arrayBuffer = await res.arrayBuffer()
+    return Buffer.from(arrayBuffer)
+  } catch {
+    return null
+  }
+}
+
+// Build a horizontal "strip" of photos (as a borderless table row) for one category/zone group.
+// Each photo gets a small caption underneath (the entry's finding text, truncated).
+async function buildPhotoStrip(entries) {
+  const withPhotos = entries.filter(e => e.photo_url)
+  if (withPhotos.length === 0) return []
+
+  const maxPerRow = 3
+  const cellWidthDXA = Math.floor(9360 / Math.min(withPhotos.length, maxPerRow))
+  const imgWidthPx = withPhotos.length === 1 ? 380 : withPhotos.length === 2 ? 260 : 180
+
+  const rows = []
+  for (let i = 0; i < withPhotos.length; i += maxPerRow) {
+    const group = withPhotos.slice(i, i + maxPerRow)
+    const cells = []
+    for (const entry of group) {
+      const buf = await fetchImageBuffer(entry.photo_url)
+      const cellChildren = []
+      if (buf) {
+        try {
+          cellChildren.push(new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new ImageRun({ data: buf, transformation: { width: imgWidthPx, height: Math.round(imgWidthPx * 0.75) } })],
+          }))
+        } catch {
+          cellChildren.push(new Paragraph({ children: [new TextRun({ text: '[image unavailable]', italics: true, size: 16, color: '9a9285' })] }))
+        }
+      } else {
+        cellChildren.push(new Paragraph({ children: [new TextRun({ text: '[image unavailable]', italics: true, size: 16, color: '9a9285' })] }))
+      }
+      // Caption: zone + short finding
+      const caption = entry.note ? entry.note.slice(0, 70) + (entry.note.length > 70 ? '…' : '') : entry.category
+      cellChildren.push(new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [new TextRun({ text: caption, italics: true, size: 16, color: '9a9285', font: 'Arial' })],
+        spacing: { before: 40 },
+      }))
+      cells.push(new TableCell({
+        width: { size: cellWidthDXA, type: WidthType.DXA },
+        borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+        margins: { top: 60, bottom: 60, left: 60, right: 60 },
+        children: cellChildren,
+      }))
+    }
+    rows.push(new TableRow({ children: cells }))
+  }
+
+  return [
+    new Table({
+      width: { size: 9360, type: WidthType.DXA },
+      borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE }, insideHorizontal: { style: BorderStyle.NONE }, insideVertical: { style: BorderStyle.NONE } },
+      rows,
+    }),
+    new Paragraph({ children: [new TextRun('')], spacing: { after: 160 } }),
+  ]
+}
+
+// ---- Markdown parsing (unchanged structure, now async to allow image fetches) ----
+async function parseMarkdown(markdown, entriesByZone) {
   const lines = markdown.split('\n')
   const children = []
 
@@ -38,14 +106,23 @@ function parseMarkdown(markdown, property) {
       i++; continue
     }
 
-    // H3
+    // H3 — also a hook point: if this is a zone heading, drop a photo strip right after it
     if (line.startsWith('### ')) {
+      const headingText = line.replace(/^### /, '').replace(/\*\*/g, '')
       children.push(new Paragraph({
         heading: HeadingLevel.HEADING_3,
-        children: [new TextRun({ text: line.replace(/^### /, '').replace(/\*\*/g, ''), bold: true, font: 'Arial', size: 24 })],
+        children: [new TextRun({ text: headingText, bold: true, font: 'Arial', size: 24 })],
         spacing: { before: 200, after: 100 },
       }))
-      i++; continue
+      i++
+
+      // If this heading matches a zone name we have entries/photos for, insert the strip
+      const matchedZone = Object.keys(entriesByZone).find(z => headingText.includes(z) || z.includes(headingText))
+      if (matchedZone && entriesByZone[matchedZone]?.length) {
+        const strip = await buildPhotoStrip(entriesByZone[matchedZone])
+        children.push(...strip)
+      }
+      continue
     }
 
     // Table
@@ -77,7 +154,6 @@ function parseMarkdown(markdown, property) {
           })
         })
 
-        // Estimate column widths evenly
         const colCount = tableLines[0].split('|').filter(c => c.trim() !== '').length
         const colWidth = Math.floor(9360 / colCount)
         const colWidths = Array(colCount).fill(colWidth)
@@ -154,9 +230,17 @@ function parseMarkdown(markdown, property) {
 
 export async function POST(req) {
   try {
-    const { fieldNotes, property, inspectorName } = await req.json()
+    const { fieldNotes, property, inspectorName, entries } = await req.json()
 
-    // Generate report text from Claude
+    // Group entries by zone so we know which photos belong under which heading
+    const entriesByZone = {}
+    if (Array.isArray(entries)) {
+      for (const e of entries) {
+        if (!entriesByZone[e.zone]) entriesByZone[e.zone] = []
+        entriesByZone[e.zone].push(e)
+      }
+    }
+
     const prompt = `You are an expert wildfire risk assessor. Using the field notes below, generate a complete Wildfire Risk Reduction Assessment report in Markdown format.
 
 FIELD NOTES:
@@ -211,7 +295,7 @@ Use this structure:
 
 ## 3. FINDINGS BY ZONE
 
-For each zone that has entries, create a findings table and recommendations.
+For each zone that has entries, create a heading using the EXACT zone name as it appears in the field notes (e.g. "### Zone 0 (0–5 ft)"), followed by a findings table and recommendations.
 
 ### Structure
 | Category | Finding | Status | Distance |
@@ -220,21 +304,21 @@ For each zone that has entries, create a findings table and recommendations.
 
 **Recommendations:** [list any non-compliant or verify items]
 
-### Immediate Zone (0–5 ft)
+### Zone 0 (0–5 ft)
 | Category | Finding | Status | Distance |
 |---|---|---|---|
 [rows]
 
 **Recommendations:** [list]
 
-### Intermediate Zone (5–30 ft)
+### Zone 1 (5–30 ft)
 | Category | Finding | Status | Distance |
 |---|---|---|---|
 [rows]
 
 **Recommendations:** [list]
 
-### Extended Zone (30–100 ft)
+### Zone 2 (30–100 ft)
 | Category | Finding | Status | Distance |
 |---|---|---|---|
 [rows]
@@ -253,7 +337,9 @@ For each zone that has entries, create a findings table and recommendations.
 
 ## 5. DISCLAIMER
 
-This report reflects conditions observed on the date of assessment and is intended to provide risk-reduction guidance. It is not a guarantee against wildfire damage or loss, nor an official Wildfire Prepared Home designation.`
+This report reflects conditions observed on the date of assessment and is intended to provide risk-reduction guidance. It is not a guarantee against wildfire damage or loss, nor an official Wildfire Prepared Home designation.
+
+IMPORTANT: Use the exact zone names from the field notes as your ### headings in section 3 (e.g. if field notes say "[Zone 0 (0–5 ft)]", your heading must be "### Zone 0 (0–5 ft)"), so photos can be matched to the correct section.`
 
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
@@ -263,8 +349,8 @@ This report reflects conditions observed on the date of assessment and is intend
 
     const reportText = message.content[0].text
 
-    // Build DOCX
-    const docChildren = parseMarkdown(reportText, property)
+    // Build DOCX (now async due to image fetching)
+    const docChildren = await parseMarkdown(reportText, entriesByZone)
 
     const doc = new Document({
       numbering: {

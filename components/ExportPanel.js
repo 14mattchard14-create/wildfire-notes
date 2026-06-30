@@ -73,7 +73,7 @@ export default function ExportPanel({ property, entries, user }) {
       const res = await fetch('/api/report-docx', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fieldNotes: raw, property, inspectorName: user?.user_metadata?.full_name || user?.email || 'Unknown' }),
+        body: JSON.stringify({ fieldNotes: raw, property, inspectorName: user?.user_metadata?.full_name || user?.email || 'Unknown', entries }),
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
