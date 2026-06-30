@@ -47,7 +47,7 @@ const TOP_STATUSES = [
   { value: 'Needs Verification', label: 'Verify' },
 ]
 
-const DISTANCE_ZONES = ['Zone 0 (0–5 ft)', 'Zone 1 (5–30 ft)', 'Zone 2 (30–100 ft)']
+const DISTANCE_ZONES = ['0-5 FT. Noncombustible Zone', '5-30 FT. Defensible Space - Vegetation', '10-30 FT. Defensible Space - Detached Structures & Other Large Items']
 
 const DISTANCE_TYPES = [
   'Distance from home',

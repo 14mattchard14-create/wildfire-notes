@@ -172,14 +172,6 @@ export default function ExportPanel({ property, entries, user }) {
           <button onClick={generateReport} disabled={genning} style={{ width: '100%', background: c.accent, color: '#1b1917', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 13, cursor: 'pointer', opacity: genning ? 0.5 : 1, marginBottom: 14 }}>
             {genning ? 'Generating Report…' : 'Generate & Download Report'}
           </button>
-          {debugLog && (
-            <div style={{ background: '#1b1917', border: '1px solid #be5b1d', borderRadius: 4, padding: 10, marginBottom: 10, maxHeight: 200, overflowY: 'auto' }}>
-              <p style={{ fontSize: 10, fontFamily: 'monospace', color: '#be5b1d', marginBottom: 6, textTransform: 'uppercase' }}>Debug Log (temporary)</p>
-              {debugLog.map((line, i) => (
-                <p key={i} style={{ fontSize: 10, fontFamily: 'monospace', color: '#9a9285', margin: '2px 0', wordBreak: 'break-all' }}>{line}</p>
-              ))}
-            </div>
-          )}
           {report && (
             <>
               <textarea readOnly value={report} style={{ width: '100%', background: '#1b1917', border: `1px solid ${c.line}`, borderRadius: 4, padding: '10px 12px', fontSize: 12, fontFamily: 'monospace', color: c.muted, minHeight: 400, resize: 'vertical', outline: 'none', boxSizing: 'border-box', marginBottom: 10, scrollbarWidth: 'thin', scrollbarColor: `${c.line} transparent` }} />

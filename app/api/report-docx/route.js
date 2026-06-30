@@ -315,7 +315,7 @@ function buildTOC() {
 }
 
 // ---- Markdown parsing (unchanged structure, now async to allow image fetches) ----
-async function parseMarkdown(markdown, entriesByZone, captionMap, debugLog) {
+async function parseMarkdown(markdown, entriesByZone, captionMap) {
   const lines = markdown.split('\n')
   const children = []
   const matchedZoneKeys = new Set()
@@ -361,7 +361,6 @@ async function parseMarkdown(markdown, entriesByZone, captionMap, debugLog) {
       // If this heading matches a zone name we have entries/photos for, insert the strip
       const normalize = s => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
       const normalizedHeading = normalize(headingText)
-      debugLog.push('heading: ' + JSON.stringify(headingText))
       const matchedZone = Object.keys(entriesByZone).find(z => {
         const normalizedZone = normalize(z)
         return normalizedHeading === normalizedZone || normalizedHeading.includes(normalizedZone) || normalizedZone.includes(normalizedHeading)
@@ -515,9 +514,7 @@ export async function POST(req) {
         entriesByZone[e.zone].push(e)
       }
     }
-    const debugLog = []
-    debugLog.push('entriesByZone keys: ' + JSON.stringify(Object.keys(entriesByZone)))
-    debugLog.push('photo counts per zone: ' + JSON.stringify(Object.fromEntries(Object.entries(entriesByZone).map(([z, arr]) => [z, arr.filter(e => e.photo_url).length]))))
+
 
     const prompt = `You are an expert wildfire risk assessor. Using the field notes below, generate a complete Wildfire Risk Reduction Assessment report in Markdown format.
 
@@ -715,7 +712,7 @@ IMPORTANT: Do not include cost estimates anywhere in the report, including the a
       .replace(/^\*\*Inspector:\*\*.*\n/m, '')
       .replace(/^\*\*Date of Assessment:\*\*.*\n/m, '')
       .replace(/^---\s*\n/, '')
-    const bodyChildren = await parseMarkdown(bodyText, entriesByZone, captionMap, debugLog)
+    const bodyChildren = await parseMarkdown(bodyText, entriesByZone, captionMap)
     const docChildren = [...titlePageChildren, ...tocChildren, ...zoneGuideChildren, ...bodyChildren]
 
     const doc = new Document({
@@ -753,7 +750,7 @@ IMPORTANT: Do not include cost estimates anywhere in the report, including the a
     const buffer = await Packer.toBuffer(doc)
     const base64 = buffer.toString('base64')
 
-    return Response.json({ docx: base64, report: reportText, debugLog })
+    return Response.json({ docx: base64, report: reportText })
   } catch (err) {
     console.error('DOCX generation error:', err)
     return Response.json({ error: err.message }, { status: 500 })
