@@ -48,7 +48,7 @@ function getImageDimensions(buf) {
 // Build a horizontal "strip" of photos (as a borderless table row) for one category/zone group.
 // Each photo gets a small caption underneath (the entry's finding text, truncated).
 // Fixed-size cells (in DXA) keep Word AND Google Docs rendering consistent.
-async function buildPhotoStrip(entries) {
+async function buildPhotoStrip(entries, captionMap) {
   const withPhotos = entries.filter(e => e.photo_url)
   if (withPhotos.length === 0) return []
 
@@ -81,8 +81,8 @@ async function buildPhotoStrip(entries) {
       } else {
         cellChildren.push(new Paragraph({ children: [new TextRun({ text: '[image unavailable]', italics: true, size: 16, color: '9a9285' })] }))
       }
-      // Caption: full finding text, allowed to wrap across multiple lines
-      const caption = entry.note || entry.category
+      // Caption: AI-polished description if available, otherwise fall back to raw note
+      const caption = captionMap?.[entry.id] || entry.note || entry.category
       cellChildren.push(new Paragraph({
         alignment: AlignmentType.CENTER,
         children: [new TextRun({ text: caption, italics: true, size: 15, color: '9a9285', font: 'Arial' })],
@@ -264,13 +264,17 @@ function buildTOC() {
       children: [new TextRun({ text: 'TABLE OF CONTENTS', bold: true, font: 'Arial', size: 32, color: 'BE5B1D' })],
       spacing: { before: 200, after: 160 },
     }),
+    new Paragraph({
+      children: [new TextRun({ text: '(If this section appears blank, right-click it and select "Update Field" — or in Google Docs it will auto-populate after the document finishes loading.)', italics: true, font: 'Arial', size: 18, color: '9a9285' })],
+      spacing: { after: 160 },
+    }),
     new TableOfContents('Table of Contents', { hyperlink: true, headingStyleRange: '1-3' }),
     new Paragraph({ children: [new PageBreak()] }),
   ]
 }
 
 // ---- Markdown parsing (unchanged structure, now async to allow image fetches) ----
-async function parseMarkdown(markdown, entriesByZone) {
+async function parseMarkdown(markdown, entriesByZone, captionMap) {
   const lines = markdown.split('\n')
   const children = []
 
@@ -315,7 +319,7 @@ async function parseMarkdown(markdown, entriesByZone) {
       // If this heading matches a zone name we have entries/photos for, insert the strip
       const matchedZone = Object.keys(entriesByZone).find(z => headingText.includes(z) || z.includes(headingText))
       if (matchedZone && entriesByZone[matchedZone]?.length) {
-        const strip = await buildPhotoStrip(entriesByZone[matchedZone])
+        const strip = await buildPhotoStrip(entriesByZone[matchedZone], captionMap)
         children.push(...strip)
       }
       continue
@@ -424,6 +428,32 @@ async function parseMarkdown(markdown, entriesByZone) {
   return children
 }
 
+async function generateCaptions(entries) {
+  const withPhotos = entries.filter(e => e.photo_url && e.note)
+  if (withPhotos.length === 0) return {}
+
+  const list = withPhotos.map(e => `ID: ${e.id}\nCategory: ${e.category}\nZone: ${e.zone}\nRaw note: ${e.note}\nDistance: ${e.distance ?? 'none'}`).join('\n\n')
+
+  const prompt = `You are wordsmithing photo captions for a wildfire risk assessment report. Below are raw field notes (shorthand) for several photographed findings. Rewrite each into a single polished, professional caption sentence (under 18 words) suitable to appear directly beneath the photo. Use proper terminology and incorporate the distance if given. Do not include the category name redundantly if it's obvious from the photo context.
+
+${list}
+
+Respond ONLY with a JSON object mapping each ID to its polished caption string, like {"abc123": "Caption text here", ...}. No other text, no markdown fences.`
+
+  try {
+    const res = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1500,
+      messages: [{ role: 'user', content: prompt }],
+    })
+    const text = res.content[0].text.replace(/```json|```/g, '').trim()
+    return JSON.parse(text)
+  } catch (err) {
+    console.error('Caption generation error:', err)
+    return {}
+  }
+}
+
 export async function POST(req) {
   try {
     const { fieldNotes, property, inspectorName, entries } = await req.json()
@@ -493,7 +523,7 @@ Use this structure:
 
 ## 3. FINDINGS BY ZONE
 
-For each zone that has entries, create a heading using the EXACT zone name as it appears in the field notes (e.g. "### Zone 0 (0–5 ft)"), followed by a findings table and recommendations. ALWAYS present "Overall Site" FIRST if it has any entries, before any other zone, since it sets whole-property context for everything that follows. Each table has only two columns: Category and Finding. If a distance measurement was recorded for an entry, weave it naturally into the Finding sentence (e.g. "Vegetation observed 3 ft from the structure" rather than a separate column) — do not create a Distance or Status column.
+For each zone that has entries, create a heading using the EXACT zone name as it appears in the field notes (e.g. "### Zone 0 (0–5 ft)"), followed by a findings table and recommendations. ALWAYS present "Overall Site" FIRST if it has any entries, before any other zone, since it sets whole-property context for everything that follows. Each table has exactly two columns: Category and Finding. Fold the Status (Compliant/Non-Compliant/Needs Verification/Not Applicable) directly into the Finding sentence as plain language (e.g. "...which is non-compliant with WPH Base requirements" or "...meets Base compliance") rather than a separate Status column. If a distance measurement was recorded, also weave it into the same sentence (e.g. "Vegetation observed 3 ft from the structure, which is non-compliant..."). Do not create separate Distance or Status columns — everything goes into one well-written Finding sentence per row.
 
 ### Overall Site
 | Category | Finding |
@@ -558,7 +588,8 @@ IMPORTANT: Do not include cost estimates anywhere in the report, including the a
 
     const reportText = message.content[0].text
 
-    // Build DOCX (now async due to image fetching)
+    // Generate AI-polished photo captions, and build DOCX (now async due to image fetching)
+    const captionMap = Array.isArray(entries) ? await generateCaptions(entries) : {}
     const titlePageChildren = buildTitlePage(property, inspectorName)
     const tocChildren = buildTOC()
     const zoneGuideChildren = buildZoneGuide()
@@ -570,7 +601,7 @@ IMPORTANT: Do not include cost estimates anywhere in the report, including the a
       .replace(/^\*\*Inspector:\*\*.*\n/m, '')
       .replace(/^\*\*Date of Assessment:\*\*.*\n/m, '')
       .replace(/^---\s*\n/, '')
-    const bodyChildren = await parseMarkdown(bodyText, entriesByZone)
+    const bodyChildren = await parseMarkdown(bodyText, entriesByZone, captionMap)
     const docChildren = [...titlePageChildren, ...tocChildren, ...zoneGuideChildren, ...bodyChildren]
 
     const doc = new Document({
