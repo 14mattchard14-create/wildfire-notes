@@ -208,15 +208,15 @@ const ZONE_EDUCATION = [
     desc: 'A whole-property view of wildfire exposure, factoring in slope, prevailing wind, fuel load, and how neighboring properties could contribute to fire spread toward or away from the home.',
   },
   {
-    name: '0–5 Ft Noncombustible Zone',
+    name: '0-5 FT. Noncombustible Zone',
     desc: 'The most critical area around the home. The first five feet surrounding the home and attached features must be completely noncombustible — bare mineral soil or hardscape only, with no vegetation, mulch, or combustible items, extending vertically with no overhanging branches.',
   },
   {
-    name: '5–30 Ft Defensible Space',
+    name: '5-30 FT. Defensible Space - Vegetation',
     desc: 'A fuel-reduction zone that slows fire spread before it reaches the home. Trees and shrubs must be properly spaced and pruned, grass kept short, dead vegetation removed, and firewood stored well away from the structure.',
   },
   {
-    name: 'Detached Structures & Other Large Items',
+    name: '10-30 FT. Defensible Space - Detached Structures & Other Large Items',
     desc: 'Sheds, pergolas, hot tubs, outdoor kitchens, and fuel/water storage tanks within 30 ft of the home each carry their own placement, spacing, and material requirements to prevent them from acting as fire bridges to the structure.',
   },
   {
@@ -562,21 +562,21 @@ Present findings grouped under these categories, IN THIS EXACT ORDER, using the 
 
 **Recommendations:** [list]
 
-### 0–5 Ft Noncombustible Zone
+### 0-5 FT. Noncombustible Zone
 | Category | Finding |
 |---|---|
 [rows]
 
 **Recommendations:** [list]
 
-### 5–30 Ft Defensible Space
+### 5-30 FT. Defensible Space - Vegetation
 | Category | Finding |
 |---|---|
 [rows]
 
 **Recommendations:** [list]
 
-### Detached Structures & Other Large Items
+### 10-30 FT. Defensible Space - Detached Structures & Other Large Items
 | Category | Finding |
 |---|---|
 [rows]
