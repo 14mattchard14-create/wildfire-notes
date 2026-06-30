@@ -7,12 +7,12 @@ import PropertySelector from '@/components/PropertySelector'
 import EntryForm        from '@/components/EntryForm'
 import EntriesList      from '@/components/EntriesList'
 import SiteNotes        from '@/components/SiteNotes'
-import Priorities       from '@/components/Priorities'
+import FireData         from '@/components/FireData'
 import ExportPanel      from '@/components/ExportPanel'
 import LoginPage        from '@/app/login/page'
 import GuidedEntry      from '@/components/GuidedEntry'
 
-const TABS = ['Entries', 'Site Notes', 'Priorities', 'Export']
+const TABS = ['Entries', 'Site Notes', 'Fire Data', 'Export']
 
 const s = {
   page:      { maxWidth: 640, margin: '0 auto', minHeight: '100vh', paddingBottom: 48 },
@@ -85,7 +85,8 @@ export default function Home() {
 
       <main style={s.main}>
         {!property && <p style={s.empty}>Select or create a property above to begin.</p>}
-        {property && activeTab === 'Entries'    && (
+
+        {property && activeTab === 'Entries' && (
           <>
             <button
               onClick={() => setGuidedOpen(true)}
@@ -105,8 +106,9 @@ export default function Home() {
             )}
           </>
         )}
-        {property && activeTab === 'Site Notes' && <SiteNotes propertyId={property.id} property={property} />}
-        {property && activeTab === 'Priorities' && <Priorities propertyId={property.id} />}
+
+        {property && activeTab === 'Site Notes' && <SiteNotes propertyId={property.id} />}
+        {property && activeTab === 'Fire Data'  && <FireData property={property} />}
         {property && activeTab === 'Export'     && <ExportPanel property={property} entries={entries} user={user} />}
       </main>
     </div>
