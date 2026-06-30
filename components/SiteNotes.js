@@ -115,6 +115,29 @@ export default function SiteNotes({ propertyId, property }) {
         </div>
       )}
 
+      {/* Fire History Card */}
+      {(fireLoading || (fireHistory && fireHistory.length > 0)) && (
+        <div style={{ background: '#1b1917', border: `1px solid ${c.line}`, borderLeft: `4px solid ${c.warn}`, borderRadius: 4, padding: '12px 14px', marginBottom: 24 }}>
+          <p style={{ fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase', color: c.muted, marginBottom: 10 }}>
+            CAL FIRE — Fire History (within 5 mi)
+          </p>
+          {fireLoading && <p style={{ fontSize: 12, color: c.muted, margin: 0 }}>Looking up nearby fire history…</p>}
+          {!fireLoading && fireHistory && fireHistory.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {fireHistory.map((fire, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+                  <span style={{ color: c.text }}>{fire.name?.trim() || 'Unnamed Fire'} ({fire.year})</span>
+                  {fire.acres && <span style={{ fontFamily: 'monospace', color: c.muted, fontSize: 11 }}>{fire.acres.toLocaleString()} ac</span>}
+                </div>
+              ))}
+              <p style={{ fontSize: 10.5, color: c.muted, marginTop: 6, lineHeight: 1.4 }}>
+                Source: CAL FIRE FRAP historical fire perimeter database. Coverage may be incomplete, especially for older or smaller fires.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       <p style={{ fontSize: 12, color: c.muted, marginBottom: 20, lineHeight: 1.5 }}>
         Record observations for each Wildfire Prepared Home category below — these notes are used to generate the corresponding section of the final report.
       </p>
