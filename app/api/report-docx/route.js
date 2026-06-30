@@ -313,6 +313,7 @@ function buildTOC() {
 async function parseMarkdown(markdown, entriesByZone, captionMap) {
   const lines = markdown.split('\n')
   const children = []
+  const matchedZoneKeys = new Set()
 
   const border = { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' }
   const borders = { top: border, bottom: border, left: border, right: border }
@@ -353,8 +354,14 @@ async function parseMarkdown(markdown, entriesByZone, captionMap) {
       i++
 
       // If this heading matches a zone name we have entries/photos for, insert the strip
-      const matchedZone = Object.keys(entriesByZone).find(z => headingText.includes(z) || z.includes(headingText))
+      const normalize = s => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+      const normalizedHeading = normalize(headingText)
+      const matchedZone = Object.keys(entriesByZone).find(z => {
+        const normalizedZone = normalize(z)
+        return normalizedHeading === normalizedZone || normalizedHeading.includes(normalizedZone) || normalizedZone.includes(normalizedHeading)
+      })
       if (matchedZone && entriesByZone[matchedZone]?.length) {
+        matchedZoneKeys.add(matchedZone)
         const strip = await buildPhotoStrip(entriesByZone[matchedZone], captionMap)
         children.push(...strip)
       }
@@ -672,7 +679,7 @@ Present findings grouped under these categories, IN THIS EXACT ORDER, using the 
 
 This report reflects conditions observed on the date of assessment and is intended to provide risk-reduction guidance. It is not a guarantee against wildfire damage or loss, nor an official Wildfire Prepared Home designation.
 
-IMPORTANT: Use the exact zone names from the field notes as your ### headings in section 3 (e.g. if field notes say "[Zone 0 (0–5 ft)]", your heading must be "### Zone 0 (0–5 ft)"), so photos can be matched to the correct section.
+IMPORTANT: Your ### headings in section 3 MUST be copied character-for-character from the category list above (e.g. "### 0-5 FT. Noncombustible Zone", "### 5-30 FT. Defensible Space - Vegetation", "### 10-30 FT. Defensible Space - Detached Structures & Other Large Items", "### Roof", etc.) — do not paraphrase, abbreviate, or alter punctuation in the heading text, since photos are matched to sections by exact heading text.
 
 IMPORTANT: Do not use any emoji or icon characters anywhere in the report (no checkmarks, warning symbols, circles, etc.). Use plain text only — e.g. write "Non-compliant" instead of using a warning emoji, and "Compliant" instead of a checkmark.
 
