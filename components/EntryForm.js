@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { ZONES, CATEGORIES } from '@/lib/criteria'
+import { ZONES } from '@/lib/criteria'
 import InfoModal   from './InfoModal'
 import PhotoUpload from './PhotoUpload'
 
@@ -71,7 +71,6 @@ function StatusBtn({ value, label, status, setStatus }) {
 
 export default function EntryForm({ propertyId, onSaved, user }) {
   const [zone,       setZone]       = useState(ZONES[0])
-  const [category,   setCategory]   = useState(CATEGORIES[0])
   const [status,     setStatus]     = useState(null)
   const [distance,     setDistance]     = useState('')
   const [distanceType,  setDistanceType]  = useState(DISTANCE_TYPES[0])
@@ -91,7 +90,7 @@ export default function EntryForm({ propertyId, onSaved, user }) {
     const userName = user?.user_metadata?.full_name || user?.email || 'Unknown'
     const { error } = await supabase.from('entries').insert({
       property_id: propertyId,
-      zone, category, status,
+      zone, category: zone, status,
       distance: showDistance && distance.trim() ? (distanceType.trim() ? `${distance.trim()} — ${distanceType.trim()}` : distance.trim()) : null,
       note:     note.trim(),
       detail:   detail.trim() || null,
@@ -109,20 +108,13 @@ export default function EntryForm({ propertyId, onSaved, user }) {
 
   return (
     <>
-      {infoOpen && <InfoModal category={category} onClose={() => setInfoOpen(false)} />}
+      {infoOpen && <InfoModal category={zone} onClose={() => setInfoOpen(false)} />}
 
       <div style={card}>
         <div style={field}>
           <label style={label}>Zone</label>
           <select style={input} value={zone} onChange={e => { setZone(e.target.value); if (!DISTANCE_ZONES.includes(e.target.value)) { setShowDist(false); setDistance('') } }}>
             {ZONES.map(z => <option key={z}>{z}</option>)}
-          </select>
-        </div>
-
-        <div style={field}>
-          <label style={label}>Criteria / Category</label>
-          <select style={input} value={category} onChange={e => setCategory(e.target.value)}>
-            {CATEGORIES.map(c => <option key={c}>{c}</option>)}
           </select>
           <button onClick={() => setInfoOpen(true)} style={{ marginTop: 6, fontSize: 11, fontFamily: 'monospace', color: c.accent, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
             ⓘ Read about this category

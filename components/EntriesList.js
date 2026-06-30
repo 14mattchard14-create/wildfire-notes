@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { ZONES, CATEGORIES } from '@/lib/criteria'
+import { ZONES } from '@/lib/criteria'
 import InfoModal from './InfoModal'
 
 const c = {
@@ -86,7 +86,6 @@ export default function EntriesList({ entries, onDeleted }) {
     }
     setEditData({
       zone:         entry.zone,
-      category:     entry.category,
       status:       entry.status,
       distance:     distanceVal,
       distanceType: distanceType,
@@ -100,7 +99,7 @@ export default function EntriesList({ entries, onDeleted }) {
     setSaving(true)
     const { error } = await supabase.from('entries').update({
       zone:     editData.zone,
-      category: editData.category,
+      category: editData.zone,
       status:   editData.status,
       distance: editData.showDistance && editData.distance.trim() ? (editData.distanceType?.trim() ? `${editData.distance.trim()} — ${editData.distanceType.trim()}` : editData.distance.trim()) : null,
       note:     editData.note.trim(),
@@ -167,18 +166,10 @@ export default function EntriesList({ entries, onDeleted }) {
                 <select style={inputStyle} value={editData.zone} onChange={e => setEditData(d => ({ ...d, zone: e.target.value }))}>
                   {ZONES.map(z => <option key={z}>{z}</option>)}
                 </select>
-              </div>
-
-              {/* Category */}
-              <div style={{ marginBottom: 10 }}>
-                <label style={{ display: 'block', fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted, marginBottom: 4 }}>Category</label>
-                <select style={inputStyle} value={editData.category} onChange={e => setEditData(d => ({ ...d, category: e.target.value }))}>
-                  {CATEGORIES.map(cat => <option key={cat}>{cat}</option>)}
-                </select>
                 <button onClick={() => setInfoOpen(true)} style={{ marginTop: 6, fontSize: 11, fontFamily: 'monospace', color: c.accent, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
                   ⓘ Read about this category
                 </button>
-                {infoOpen && <InfoModal category={editData.category} onClose={() => setInfoOpen(false)} />}
+                {infoOpen && <InfoModal category={editData.zone} onClose={() => setInfoOpen(false)} />}
               </div>
 
               {/* Status */}
@@ -276,15 +267,14 @@ export default function EntriesList({ entries, onDeleted }) {
 
           return (
             <div key={entry.id} style={{ background: c.surface, border: `1px solid ${c.line}`, borderLeft: `4px solid ${BORDER[entry.status] ?? c.muted}`, borderRadius: 4, padding: '12px 13px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: c.accent, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{entry.zone}</span>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
                 <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: STATUS_COLOR[entry.status] ?? c.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{entry.status}</span>
               </div>
 
-              <p style={{ fontWeight: 600, fontSize: 15, margin: '0 0 4px', color: c.text }}>{entry.category}</p>
+              <p style={{ fontWeight: 600, fontSize: 15, margin: '0 0 4px', color: c.text }}>{entry.zone}</p>
 
               <button
-                onClick={() => setViewInfoOpen(entry.category)}
+                onClick={() => setViewInfoOpen(entry.zone)}
                 style={{ fontSize: 10.5, fontFamily: 'monospace', color: c.accent, background: 'none', border: 'none', padding: 0, marginBottom: 6, cursor: 'pointer', display: 'block' }}
               >
                 ⓘ Read about this category
