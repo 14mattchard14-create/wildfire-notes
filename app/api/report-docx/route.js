@@ -361,6 +361,7 @@ async function parseMarkdown(markdown, entriesByZone, captionMap) {
       // If this heading matches a zone name we have entries/photos for, insert the strip
       const normalize = s => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
       const normalizedHeading = normalize(headingText)
+      console.log('DEBUG heading found:', JSON.stringify(headingText), '| normalized:', JSON.stringify(normalizedHeading))
       const matchedZone = Object.keys(entriesByZone).find(z => {
         const normalizedZone = normalize(z)
         return normalizedHeading === normalizedZone || normalizedHeading.includes(normalizedZone) || normalizedZone.includes(normalizedHeading)
@@ -514,6 +515,8 @@ export async function POST(req) {
         entriesByZone[e.zone].push(e)
       }
     }
+    console.log('DEBUG entriesByZone keys:', JSON.stringify(Object.keys(entriesByZone)))
+    console.log('DEBUG photo counts per zone:', JSON.stringify(Object.fromEntries(Object.entries(entriesByZone).map(([z, arr]) => [z, arr.filter(e => e.photo_url).length]))))
 
     const prompt = `You are an expert wildfire risk assessor. Using the field notes below, generate a complete Wildfire Risk Reduction Assessment report in Markdown format.
 
