@@ -208,20 +208,56 @@ const ZONE_EDUCATION = [
     desc: 'A whole-property view of wildfire exposure, factoring in slope, prevailing wind, fuel load, and how neighboring properties could contribute to fire spread toward or away from the home.',
   },
   {
-    name: 'Home Hardening (Structure)',
-    desc: 'The home itself — roof, vents, siding, windows, doors, eaves, gutters, decks. These features determine whether embers and direct flame contact can ignite the structure, regardless of how well the surrounding landscape is managed.',
+    name: '0–5 Ft Noncombustible Zone',
+    desc: 'The most critical area around the home. The first five feet surrounding the home and attached features must be completely noncombustible — bare mineral soil or hardscape only, with no vegetation, mulch, or combustible items, extending vertically with no overhanging branches.',
   },
   {
-    name: 'Zone 0 (0–5 ft)',
-    desc: 'The Immediate Zone. The 5 feet closest to the home and any attached structures. This zone requires the most aggressive ember protection — bare mineral soil or noncombustible hardscape, no vegetation, no combustible mulch or furniture.',
+    name: '5–30 Ft Defensible Space',
+    desc: 'A fuel-reduction zone that slows fire spread before it reaches the home. Trees and shrubs must be properly spaced and pruned, grass kept short, dead vegetation removed, and firewood stored well away from the structure.',
   },
   {
-    name: 'Zone 1 (5–30 ft)',
-    desc: 'The Intermediate Zone. Vegetation here must be widely spaced, well-maintained, and free of "ladder fuels" that could carry fire from the ground into tree canopies. Detached structures in this zone face additional placement requirements.',
+    name: 'Detached Structures & Other Large Items',
+    desc: 'Sheds, pergolas, hot tubs, outdoor kitchens, and fuel/water storage tanks within 30 ft of the home each carry their own placement, spacing, and material requirements to prevent them from acting as fire bridges to the structure.',
   },
   {
-    name: 'Zone 2 (30–100 ft)',
-    desc: 'The Extended Zone. Focuses on reducing fuel continuity over a larger area — thinning vegetation, removing dead/dying plants, and maintaining spacing between tree canopies to slow an approaching fire before it reaches the home.',
+    name: 'Roof',
+    desc: 'The roof covering must be Class A fire-rated and kept free of debris — wood roofs and plastic corrugated panels are never permitted, since the roof is one of the most common paths for ember ignition.',
+  },
+  {
+    name: 'Gutters',
+    desc: 'Gutters and downspouts must be noncombustible and kept clear of debris, since dry leaves and needles trapped in gutters are a common ember ignition point.',
+  },
+  {
+    name: '6-Inch Noncombustible Wall Clearance',
+    desc: 'A 6-inch noncombustible buffer at the base of exterior walls, deck posts, and stairs prevents ground-level embers and flames from reaching combustible wall materials.',
+  },
+  {
+    name: 'Vents',
+    desc: 'Roof, attic, eave, and under-home vents are major ember entry points and require flame/ember-resistant construction or 1/8-inch corrosion-resistant mesh. Dryer vents need a functional flap instead, since mesh traps lint.',
+  },
+  {
+    name: 'Eaves & Soffits',
+    desc: 'The exposed underside of roof eaves can trap rising embers and heat; enclosing or protecting this area with noncombustible material is a key upgrade for ember resistance.',
+  },
+  {
+    name: 'Skylights',
+    desc: 'Plastic dome skylights are vulnerable to radiant heat; flat, multi-pane tempered-glass skylights with mesh-protected operable vents are far more fire-resistant.',
+  },
+  {
+    name: 'Exterior Wall Coverings / Siding',
+    desc: 'Full noncombustible siding (brick, stucco, fiber-cement, metal) provides much stronger protection against direct flame contact and radiant heat than the 6-inch base clearance alone.',
+  },
+  {
+    name: 'Exterior Windows',
+    desc: 'Tempered double-pane glass resists breaking under radiant heat — broken windows are a common way embers and flame enter a home\'s interior during a wildfire.',
+  },
+  {
+    name: 'Exterior Doors',
+    desc: 'Solid-core or noncombustible doors with tempered glass panes (where applicable) and noncombustible thresholds resist ignition better than hollow or thin wood doors.',
+  },
+  {
+    name: 'Decks, Patios & Overhead Structures',
+    desc: 'Decks and patios near the home need their own ember-resistant zone, noncombustible bases at posts/stairs, and (for Plus) fully noncombustible walking surfaces and railings.',
   },
   {
     name: 'Access & Address',
@@ -469,7 +505,11 @@ export async function POST(req) {
 
     const prompt = `You are an expert wildfire risk assessor. Using the field notes below, generate a complete Wildfire Risk Reduction Assessment report in Markdown format.
 
-IMPORTANT CONTEXT ON THE FIELD NOTES: The "Finding" and "Details" text in each entry below is raw shorthand the inspector typed quickly on-site — not polished prose. Treat it as metadata describing what was observed, not as text to copy verbatim into the report. Your job is to interpret that shorthand and write clear, professional, complete sentences for the Finding column and the narrative/recommendation sections, using your wildfire expertise to fill in standard terminology and likely implications. For example, if a note says "vent no mesh," write something like "An attic vent was observed without the required 1/8-inch corrosion-resistant metal mesh, allowing ember entry." Use the Status (Base Compliant, Plus Compliant, Non-Compliant, Needs Verification, Not Applicable) and Distance fields as additional metadata to inform your assessment and recommendations — the distance value tells you spacing/clearance that matters for WPH compliance determinations.
+IMPORTANT CONTEXT ON THE FIELD NOTES: The field notes below contain two kinds of input, both of which are raw shorthand metadata for you to interpret — not polished prose to copy verbatim:
+1. "SITE NOTES BY CATEGORY" — freeform inspector observations recorded per WPH category, used to write narrative context and findings for that category even if no individual logged entry exists for it.
+2. "ENTRIES" — individual logged findings, each tagged with a zone/category, a status, a short "Finding" note, optional "Details," and optional distance.
+
+Combine BOTH sources when writing each category's findings table and recommendations — site notes often add context (e.g. material types, overall condition) that individual entries don't capture, and vice versa. Your job is to interpret this shorthand and write clear, professional, complete sentences, using your wildfire expertise to fill in standard terminology and likely implications. For example, if a note says "vent no mesh," write something like "An attic vent was observed without the required 1/8-inch corrosion-resistant metal mesh, allowing ember entry." Use status and distance values as metadata to inform your assessment and recommendations — they are not meant to appear as separate table columns.
 
 FIELD NOTES:
 ${fieldNotes}
@@ -500,67 +540,125 @@ Use this structure:
 - [Priority 3]
 
 ### WPH Designation Snapshot
-- Base (Essential): [X of 10 met based on Base Compliant entries]
-- Plus (Enhanced): [X of 10 met based on Plus Compliant entries]
+- Base (Essential): [count categories marked Base Compliant vs. total categories assessed, e.g. "6 of 9 assessed categories meet Base requirements"]
+- Plus (Enhanced): [same approach for Plus Compliant — note that Plus requires Base to also be met]
 
 ---
 
 ## 2. SITE & ENVIRONMENTAL OVERVIEW
 
-### Slope & Topography
-[From site notes]
-
-### Fuel Type / Vegetation
-[From site notes]
-
-### Prevailing Wind / Weather Exposure
-[From site notes]
-
-### Neighboring Properties
-[From site notes]
+Write 1-3 short paragraphs summarizing the "Overall Site & Surrounding Environment" site notes — slope, topography, prevailing wind, surrounding vegetation, neighboring properties, and general conflagration risk context. If no site notes were recorded for this section, write "(not assessed)".
 
 ---
 
-## 3. FINDINGS BY ZONE
+## 3. FINDINGS BY CATEGORY
 
-For each zone that has entries, create a heading using the EXACT zone name as it appears in the field notes (e.g. "### Zone 0 (0–5 ft)"), followed by a findings table and recommendations. ALWAYS present "Overall Site" FIRST if it has any entries, before any other zone, since it sets whole-property context for everything that follows. Each table has exactly two columns: Category and Finding. Fold the Status (Compliant/Non-Compliant/Needs Verification/Not Applicable) directly into the Finding sentence as plain language (e.g. "...which is non-compliant with WPH Base requirements" or "...meets Base compliance") rather than a separate Status column. If a distance measurement was recorded, also weave it into the same sentence (e.g. "Vegetation observed 3 ft from the structure, which is non-compliant..."). Do not create separate Distance or Status columns — everything goes into one well-written Finding sentence per row.
+Present findings grouped under these categories, IN THIS EXACT ORDER, using the EXACT category names below as ### headings. Only include a category's table if there is at least one field-note entry OR site-note text for it; otherwise skip that category entirely. Each table has exactly two columns: Category and Finding. Fold compliance status (Base Compliant/Plus Compliant/Non-Compliant/Needs Verification/Not Applicable) and any recorded distance directly into the Finding sentence as natural language — do not create separate Status or Distance columns.
 
 ### Overall Site
 | Category | Finding |
 |---|---|
-[rows — only include this section if there are Overall Site entries]
-
-**Recommendations:** [list any non-compliant or verify items]
-
-### Structure
-| Category | Finding |
-|---|---|
 [rows]
 
-**Recommendations:** [list any non-compliant or verify items]
+**Recommendations:** [list]
 
-### Zone 0 (0–5 ft)
+### 0–5 Ft Noncombustible Zone
 | Category | Finding |
 |---|---|
 [rows]
 
 **Recommendations:** [list]
 
-### Zone 1 (5–30 ft)
+### 5–30 Ft Defensible Space
 | Category | Finding |
 |---|---|
 [rows]
 
 **Recommendations:** [list]
 
-### Zone 2 (30–100 ft)
+### Detached Structures & Other Large Items
 | Category | Finding |
 |---|---|
 [rows]
 
 **Recommendations:** [list]
 
----
+### Roof
+| Category | Finding |
+|---|---|
+[rows]
+
+**Recommendations:** [list]
+
+### Gutters
+| Category | Finding |
+|---|---|
+[rows]
+
+**Recommendations:** [list]
+
+### 6-Inch Noncombustible Wall Clearance
+| Category | Finding |
+|---|---|
+[rows]
+
+**Recommendations:** [list]
+
+### Vents
+| Category | Finding |
+|---|---|
+[rows]
+
+**Recommendations:** [list]
+
+### Eaves & Soffits
+| Category | Finding |
+|---|---|
+[rows]
+
+**Recommendations:** [list]
+
+### Skylights
+| Category | Finding |
+|---|---|
+[rows]
+
+**Recommendations:** [list]
+
+### Exterior Wall Coverings / Siding
+| Category | Finding |
+|---|---|
+[rows]
+
+**Recommendations:** [list]
+
+### Exterior Windows
+| Category | Finding |
+|---|---|
+[rows]
+
+**Recommendations:** [list]
+
+### Exterior Doors
+| Category | Finding |
+|---|---|
+[rows]
+
+**Recommendations:** [list]
+
+### Decks, Patios & Overhead Structures
+| Category | Finding |
+|---|---|
+[rows]
+
+**Recommendations:** [list]
+
+### Access & Address
+| Category | Finding |
+|---|---|
+[rows]
+
+**Recommendations:** [list]
 
 ## 4. PRIORITIZED ACTION PLAN
 

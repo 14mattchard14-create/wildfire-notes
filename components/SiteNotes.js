@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { SITE_NOTE_SECTIONS } from '@/lib/criteria'
 
 const c = {
   surface:  '#242220',
@@ -20,22 +21,14 @@ const FHSZ_COLOR = {
   'Very High': c.warn,
 }
 
-const FIELDS = [
-  { key: 'slope',     label: 'Slope & Topography',                         placeholder: 'Grade, aspect, position on hillside…' },
-  { key: 'fuel',      label: 'Fuel Type / Vegetation',                     placeholder: 'Dominant vegetation, fuel continuity, ladder fuels…' },
-  { key: 'wind',      label: 'Prevailing Wind / Weather Exposure',          placeholder: 'Wind corridors, exposure, historical fire weather…' },
-  { key: 'neighbors', label: 'Neighboring Properties / Conflagration Risk', placeholder: 'Adjacent structures, shared vegetation, spacing…' },
-  { key: 'other',     label: 'Other Geographic Considerations',             placeholder: 'Anything else relevant to overall site risk…' },
-]
-
 const textareaStyle = {
   width: '100%', background: '#1b1917', border: `1px solid ${c.line}`,
   borderRadius: 4, padding: '10px 12px', fontSize: 14, color: c.text,
-  fontFamily: 'inherit', resize: 'vertical', minHeight: 72, outline: 'none', boxSizing: 'border-box',
+  fontFamily: 'inherit', resize: 'vertical', minHeight: 64, outline: 'none', boxSizing: 'border-box',
 }
 
 export default function SiteNotes({ propertyId, property }) {
-  const [notes,  setNotes]  = useState({ slope:'', fuel:'', wind:'', neighbors:'', other:'' })
+  const [notes,  setNotes]  = useState({})
   const [saving, setSaving] = useState(false)
   const [saved,  setSaved]  = useState(false)
 
@@ -66,9 +59,7 @@ export default function SiteNotes({ propertyId, property }) {
           <p style={{ fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase', color: c.muted, marginBottom: 10 }}>
             CAL FIRE — Fire Hazard Severity Zone
           </p>
-
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {/* Responsibility Area */}
             {sra && (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 12, color: c.muted }}>Responsibility Area</span>
@@ -79,40 +70,25 @@ export default function SiteNotes({ propertyId, property }) {
                 </span>
               </div>
             )}
-
-            {/* FHSZ Rating */}
             {fhsz && (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 12, color: c.muted }}>Fire Hazard Severity Zone</span>
                 <span style={{
                   fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase',
-                  color: FHSZ_COLOR[fhsz] ?? c.muted,
-                  border: `1px solid ${FHSZ_COLOR[fhsz] ?? c.muted}`,
+                  color: FHSZ_COLOR[fhsz] ?? c.muted, border: `1px solid ${FHSZ_COLOR[fhsz] ?? c.muted}`,
                   borderRadius: 20, padding: '2px 10px',
-                }}>
-                  {fhsz}
-                </span>
+                }}>{fhsz}</span>
               </div>
             )}
-
-            {/* County */}
             {county && (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 12, color: c.muted }}>Jurisdiction</span>
                 <span style={{ fontSize: 12, fontFamily: 'monospace', color: c.text }}>{county} County</span>
               </div>
             )}
-
-            {/* LRA note */}
             {sra === 'LRA' && (
               <p style={{ fontSize: 11, color: c.muted, marginTop: 4, lineHeight: 1.5, borderTop: `1px dashed ${c.line}`, paddingTop: 8 }}>
-                This property is in a Local Responsibility Area — financial responsibility for wildfire prevention rests with the local agency (city, county, or district). Final adopted zones may differ from state recommendations; contact your local agency for confirmed FHSZ designation.
-              </p>
-            )}
-
-            {!fhsz && sra === 'LRA' && (
-              <p style={{ fontSize: 11, color: c.muted, lineHeight: 1.5 }}>
-                No Fire Hazard Severity Zone identified by the State Fire Marshal for this LRA parcel per Government Code §51178.
+                This property is in a Local Responsibility Area — financial responsibility for wildfire prevention rests with the local agency. Final adopted zones may differ from state recommendations.
               </p>
             )}
           </div>
@@ -120,16 +96,21 @@ export default function SiteNotes({ propertyId, property }) {
       )}
 
       <p style={{ fontSize: 12, color: c.muted, marginBottom: 20, lineHeight: 1.5 }}>
-        Capture context that applies to the whole property — fill in after walking the site.
+        Record observations for each Wildfire Prepared Home category below — these notes are used to generate the corresponding section of the final report.
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {FIELDS.map(f => (
-          <div key={f.key}>
+        {SITE_NOTE_SECTIONS.map(s => (
+          <div key={s.key}>
             <label style={{ display: 'block', fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase', color: c.accent, marginBottom: 6 }}>
-              {f.label}
+              {s.label}
             </label>
-            <textarea style={textareaStyle} placeholder={f.placeholder} value={notes[f.key] ?? ''} onChange={e => setNotes(n => ({ ...n, [f.key]: e.target.value }))} />
+            <textarea
+              style={textareaStyle}
+              placeholder={s.placeholder}
+              value={notes[s.key] ?? ''}
+              onChange={e => setNotes(n => ({ ...n, [s.key]: e.target.value }))}
+            />
           </div>
         ))}
       </div>

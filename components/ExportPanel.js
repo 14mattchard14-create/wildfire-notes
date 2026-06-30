@@ -28,13 +28,30 @@ export default function ExportPanel({ property, entries, user }) {
     lines.push(`FIELD NOTES — ${property.address}`)
     lines.push(`Visit date: ${property.visit_date ?? '—'}`)
     lines.push('')
-    lines.push('--- SITE NOTES ---')
+    lines.push('--- SITE NOTES BY CATEGORY ---')
     if (site) {
-      if (site.slope)     lines.push(`Slope & Topography: ${site.slope}`)
-      if (site.fuel)      lines.push(`Fuel Type / Vegetation: ${site.fuel}`)
-      if (site.wind)      lines.push(`Wind / Weather Exposure: ${site.wind}`)
-      if (site.neighbors) lines.push(`Neighboring Properties: ${site.neighbors}`)
-      if (site.other)     lines.push(`Other: ${site.other}`)
+      const fieldLabels = [
+        ['overall_site', 'Overall Site & Surrounding Environment'],
+        ['zone_0', '0-5 Ft Noncombustible Zone'],
+        ['zone_5_30', '5-30 Ft Defensible Space'],
+        ['detached_structures', 'Detached Structures & Other Large Items'],
+        ['roof', 'Roof'],
+        ['gutters', 'Gutters & Downspouts'],
+        ['wall_clearance', '6-Inch Noncombustible Wall Clearance'],
+        ['vents', 'Vents'],
+        ['eaves_soffits', 'Eaves & Soffits'],
+        ['skylights', 'Skylights'],
+        ['siding', 'Exterior Wall Coverings / Siding'],
+        ['windows_doors', 'Exterior Windows & Doors'],
+        ['decks', 'Decks, Patios & Overhead Structures'],
+        ['access', 'Access & Address'],
+        ['other', 'Other Observations'],
+      ]
+      let hasAny = false
+      fieldLabels.forEach(([key, label]) => {
+        if (site[key]) { lines.push(`${label}: ${site[key]}`); hasAny = true }
+      })
+      if (!hasAny) lines.push('(none recorded)')
     } else { lines.push('(none recorded)') }
     lines.push('')
     lines.push('--- PRIORITIES ---')
