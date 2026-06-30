@@ -10,6 +10,7 @@ import SiteNotes        from '@/components/SiteNotes'
 import Priorities       from '@/components/Priorities'
 import ExportPanel      from '@/components/ExportPanel'
 import LoginPage        from '@/app/login/page'
+import GuidedEntry      from '@/components/GuidedEntry'
 
 const TABS = ['Entries', 'Site Notes', 'Priorities', 'Export']
 
@@ -31,6 +32,7 @@ export default function Home() {
   const [activeTab,  setActiveTab]  = useState('Entries')
   const [entries,    setEntries]    = useState([])
   const [refreshKey, setRefreshKey] = useState(0)
+  const [guidedOpen, setGuidedOpen] = useState(false)
 
   useEffect(() => {
     if (!property) { setEntries([]); return }
@@ -83,7 +85,26 @@ export default function Home() {
 
       <main style={s.main}>
         {!property && <p style={s.empty}>Select or create a property above to begin.</p>}
-        {property && activeTab === 'Entries'    && <><EntryForm propertyId={property.id} onSaved={onEntrySaved} user={user} /><EntriesList entries={entries} onDeleted={onEntrySaved} /></>}
+        {property && activeTab === 'Entries'    && (
+          <>
+            <button
+              onClick={() => setGuidedOpen(true)}
+              style={{ width: '100%', background: 'transparent', border: '1px solid #be5b1d', borderRadius: 4, color: '#be5b1d', fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.04em', textTransform: 'uppercase', padding: 12, cursor: 'pointer', marginBottom: 16 }}
+            >
+              ◎ Guided Entry — Walk Me Through It
+            </button>
+            <EntryForm propertyId={property.id} onSaved={onEntrySaved} user={user} />
+            <EntriesList entries={entries} onDeleted={onEntrySaved} />
+            {guidedOpen && (
+              <GuidedEntry
+                propertyId={property.id}
+                user={user}
+                onClose={() => { setGuidedOpen(false); onEntrySaved() }}
+                onSaved={onEntrySaved}
+              />
+            )}
+          </>
+        )}
         {property && activeTab === 'Site Notes' && <SiteNotes propertyId={property.id} property={property} />}
         {property && activeTab === 'Priorities' && <Priorities propertyId={property.id} />}
         {property && activeTab === 'Export'     && <ExportPanel property={property} entries={entries} user={user} />}
