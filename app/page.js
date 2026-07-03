@@ -11,20 +11,9 @@ import FireData         from '@/components/FireData'
 import ExportPanel      from '@/components/ExportPanel'
 import LoginPage        from '@/app/login/page'
 import GuidedEntry      from '@/components/GuidedEntry'
+import ThemeToggle      from '@/components/ThemeToggle'
 
 const TABS = ['Entries', 'Site Notes', 'Fire Data', 'Export']
-
-const s = {
-  page:      { maxWidth: 640, margin: '0 auto', minHeight: '100vh', paddingBottom: 48 },
-  header:    { position: 'sticky', top: 0, zIndex: 20, background: '#1b1917', borderBottom: '1px solid #3a352f', padding: '18px 16px 14px' },
-  eyebrow:   { fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#be5b1d', marginBottom: 4, fontFamily: 'monospace', display: 'block' },
-  h1:        { fontSize: 22, fontWeight: 700, letterSpacing: '0.02em', textTransform: 'uppercase', margin: '0 0 12px', color: '#ece6db' },
-  nav:       { position: 'sticky', top: 88, zIndex: 10, background: '#1b1917', borderBottom: '1px solid #3a352f', display: 'flex' },
-  tab:       { flex: 1, padding: '12px 4px', fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', background: 'transparent', border: 'none', borderBottom: '2px solid transparent', color: '#9a9285', cursor: 'pointer' },
-  tabActive: { flex: 1, padding: '12px 4px', fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', background: 'transparent', border: 'none', borderBottom: '2px solid #be5b1d', color: '#ece6db', cursor: 'pointer' },
-  main:      { flex: 1, padding: '16px 16px 64px' },
-  empty:     { color: '#9a9285', fontSize: 13, textAlign: 'center', marginTop: 48 },
-}
 
 export default function Home() {
   const { user, loading } = useAuth()
@@ -47,8 +36,8 @@ export default function Home() {
   const onEntrySaved = () => setRefreshKey(k => k + 1)
 
   if (loading) return (
-    <div style={{ minHeight: '100vh', background: '#1b1917', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <span style={{ color: '#9a9285', fontFamily: 'monospace', fontSize: 13 }}>Loading…</span>
+    <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span style={{ color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: 13 }}>Loading…</span>
     </div>
   )
 
@@ -57,16 +46,19 @@ export default function Home() {
   const userName = user.user_metadata?.full_name || user.email
 
   return (
-    <div style={s.page}>
-      <header style={s.header}>
-        <span style={s.eyebrow}>Field Notes · Wildfire Inspection</span>
+    <div style={{ maxWidth: 640, margin: '0 auto', minHeight: '100vh', paddingBottom: 48 }}>
+      <header style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--header-bg)', borderBottom: '1px solid var(--line)', padding: '18px 16px 14px' }}>
+        <span style={{ fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 4, fontFamily: 'monospace', display: 'block' }}>
+          Field Notes · Wildfire Inspection
+        </span>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-          <h1 style={{ ...s.h1, margin: 0 }}>Site Intake</h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#9a9285' }}>{userName}</span>
+          <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: '0.02em', textTransform: 'uppercase', margin: 0, color: 'var(--header-text)' }}>Site Intake</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <ThemeToggle />
+            <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--header-text)', opacity: 0.6 }}>{userName}</span>
             <button
               onClick={() => supabase.auth.signOut()}
-              style={{ fontSize: 10.5, fontFamily: 'monospace', color: '#9a9285', background: 'none', border: '1px solid #3a352f', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+              style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--header-text)', opacity: 0.7, background: 'none', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}
             >
               Sign Out
             </button>
@@ -75,22 +67,28 @@ export default function Home() {
         <PropertySelector selected={property} onSelect={setProperty} user={user} />
       </header>
 
-      <nav style={s.nav}>
+      <nav style={{ position: 'sticky', top: 88, zIndex: 10, background: 'var(--bg)', borderBottom: '1px solid var(--line)', display: 'flex' }}>
         {TABS.map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} style={activeTab === tab ? s.tabActive : s.tab}>
+          <button key={tab} onClick={() => setActiveTab(tab)} style={{
+            flex: 1, padding: '12px 4px', fontSize: 11, fontFamily: 'monospace',
+            letterSpacing: '0.06em', textTransform: 'uppercase', background: 'transparent', border: 'none',
+            borderBottom: activeTab === tab ? '2px solid var(--tab-active)' : '2px solid transparent',
+            color: activeTab === tab ? 'var(--text)' : 'var(--tab-text)',
+            cursor: 'pointer',
+          }}>
             {tab}
           </button>
         ))}
       </nav>
 
-      <main style={s.main}>
-        {!property && <p style={s.empty}>Select or create a property above to begin.</p>}
+      <main style={{ flex: 1, padding: '16px 16px 64px' }}>
+        {!property && <p style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', marginTop: 48 }}>Select or create a property above to begin.</p>}
 
         {property && activeTab === 'Entries' && (
           <>
             <button
               onClick={() => setGuidedOpen(true)}
-              style={{ width: '100%', background: 'transparent', border: '1px solid #be5b1d', borderRadius: 4, color: '#be5b1d', fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.04em', textTransform: 'uppercase', padding: 12, cursor: 'pointer', marginBottom: 16 }}
+              style={{ width: '100%', background: 'transparent', border: '1px solid var(--accent)', borderRadius: 4, color: 'var(--accent)', fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.04em', textTransform: 'uppercase', padding: 12, cursor: 'pointer', marginBottom: 16 }}
             >
               ◎ Guided Entry — Walk Me Through It
             </button>
@@ -108,7 +106,7 @@ export default function Home() {
         )}
 
         {property && activeTab === 'Site Notes' && <SiteNotes propertyId={property.id} />}
-        {property && activeTab === 'Fire Data'  && <FireData property={property} />}
+        {property && activeTab === 'Fire Data'  && <FireData property={property} propertyId={property.id} />}
         {property && activeTab === 'Export'     && <ExportPanel property={property} entries={entries} user={user} />}
       </main>
     </div>

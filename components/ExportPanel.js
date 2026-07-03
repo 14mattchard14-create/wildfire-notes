@@ -3,14 +3,6 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
-const c = {
-  surface: '#242220',
-  line:    '#3a352f',
-  accent:  '#be5b1d',
-  text:    '#ece6db',
-  muted:   '#9a9285',
-}
-
 export default function ExportPanel({ property, entries, user }) {
   const [tab,        setTab]        = useState('raw')
   const [text,       setText]       = useState('')
@@ -18,18 +10,14 @@ export default function ExportPanel({ property, entries, user }) {
   const [copied,     setCopied]     = useState(false)
   const [loading,    setLoading]    = useState(false)
   const [genning,    setGenning]    = useState(false)
-  const [debugLog,   setDebugLog]   = useState(null)
-
   const [shareLoading,   setShareLoading]   = useState(false)
   const [shareResult,    setShareResult]    = useState(null)
   const [shareError,     setShareError]     = useState('')
   const [copyLabel,      setCopyLabel]      = useState('Copy Link')
-
   const [editMode,       setEditMode]       = useState(false)
   const [editMarkdown,   setEditMarkdown]   = useState('')
   const [republishing,   setRepublishing]   = useState(false)
   const [republishMsg,   setRepublishMsg]   = useState('')
-
   const [rewriteOpen,    setRewriteOpen]    = useState(false)
   const [rewriteSection, setRewriteSection] = useState('')
   const [rewriteInstr,   setRewriteInstr]   = useState('')
@@ -47,34 +35,14 @@ export default function ExportPanel({ property, entries, user }) {
     lines.push('')
     lines.push('--- SITE NOTES BY CATEGORY ---')
     if (site) {
-      const fieldLabels = [
-        ['overall_site', 'Overall Site & Surrounding Environment'],
-        ['zone_0', '0-5 Ft Noncombustible Zone'],
-        ['zone_5_30', '5-30 Ft Defensible Space'],
-        ['detached_structures', 'Detached Structures & Other Large Items'],
-        ['roof', 'Roof'],
-        ['gutters', 'Gutters & Downspouts'],
-        ['wall_clearance', '6-Inch Noncombustible Wall Clearance'],
-        ['vents', 'Vents'],
-        ['eaves_soffits', 'Eaves & Soffits'],
-        ['skylights', 'Skylights'],
-        ['siding', 'Exterior Wall Coverings / Siding'],
-        ['windows_doors', 'Exterior Windows & Doors'],
-        ['decks', 'Decks, Patios & Overhead Structures'],
-        ['access', 'Access & Address'],
-        ['other', 'Other Observations'],
-      ]
+      const fieldLabels = [['overall_site','Overall Site & Surrounding Environment'],['zone_0','0-5 Ft Noncombustible Zone'],['zone_5_30','5-30 Ft Defensible Space'],['detached_structures','Detached Structures & Other Large Items'],['roof','Roof'],['gutters','Gutters & Downspouts'],['wall_clearance','6-Inch Noncombustible Wall Clearance'],['vents','Vents'],['eaves_soffits','Eaves & Soffits'],['skylights','Skylights'],['siding','Exterior Wall Coverings / Siding'],['windows_doors','Exterior Windows & Doors'],['decks','Decks, Patios & Overhead Structures'],['access','Access & Address'],['other','Other Observations']]
       let hasAny = false
-      fieldLabels.forEach(([key, label]) => {
-        if (site[key]) { lines.push(`${label}: ${site[key]}`); hasAny = true }
-      })
+      fieldLabels.forEach(([key, label]) => { if (site[key]) { lines.push(`${label}: ${site[key]}`); hasAny = true } })
       if (!hasAny) lines.push('(none recorded)')
     } else { lines.push('(none recorded)') }
     lines.push('')
     lines.push('--- PRIORITIES ---')
-    if (priorities?.length) {
-      priorities.forEach((p, i) => { if (p.text) lines.push(`${i + 1}. ${p.text}${p.why ? ' — ' + p.why : ''}`) })
-    } else { lines.push('(none set)') }
+    if (priorities?.length) { priorities.forEach((p, i) => { if (p.text) lines.push(`${i + 1}. ${p.text}${p.why ? ' — ' + p.why : ''}`) }) } else { lines.push('(none set)') }
     lines.push('')
     lines.push('--- ENTRIES ---')
     if (entries.length) {
@@ -91,195 +59,98 @@ export default function ExportPanel({ property, entries, user }) {
     return lines.join('\n')
   }
 
-  async function generateRaw() {
-    setLoading(true)
-    const raw = await buildRaw()
-    setText(raw)
-    setLoading(false)
-    return raw
-  }
+  async function generateRaw() { setLoading(true); const raw = await buildRaw(); setText(raw); setLoading(false); return raw }
 
   async function generateReport() {
     setGenning(true)
     const raw = text || await buildRaw()
     if (!text) setText(raw)
     try {
-      const res = await fetch('/api/report-docx', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fieldNotes: raw, property, inspectorName: user?.user_metadata?.full_name || user?.email || 'Unknown', entries }),
-      })
+      const res = await fetch('/api/report-docx', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fieldNotes: raw, property, inspectorName: user?.user_metadata?.full_name || user?.email || 'Unknown', entries }) })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-      setReport(data.report)
-      setDebugLog(data.debugLog ?? null)
-      downloadDocx(data.docx)
-    } catch (err) {
-      alert('Report generation failed: ' + err.message)
-    }
+      setReport(data.report); downloadDocx(data.docx)
+    } catch (err) { alert('Report generation failed: ' + err.message) }
     setGenning(false)
   }
 
   async function handleGenerateShareLink() {
-    setShareLoading(true)
-    setShareError('')
-    setShareResult(null)
-    setEditMode(false)
-    setRepublishMsg('')
+    setShareLoading(true); setShareError(''); setShareResult(null); setEditMode(false); setRepublishMsg('')
     try {
       const raw = text || await buildRaw()
       if (!text) setText(raw)
-      const res = await fetch('/api/share-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fieldNotes: raw,
-          property,
-          inspectorName: user?.user_metadata?.full_name || user?.email || 'Unknown',
-          entries,
-        }),
-      })
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error || 'Failed to generate link')
-      }
-      const data = await res.json()
-      setShareResult(data)
-    } catch (err) {
-      setShareError(err.message)
-    } finally {
-      setShareLoading(false)
-    }
+      const res = await fetch('/api/share-report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fieldNotes: raw, property, inspectorName: user?.user_metadata?.full_name || user?.email || 'Unknown', entries }) })
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed to generate link') }
+      const data = await res.json(); setShareResult(data)
+    } catch (err) { setShareError(err.message) } finally { setShareLoading(false) }
   }
 
-  function handleCopyLink() {
-    const url = `${window.location.origin}/report/${shareResult.token}`
-    navigator.clipboard.writeText(url)
-    setCopyLabel('Copied!')
-    setTimeout(() => setCopyLabel('Copy Link'), 2000)
-  }
+  function handleCopyLink() { navigator.clipboard.writeText(`${window.location.origin}/report/${shareResult.token}`); setCopyLabel('Copied!'); setTimeout(() => setCopyLabel('Copy Link'), 2000) }
 
   function handleOpenEdit() {
-    supabase
-      .from('shared_reports')
-      .select('report_markdown')
-      .eq('token', shareResult.token)
-      .single()
-      .then(({ data }) => {
-        if (data) {
-          setEditMarkdown(data.report_markdown)
-          setEditMode(true)
-          setRewriteOpen(false)
-          setRewriteSection('')
-          setRewriteInstr('')
-          setRewriteError('')
-          setRepublishMsg('')
-        }
-      })
+    supabase.from('shared_reports').select('report_markdown').eq('token', shareResult.token).single()
+      .then(({ data }) => { if (data) { setEditMarkdown(data.report_markdown); setEditMode(true); setRewriteOpen(false); setRewriteSection(''); setRewriteInstr(''); setRewriteError(''); setRepublishMsg('') } })
   }
 
   async function handleRepublish() {
-    setRepublishing(true)
-    setRepublishMsg('')
+    setRepublishing(true); setRepublishMsg('')
     try {
-      const res = await fetch('/api/edit-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'republish', token: shareResult.token, markdown: editMarkdown }),
-      })
+      const res = await fetch('/api/edit-report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'republish', token: shareResult.token, markdown: editMarkdown }) })
       if (!res.ok) throw new Error('Failed to republish')
       setRepublishMsg('✓ Report updated — the link now shows the new version.')
-    } catch (err) {
-      setRepublishMsg('✗ ' + err.message)
-    } finally {
-      setRepublishing(false)
-    }
+    } catch (err) { setRepublishMsg('✗ ' + err.message) } finally { setRepublishing(false) }
   }
 
   async function handleRewriteSection() {
     if (!rewriteSection || !rewriteInstr.trim()) return
-    setRewriting(true)
-    setRewriteError('')
+    setRewriting(true); setRewriteError('')
     try {
-      const res = await fetch('/api/edit-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'rewrite-section',
-          token: shareResult.token,
-          markdown: editMarkdown,
-          sectionTitle: rewriteSection,
-          instructions: rewriteInstr,
-        }),
-      })
+      const res = await fetch('/api/edit-report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'rewrite-section', token: shareResult.token, markdown: editMarkdown, sectionTitle: rewriteSection, instructions: rewriteInstr }) })
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data.error || 'Rewrite failed')
-      setEditMarkdown(data.markdown)
-      setRewriteInstr('')
-      setRewriteOpen(false)
-    } catch (err) {
-      setRewriteError(err.message)
-    } finally {
-      setRewriting(false)
-    }
+      setEditMarkdown(data.markdown); setRewriteInstr(''); setRewriteOpen(false)
+    } catch (err) { setRewriteError(err.message) } finally { setRewriting(false) }
   }
 
-  function getSections(md) {
-    if (!md) return []
-    return md.split('\n')
-      .filter(l => l.startsWith('## ') || l.startsWith('### '))
-      .map(l => l.replace(/^#{2,3} /, '').trim())
-  }
+  function getSections(md) { if (!md) return []; return md.split('\n').filter(l => l.startsWith('## ') || l.startsWith('### ')).map(l => l.replace(/^#{2,3} /, '').trim()) }
 
   function downloadDocx(base64) {
     const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
     const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${property.address ?? 'wildfire-report'}.docx`
-    a.click()
-    URL.revokeObjectURL(url)
+    const url = URL.createObjectURL(blob); const a = document.createElement('a')
+    a.href = url; a.download = `${property.address ?? 'wildfire-report'}.docx`; a.click(); URL.revokeObjectURL(url)
   }
 
-  function downloadTxt(content, filename) {
-    const blob = new Blob([content], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    a.click()
-    URL.revokeObjectURL(url)
-  }
+  function downloadTxt(content, filename) { const blob = new Blob([content], { type: 'text/plain' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url) }
 
-  async function copy(content) {
-    try { await navigator.clipboard.writeText(content) } catch { /* silent */ }
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+  async function copy(content) { try { await navigator.clipboard.writeText(content) } catch { } setCopied(true); setTimeout(() => setCopied(false), 2000) }
+
+  const sections = getSections(editMarkdown)
 
   const btnBase = { flex: 1, border: 'none', borderRadius: 4, fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', padding: '8px', cursor: 'pointer', fontWeight: 600 }
-  const outlineBtn = { background: 'transparent', border: `1px solid ${c.line}`, borderRadius: 4, color: c.muted, fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.04em', textTransform: 'uppercase', padding: '10px', cursor: 'pointer' }
-  const sections = getSections(editMarkdown)
+  const outlineBtn = { background: 'transparent', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text-muted)', fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.04em', textTransform: 'uppercase', padding: '10px', cursor: 'pointer' }
+  const textareaStyle = { width: '100%', background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 4, padding: '10px 12px', fontSize: 12, fontFamily: 'monospace', color: 'var(--text-muted)', resize: 'vertical', outline: 'none', boxSizing: 'border-box', scrollbarWidth: 'thin' }
 
   return (
     <div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-        <button onClick={() => setTab('raw')} style={{ ...btnBase, background: tab === 'raw' ? c.accent : 'transparent', color: tab === 'raw' ? '#1b1917' : c.muted, border: `1px solid ${tab === 'raw' ? c.accent : c.line}` }}>Raw Notes</button>
-        <button onClick={() => setTab('report')} style={{ ...btnBase, background: tab === 'report' ? c.accent : 'transparent', color: tab === 'report' ? '#1b1917' : c.muted, border: `1px solid ${tab === 'report' ? c.accent : c.line}` }}>Full Report</button>
-        <button onClick={() => setTab('share')} style={{ ...btnBase, background: tab === 'share' ? c.accent : 'transparent', color: tab === 'share' ? '#1b1917' : c.muted, border: `1px solid ${tab === 'share' ? c.accent : c.line}` }}>Share Link</button>
+        {['raw','report','share'].map(t => (
+          <button key={t} onClick={() => setTab(t)} style={{ ...btnBase, background: tab === t ? 'var(--accent)' : 'transparent', color: tab === t ? 'var(--bg)' : 'var(--text-muted)', border: `1px solid ${tab === t ? 'var(--accent)' : 'var(--line)'}` }}>
+            {t === 'raw' ? 'Raw Notes' : t === 'report' ? 'Full Report' : 'Share Link'}
+          </button>
+        ))}
       </div>
 
       {tab === 'raw' && (
         <>
-          <button onClick={generateRaw} disabled={loading} style={{ width: '100%', background: c.accent, color: '#1b1917', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 13, cursor: 'pointer', opacity: loading ? 0.5 : 1, marginBottom: 14 }}>
+          <button onClick={generateRaw} disabled={loading} style={{ width: '100%', background: 'var(--accent)', color: 'var(--bg)', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 13, cursor: 'pointer', opacity: loading ? 0.5 : 1, marginBottom: 14 }}>
             {loading ? 'Generating…' : 'Generate Raw Notes'}
           </button>
           {text && (
             <>
-              <textarea readOnly value={text} style={{ width: '100%', background: '#1b1917', border: `1px solid ${c.line}`, borderRadius: 4, padding: '10px 12px', fontSize: 12, fontFamily: 'monospace', color: c.muted, minHeight: 280, resize: 'vertical', outline: 'none', boxSizing: 'border-box', marginBottom: 10, scrollbarWidth: 'thin', scrollbarColor: `${c.line} transparent` }} />
+              <textarea readOnly value={text} style={{ ...textareaStyle, minHeight: 280, marginBottom: 10 }} />
               <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => copy(text)} style={{ ...outlineBtn, flex: 1, borderColor: copied ? c.accent : c.line, color: copied ? c.accent : c.muted }}>{copied ? '✓ Copied' : 'Copy'}</button>
+                <button onClick={() => copy(text)} style={{ ...outlineBtn, flex: 1, borderColor: copied ? 'var(--accent)' : 'var(--line)', color: copied ? 'var(--accent)' : 'var(--text-muted)' }}>{copied ? '✓ Copied' : 'Copy'}</button>
                 <button onClick={() => downloadTxt(text, `${property.address ?? 'field-notes'}.txt`)} style={{ ...outlineBtn, flex: 1 }}>↓ Download .txt</button>
               </div>
             </>
@@ -289,14 +160,14 @@ export default function ExportPanel({ property, entries, user }) {
 
       {tab === 'report' && (
         <>
-          <button onClick={generateReport} disabled={genning} style={{ width: '100%', background: c.accent, color: '#1b1917', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 13, cursor: 'pointer', opacity: genning ? 0.5 : 1, marginBottom: 14 }}>
+          <button onClick={generateReport} disabled={genning} style={{ width: '100%', background: 'var(--accent)', color: 'var(--bg)', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 13, cursor: 'pointer', opacity: genning ? 0.5 : 1, marginBottom: 14 }}>
             {genning ? 'Generating Report…' : 'Generate & Download Report'}
           </button>
           {report && (
             <>
-              <textarea readOnly value={report} style={{ width: '100%', background: '#1b1917', border: `1px solid ${c.line}`, borderRadius: 4, padding: '10px 12px', fontSize: 12, fontFamily: 'monospace', color: c.muted, minHeight: 400, resize: 'vertical', outline: 'none', boxSizing: 'border-box', marginBottom: 10, scrollbarWidth: 'thin', scrollbarColor: `${c.line} transparent` }} />
+              <textarea readOnly value={report} style={{ ...textareaStyle, minHeight: 400, marginBottom: 10 }} />
               <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => copy(report)} style={{ ...outlineBtn, flex: 1, borderColor: copied ? c.accent : c.line, color: copied ? c.accent : c.muted }}>{copied ? '✓ Copied' : 'Copy'}</button>
+                <button onClick={() => copy(report)} style={{ ...outlineBtn, flex: 1, borderColor: copied ? 'var(--accent)' : 'var(--line)', color: copied ? 'var(--accent)' : 'var(--text-muted)' }}>{copied ? '✓ Copied' : 'Copy'}</button>
                 <button onClick={() => generateReport()} disabled={genning} style={{ ...outlineBtn, flex: 1 }}>↓ Re-download .docx</button>
               </div>
             </>
@@ -306,123 +177,72 @@ export default function ExportPanel({ property, entries, user }) {
 
       {tab === 'share' && (
         <>
-          <div style={{ fontSize: 12, color: c.muted, marginBottom: 16, lineHeight: 1.6 }}>
-            Generate a private web report for your client. You'll get a link and a 6-digit access code to share with them separately.
-          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>Generate a private web report for your client. You'll get a link and a 6-digit access code to share separately.</div>
 
-          <button
-            onClick={handleGenerateShareLink}
-            disabled={shareLoading || !property}
-            style={{ width: '100%', background: c.accent, color: '#1b1917', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 13, cursor: shareLoading || !property ? 'not-allowed' : 'pointer', opacity: shareLoading || !property ? 0.5 : 1, marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-          >
+          <button onClick={handleGenerateShareLink} disabled={shareLoading || !property} style={{ width: '100%', background: 'var(--accent)', color: 'var(--bg)', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 13, cursor: shareLoading || !property ? 'not-allowed' : 'pointer', opacity: shareLoading || !property ? 0.5 : 1, marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             {shareLoading ? 'Generating…' : '🔗 Generate Shareable Link'}
           </button>
 
-          {shareError && (
-            <div style={{ padding: '10px 14px', background: '#2c1a18', border: `1px solid #b5483a`, borderRadius: 6, fontSize: 12, color: '#e07060', marginBottom: 14 }}>
-              {shareError}
-            </div>
-          )}
+          {shareError && <div style={{ padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 6, fontSize: 12, color: 'var(--warn)', marginBottom: 14 }}>{shareError}</div>}
 
           {shareResult && !editMode && (
-            <div style={{ background: '#1e2820', border: '1px solid #3a5e42', borderRadius: 8, padding: '16px 18px' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#8ec99a', marginBottom: 14, letterSpacing: '0.08em', textTransform: 'uppercase' }}>✓ Report Ready</div>
-
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderLeft: '3px solid var(--ok)', borderRadius: 8, padding: '16px 18px' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ok)', marginBottom: 14, letterSpacing: '0.08em', textTransform: 'uppercase' }}>✓ Report Ready</div>
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 11, color: c.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Access Code</div>
-                <div style={{ fontSize: 11, color: c.muted, marginBottom: 8, lineHeight: 1.5 }}>Share this separately with your client — they'll need it to open the report.</div>
-                <div style={{ fontSize: 32, fontWeight: 800, color: c.text, letterSpacing: '0.25em', fontVariantNumeric: 'tabular-nums', background: '#242220', border: `1px solid ${c.line}`, borderRadius: 6, padding: '10px 16px', textAlign: 'center' }}>
-                  {shareResult.accessCode}
-                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Access Code</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.5 }}>Share this separately with your client.</div>
+                <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--text)', letterSpacing: '0.25em', background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 6, padding: '10px 16px', textAlign: 'center' }}>{shareResult.accessCode}</div>
               </div>
-
               <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, color: c.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Report Link</div>
-                <div style={{ background: '#242220', border: `1px solid ${c.line}`, borderRadius: 6, padding: '8px 12px', fontSize: 12, color: c.muted, wordBreak: 'break-all', fontFamily: 'monospace' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Report Link</div>
+                <div style={{ background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: 'var(--text-muted)', wordBreak: 'break-all', fontFamily: 'monospace' }}>
                   {typeof window !== 'undefined' ? `${window.location.origin}/report/${shareResult.token}` : `/report/${shareResult.token}`}
                 </div>
               </div>
-
               <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={handleCopyLink} style={{ ...outlineBtn, flex: 1, borderColor: copyLabel === 'Copied!' ? c.accent : c.line, color: copyLabel === 'Copied!' ? c.accent : c.muted }}>
-                  {copyLabel === 'Copied!' ? '✓ Copied' : '↗ Copy Link'}
-                </button>
+                <button onClick={handleCopyLink} style={{ ...outlineBtn, flex: 1, borderColor: copyLabel === 'Copied!' ? 'var(--accent)' : 'var(--line)', color: copyLabel === 'Copied!' ? 'var(--accent)' : 'var(--text-muted)' }}>{copyLabel === 'Copied!' ? '✓ Copied' : '↗ Copy Link'}</button>
                 <button onClick={handleOpenEdit} style={{ ...outlineBtn, flex: 1 }}>✏ Edit Report</button>
               </div>
             </div>
           )}
 
           {shareResult && editMode && (
-            <div style={{ background: '#1a1a18', border: `1px solid ${c.line}`, borderRadius: 8, padding: '16px 18px' }}>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, padding: '16px 18px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: c.text, letterSpacing: '0.08em', textTransform: 'uppercase' }}>✏ Edit Report</div>
-                <button onClick={() => setEditMode(false)} style={{ background: 'none', border: 'none', color: c.muted, fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>×</button>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>✏ Edit Report</div>
+                <button onClick={() => setEditMode(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>×</button>
               </div>
 
-              {/* AI Section Rewriter */}
-              <div style={{ marginBottom: 14, background: '#242220', border: `1px solid ${c.line}`, borderRadius: 6, padding: '12px 14px' }}>
-                <button
-                  onClick={() => setRewriteOpen(o => !o)}
-                  style={{ width: '100%', background: 'none', border: 'none', color: c.accent, fontSize: 12, fontWeight: 700, cursor: 'pointer', textAlign: 'left', letterSpacing: '0.04em', textTransform: 'uppercase', padding: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
+              <div style={{ marginBottom: 14, background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 6, padding: '12px 14px' }}>
+                <button onClick={() => setRewriteOpen(o => !o)} style={{ width: '100%', background: 'none', border: 'none', color: 'var(--accent)', fontSize: 12, fontWeight: 700, cursor: 'pointer', textAlign: 'left', letterSpacing: '0.04em', textTransform: 'uppercase', padding: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>✦ AI Rewrite a Section</span>
                   <span style={{ fontSize: 14, opacity: 0.6 }}>{rewriteOpen ? '▲' : '▼'}</span>
                 </button>
-
                 {rewriteOpen && (
                   <div style={{ marginTop: 12 }}>
-                    <div style={{ fontSize: 11, color: c.muted, marginBottom: 6 }}>Select section</div>
-                    <select
-                      value={rewriteSection}
-                      onChange={e => setRewriteSection(e.target.value)}
-                      style={{ width: '100%', background: '#1b1917', border: `1px solid ${c.line}`, borderRadius: 4, color: c.text, fontSize: 12, padding: '8px 10px', marginBottom: 10, outline: 'none' }}
-                    >
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Select section</div>
+                    <select value={rewriteSection} onChange={e => setRewriteSection(e.target.value)} style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text)', fontSize: 12, padding: '8px 10px', marginBottom: 10, outline: 'none' }}>
                       <option value="">— Pick a section —</option>
                       {sections.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
-
-                    <div style={{ fontSize: 11, color: c.muted, marginBottom: 6 }}>Instructions for Claude</div>
-                    <textarea
-                      value={rewriteInstr}
-                      onChange={e => setRewriteInstr(e.target.value)}
-                      placeholder="e.g. Make this section more urgent. Emphasize the fence as a fire pathway. Add a note about the dryer vent being a code violation."
-                      style={{ width: '100%', background: '#1b1917', border: `1px solid ${c.line}`, borderRadius: 4, color: c.text, fontSize: 12, padding: '8px 10px', minHeight: 80, resize: 'vertical', outline: 'none', boxSizing: 'border-box', marginBottom: 10, fontFamily: 'inherit' }}
-                    />
-
-                    {rewriteError && <div style={{ fontSize: 12, color: '#e07060', marginBottom: 8 }}>{rewriteError}</div>}
-
-                    <button
-                      onClick={handleRewriteSection}
-                      disabled={rewriting || !rewriteSection || !rewriteInstr.trim()}
-                      style={{ width: '100%', background: rewriting || !rewriteSection || !rewriteInstr.trim() ? '#3a352f' : c.accent, color: rewriting || !rewriteSection || !rewriteInstr.trim() ? c.muted : '#1b1917', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 700, padding: '9px', cursor: rewriting || !rewriteSection || !rewriteInstr.trim() ? 'not-allowed' : 'pointer', letterSpacing: '0.04em', textTransform: 'uppercase' }}
-                    >
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Instructions for Claude</div>
+                    <textarea value={rewriteInstr} onChange={e => setRewriteInstr(e.target.value)} placeholder="e.g. Make this section more urgent. Emphasize the fence as a fire pathway." style={{ ...textareaStyle, minHeight: 80, marginBottom: 10, color: 'var(--text)' }} />
+                    {rewriteError && <div style={{ fontSize: 12, color: 'var(--warn)', marginBottom: 8 }}>{rewriteError}</div>}
+                    <button onClick={handleRewriteSection} disabled={rewriting || !rewriteSection || !rewriteInstr.trim()} style={{ width: '100%', background: rewriting || !rewriteSection || !rewriteInstr.trim() ? 'var(--surface-2)' : 'var(--accent)', color: rewriting || !rewriteSection || !rewriteInstr.trim() ? 'var(--text-muted)' : 'var(--bg)', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 700, padding: '9px', cursor: rewriting || !rewriteSection || !rewriteInstr.trim() ? 'not-allowed' : 'pointer', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
                       {rewriting ? 'Rewriting…' : 'Rewrite Section'}
                     </button>
                   </div>
                 )}
               </div>
 
-              {/* Direct markdown edit */}
-              <div style={{ fontSize: 11, color: c.muted, marginBottom: 6 }}>Edit markdown directly</div>
-              <textarea
-                value={editMarkdown}
-                onChange={e => setEditMarkdown(e.target.value)}
-                style={{ width: '100%', background: '#1b1917', border: `1px solid ${c.line}`, borderRadius: 4, padding: '10px 12px', fontSize: 12, fontFamily: 'monospace', color: c.muted, minHeight: 320, resize: 'vertical', outline: 'none', boxSizing: 'border-box', marginBottom: 10, scrollbarWidth: 'thin', scrollbarColor: `${c.line} transparent` }}
-              />
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Edit markdown directly</div>
+              <textarea value={editMarkdown} onChange={e => setEditMarkdown(e.target.value)} style={{ ...textareaStyle, minHeight: 320, marginBottom: 10, color: 'var(--text)' }} />
 
-              {republishMsg && (
-                <div style={{ fontSize: 12, color: republishMsg.startsWith('✓') ? '#8ec99a' : '#e07060', marginBottom: 10 }}>
-                  {republishMsg}
-                </div>
-              )}
+              {republishMsg && <div style={{ fontSize: 12, color: republishMsg.startsWith('✓') ? 'var(--ok)' : 'var(--warn)', marginBottom: 10 }}>{republishMsg}</div>}
 
               <div style={{ display: 'flex', gap: 6 }}>
                 <button onClick={() => setEditMode(false)} style={{ ...outlineBtn, flex: 1 }}>Cancel</button>
-                <button
-                  onClick={handleRepublish}
-                  disabled={republishing}
-                  style={{ flex: 2, background: republishing ? '#3a352f' : c.accent, color: republishing ? c.muted : '#1b1917', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 700, padding: '10px', cursor: republishing ? 'not-allowed' : 'pointer', letterSpacing: '0.04em', textTransform: 'uppercase' }}
-                >
+                <button onClick={handleRepublish} disabled={republishing} style={{ flex: 2, background: republishing ? 'var(--surface-2)' : 'var(--accent)', color: republishing ? 'var(--text-muted)' : 'var(--bg)', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 700, padding: '10px', cursor: republishing ? 'not-allowed' : 'pointer', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
                   {republishing ? 'Publishing…' : '↑ Republish'}
                 </button>
               </div>
@@ -433,4 +253,3 @@ export default function ExportPanel({ property, entries, user }) {
     </div>
   )
 }
-

@@ -2,18 +2,43 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --bg:           #1b1917;
-  --surface:      #242220;
-  --surface-2:    #2d2a27;
-  --line:         #3a352f;
-  --accent:       #be5b1d;
-  --accent-dim:   #8c5530;
-  --text:         #ece6db;
-  --text-muted:   #9a9285;
-  --ok:           #6b8e63;
-  --warn:         #b5483a;
-  --info:         #7d8fa6;
+/* ── DAY THEME (default) ───────────────────────────── */
+:root,
+[data-theme="day"] {
+  --bg:           #EEF2F5;
+  --surface:      #FFFFFF;
+  --surface-2:    #E4EAF0;
+  --line:         #C8D4DC;
+  --accent:       #A8876D;
+  --accent-dim:   #C4A48C;
+  --text:         #1A2632;
+  --text-muted:   #5C7080;
+  --ok:           #3A7D44;
+  --warn:         #B5483A;
+  --info:         #4A6FA5;
+  --header-bg:    #2C4257;
+  --header-text:  #FFFFFF;
+  --tab-active:   #A8876D;
+  --tab-text:     #5C7080;
+}
+
+/* ── EVENING THEME ─────────────────────────────────── */
+[data-theme="evening"] {
+  --bg:           #1C1A17;
+  --surface:      #252220;
+  --surface-2:    #2E2A26;
+  --line:         #3D3830;
+  --accent:       #C4956A;
+  --accent-dim:   #A07848;
+  --text:         #E8DDD0;
+  --text-muted:   #9A8E80;
+  --ok:           #5A8E63;
+  --warn:         #C05545;
+  --info:         #6A8FAF;
+  --header-bg:    #1A1410;
+  --header-text:  #E8DDD0;
+  --tab-active:   #C4956A;
+  --tab-text:     #9A8E80;
 }
 
 *, *::before, *::after {
@@ -30,6 +55,7 @@ html, body {
   font-size: 15px;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
+  transition: background 0.2s, color 0.2s;
 }
 
 h1 {
@@ -56,6 +82,7 @@ textarea {
   appearance: none !important;
   -webkit-appearance: none !important;
   outline: none !important;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
 }
 
 select:focus,
