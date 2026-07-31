@@ -4,13 +4,13 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
 const c = {
-  bg:      '#1b1917',
-  surface: '#242220',
-  line:    '#3a352f',
-  accent:  '#be5b1d',
-  text:    '#ece6db',
-  muted:   '#9a9285',
-  ok:      '#6b8e63',
+  bg:      'var(--bg)',
+  surface: 'var(--surface)',
+  line:    'var(--line)',
+  accent:  'var(--accent)',
+  text:    'var(--text)',
+  muted:   'var(--text-muted)',
+  ok:      'var(--ok)',
 }
 
 const input = {
@@ -64,7 +64,7 @@ export default function ResetPasswordPage() {
           {message && <p style={{ fontSize: 13, color: c.ok,      marginBottom: 12 }}>{message}</p>}
 
           <button onClick={handleReset} disabled={loading} style={{
-            width: '100%', background: c.accent, color: '#1b1917', border: 'none',
+            width: '100%', background: c.accent, color: '#FFFFFF', border: 'none',
             borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em',
             textTransform: 'uppercase', padding: 13, cursor: 'pointer', opacity: loading ? 0.5 : 1,
           }}>

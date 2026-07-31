@@ -1,44 +1,41 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { GUIDED_CHECKLIST, STATUSES } from '@/lib/criteria'
+import { authFetch } from '@/lib/authFetch'
+import { GUIDED_SEGMENTS, OVERALL_SITE_SEGMENT, STATUSES } from '@/lib/criteria'
+import { parseSatellite, getAreaText } from '@/lib/satellite'
 import PhotoUpload from './PhotoUpload'
 import InfoModal from './InfoModal'
 
 const c = {
-  bg:      '#1b1917',
-  surface: '#242220',
-  line:    '#3a352f',
-  accent:  '#be5b1d',
-  text:    '#ece6db',
-  muted:   '#9a9285',
-  ok:      '#6b8e63',
-  warn:    '#b5483a',
-  info:    '#7d8fa6',
+  bg:      'var(--bg)',
+  surface: 'var(--surface)',
+  line:    'var(--line)',
+  accent:  'var(--accent)',
+  text:    'var(--text)',
+  muted:   'var(--text-muted)',
+  ok:      'var(--ok)',
+  warn:    'var(--warn)',
+  info:    'var(--info)',
 }
 
 const input = { width: '100%', background: c.surface, border: `1px solid ${c.line}`, borderRadius: 4, color: c.text, fontSize: 14, padding: '10px 12px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }
 
-// Flatten the checklist into a single ordered list of steps, each tagged with its zone
-const ALL_STEPS = GUIDED_CHECKLIST.flatMap(group =>
-  group.items.map(item => ({ zone: group.zone, instructions: group.instructions, ...item }))
-)
+function itemDone(entries, item) {
+  return entries.some(e => e.zone === item.zone && e.detail === item.label)
+}
 
-const TOP_STATUSES = [
-  { value: 'Base Compliant',     label: 'Base ✓' },
-  { value: 'Plus Compliant',     label: 'Plus ✓' },
-  { value: 'Non-Compliant',      label: 'Non-Comp' },
-  { value: 'Needs Verification', label: 'Verify' },
-]
-
-function StepForm({ step, propertyId, user, onSaved, onSkip, savedState }) {
-  const [status,   setStatus]   = useState(savedState?.status ?? null)
-  const [note,     setNote]     = useState(savedState?.note ?? '')
-  const [photoUrl, setPhotoUrl] = useState(savedState?.photo_url ?? null)
+// Inline form for logging a single checklist item. Opens in place under the
+// item row rather than taking over the whole screen — the point of the
+// redesign is that you can move through a side of the house without losing
+// your place.
+function ItemInlineForm({ item, propertyId, user, onSaved, onCancel }) {
+  const [status,   setStatus]   = useState(null)
+  const [note,     setNote]     = useState('')
+  const [photoUrl, setPhotoUrl] = useState(null)
   const [saving,   setSaving]   = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
-  const [photoKey, setPhotoKey] = useState(0)
 
   async function save() {
     if (!note.trim()) { alert('Add a quick note describing what you see.'); return }
@@ -47,11 +44,11 @@ function StepForm({ step, propertyId, user, onSaved, onSkip, savedState }) {
     const userName = user?.user_metadata?.full_name || user?.email || 'Unknown'
     const { error } = await supabase.from('entries').insert({
       property_id: propertyId,
-      zone: step.zone,
-      category: step.zone,
+      zone: item.zone,
+      category: item.zone,
       status,
       note: note.trim(),
-      detail: step.label,
+      detail: item.label,
       photo_url: photoUrl || null,
       created_by: user?.id || null,
       created_by_name: userName,
@@ -62,27 +59,21 @@ function StepForm({ step, propertyId, user, onSaved, onSkip, savedState }) {
   }
 
   return (
-    <div>
-      {infoOpen && <InfoModal category={step.zone} onClose={() => setInfoOpen(false)} />}
+    <div style={{ background: c.bg, border: `1px solid ${c.line}`, borderRadius: 6, padding: 14, marginTop: 6, marginBottom: 6 }}>
+      {infoOpen && <InfoModal category={item.zone} onClose={() => setInfoOpen(false)} />}
 
-      <div style={{ marginBottom: 16 }}>
-        <span style={{ fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.accent }}>{step.zone}</span>
-        <h3 style={{ fontSize: 18, fontWeight: 700, color: c.text, margin: '4px 0 8px' }}>{step.label}</h3>
-        <p style={{ fontSize: 13, color: c.muted, lineHeight: 1.5, margin: 0 }}>{step.hint}</p>
-        <button onClick={() => setInfoOpen(true)} style={{ marginTop: 8, fontSize: 11, fontFamily: 'monospace', color: c.accent, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-          ⓘ Read about this category
-        </button>
+      <p style={{ fontSize: 12, color: c.muted, lineHeight: 1.5, margin: '0 0 6px' }}>{item.hint}</p>
+      <button onClick={() => setInfoOpen(true)} style={{ marginBottom: 12, fontSize: 11, fontFamily: 'monospace', color: c.accent, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+        ⓘ Read about this category
+      </button>
+
+      <div style={{ marginBottom: 12 }}>
+        <PhotoUpload propertyId={propertyId} onPhotoUrl={setPhotoUrl} />
       </div>
 
-      <div style={{ marginBottom: 14 }}>
-        <label style={{ display: 'block', fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted, marginBottom: 6 }}>Photo</label>
-        <PhotoUpload key={photoKey} propertyId={propertyId} onPhotoUrl={setPhotoUrl} />
-      </div>
-
-      <div style={{ marginBottom: 14 }}>
-        <label style={{ display: 'block', fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted, marginBottom: 6 }}>Status</label>
+      <div style={{ marginBottom: 12 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5 }}>
-          {TOP_STATUSES.map(s => (
+          {STATUSES.map(s => (
             <button key={s.value} onClick={() => setStatus(s.value)} style={{
               padding: '6px 2px', border: `1px solid ${status === s.value ? c.accent : c.line}`,
               borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontSize: 9.5,
@@ -91,190 +82,314 @@ function StepForm({ step, propertyId, user, onSaved, onSkip, savedState }) {
               background: status === s.value ? 'rgba(190,91,29,.15)' : 'transparent',
             }}>{s.label}</button>
           ))}
-          <button onClick={() => setStatus('Not Applicable')} style={{
-            padding: '6px 2px', border: `1px solid ${status === 'Not Applicable' ? c.muted : c.line}`,
-            borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontSize: 9.5,
-            letterSpacing: '0.02em', textTransform: 'uppercase',
-            color: status === 'Not Applicable' ? c.text : c.muted, background: 'transparent',
-          }}>N/A</button>
         </div>
       </div>
 
-      <div style={{ marginBottom: 18 }}>
-        <label style={{ display: 'block', fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted, marginBottom: 6 }}>Quick Note</label>
-        <input style={input} type="text" placeholder="What do you see?" value={note} onChange={e => setNote(e.target.value)} />
-      </div>
+      <input style={{ ...input, marginBottom: 12 }} type="text" placeholder="What do you see?" value={note} onChange={e => setNote(e.target.value)} />
 
       <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={save} disabled={saving} style={{ flex: 1, background: c.accent, color: '#1b1917', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 13, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}>
-          {saving ? 'Saving…' : 'Save & Continue'}
+        <button onClick={save} disabled={saving} style={{ flex: 1, background: c.accent, color: '#FFFFFF', border: 'none', borderRadius: 4, fontSize: 12.5, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 11, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}>
+          {saving ? 'Saving…' : 'Save Entry'}
         </button>
-        <button onClick={onSkip} style={{ padding: '13px 16px', background: 'transparent', border: `1px solid ${c.line}`, borderRadius: 4, color: c.muted, fontSize: 13, cursor: 'pointer' }}>
-          Skip
+        <button onClick={onCancel} style={{ padding: '11px 14px', background: 'transparent', border: `1px solid ${c.line}`, borderRadius: 4, color: c.muted, fontSize: 12.5, cursor: 'pointer' }}>
+          Cancel
         </button>
       </div>
     </div>
   )
 }
 
-export default function GuidedEntry({ propertyId, user, onClose, onSaved }) {
-  const [mode, setMode] = useState(null) // null | 'wizard' | 'checklist'
-  const [stepIndex, setStepIndex] = useState(0)
-  const [completed, setCompleted] = useState({}) // index -> true
+function SuggestionBanner({ text }) {
+  if (!text) return null
+  return (
+    <div style={{ background: 'rgba(58,125,68,.1)', border: `1px solid ${c.ok}`, borderRadius: 6, padding: '10px 12px', marginTop: 10, fontSize: 12, color: c.text, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+      {text}
+    </div>
+  )
+}
 
-  function markDone(idx) {
-    setCompleted(prev => ({ ...prev, [idx]: true }))
+// The walkthrough is: "Overall Site" (satellite scan + the overall-site
+// checklist + access/driveway, all combined — everything that happens
+// before you start walking the house) → every GUIDED_SEGMENTS entry in
+// order. Keeps OVERALL_SITE_SEGMENT's key ('overall_site') so entries, the
+// whole-side photo, and the gap-check API all resolve the same way a
+// normal segment would — only the instructions/virtual flag differ.
+const SATELLITE_STEP = {
+  ...OVERALL_SITE_SEGMENT,
+  virtual: true,
+  instructions: 'Start here — scan the overhead view of the whole property, then capture the same wide shots you’d take for the overall site: street view, terrain, neighboring properties, and the driveway/access route. This flags large features per category so you already know what to watch for once you reach each side.',
+}
+const STEPS = [SATELLITE_STEP, ...GUIDED_SEGMENTS]
+
+export default function GuidedEntry({ propertyId, property, entries: entriesProp, user, onClose, onSaved }) {
+  const [entries, setEntries] = useState(entriesProp || [])
+  const [activeKey, setActiveKey] = useState(SATELLITE_STEP.key)
+  const [openItemLabel, setOpenItemLabel] = useState(null)
+  const [segRows, setSegRows] = useState({}) // segment_key -> { photo_url, ai_suggestions }
+  const [segPhotoDraft, setSegPhotoDraft] = useState(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [satellite, setSatellite] = useState(() => parseSatellite(property?.satellite_analysis))
+  const [satelliteAt, setSatelliteAt] = useState(property?.satellite_analyzed_at ?? null)
+  const [satelliteRunning, setSatelliteRunning] = useState(false)
+  const [satelliteImageUrl, setSatelliteImageUrl] = useState(property?.satellite_image_url ?? null)
+  const [notesDraft, setNotesDraft] = useState('')
+  const [savingNotes, setSavingNotes] = useState(false)
+  const [notesSaved, setNotesSaved] = useState(false)
+
+  useEffect(() => { setEntries(entriesProp || []) }, [entriesProp])
+
+  const loadSegments = useCallback(async () => {
+    const { data } = await supabase.from('guided_segments').select('*').eq('property_id', propertyId)
+    const map = {}
+    ;(data || []).forEach(row => { map[row.segment_key] = row })
+    setSegRows(map)
+  }, [propertyId])
+
+  useEffect(() => { loadSegments() }, [loadSegments])
+
+  const activeIdx = STEPS.findIndex(s => s.key === activeKey)
+  const activeStep = STEPS[activeIdx]
+  const activeSegment = activeStep
+  const activeRow = segRows[activeKey]
+
+  // Site notes used to live in their own tab/table — now it's one freeform
+  // box per segment, saved onto the same guided_segments row as the
+  // segment's photo/ai_suggestions. Re-syncs whenever the active step
+  // changes or this segment's saved notes value changes (e.g. after our
+  // own save below) — but not on unrelated segRows updates, so in-progress
+  // typing here doesn't get clobbered by other segments loading/saving.
+  useEffect(() => {
+    setNotesDraft(segRows[activeKey]?.notes ?? '')
+  }, [activeKey, segRows[activeKey]?.notes])
+
+  async function saveNotes() {
+    setSavingNotes(true)
+    const { error } = await supabase.from('guided_segments').upsert(
+      { property_id: propertyId, segment_key: activeKey, notes: notesDraft, updated_at: new Date().toISOString() },
+      { onConflict: 'property_id,segment_key' }
+    )
+    setSavingNotes(false)
+    if (error) { alert('Save failed: ' + error.message); return }
+    setSegRows(prev => ({ ...prev, [activeKey]: { ...(prev[activeKey] || {}), segment_key: activeKey, notes: notesDraft } }))
+    setNotesSaved(true); setTimeout(() => setNotesSaved(false), 2000)
   }
 
-  function nextStep() {
-    if (stepIndex < ALL_STEPS.length - 1) setStepIndex(i => i + 1)
-    else onClose()
+  function refreshEntries() {
+    setOpenItemLabel(null)
+    onSaved?.()
   }
 
-  const doneCount = Object.keys(completed).length
+  async function runSatelliteAnalysis() {
+    setSatelliteRunning(true)
+    try {
+      const res = await authFetch('/api/satellite-analysis', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Analysis failed')
+      setSatellite(data.suggestions)
+      setSatelliteImageUrl(data.imageUrl ?? null)
+      setSatelliteAt(new Date().toISOString())
+    } catch (err) {
+      alert('Satellite analysis failed: ' + err.message)
+    } finally {
+      setSatelliteRunning(false)
+    }
+  }
+
+  async function analyzeSegment() {
+    const photoUrl = segPhotoDraft || activeRow?.photo_url
+    if (!photoUrl) { alert('Take a whole-side photo first.'); return }
+    setAnalyzing(true)
+    try {
+      const res = await authFetch('/api/segment-analysis', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyId, segmentKey: activeKey, photoUrl }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Analysis failed')
+      setSegRows(prev => ({ ...prev, [activeKey]: { ...(prev[activeKey] || {}), segment_key: activeKey, photo_url: photoUrl, ai_suggestions: data.suggestions } }))
+    } catch (err) {
+      alert('Segment analysis failed: ' + err.message)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  function goStep(idx) {
+    if (idx < 0) return
+    if (idx >= STEPS.length) { onClose(); return }
+    setSegPhotoDraft(null)
+    setOpenItemLabel(null)
+    setActiveKey(STEPS[idx].key)
+  }
+
+  const doneCount = seg => seg.items.filter(item => itemDone(entries, item)).length
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 60,
-      background: c.bg,
-      display: 'flex', flexDirection: 'column',
-      overflowY: 'auto',
-    }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: c.bg, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
       {/* Header */}
       <div style={{ position: 'sticky', top: 0, background: c.bg, borderBottom: `1px solid ${c.line}`, padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 5 }}>
         <div>
           <span style={{ fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase', color: c.accent, display: 'block' }}>Guided Entry</span>
-          {mode && <span style={{ fontSize: 11, fontFamily: 'monospace', color: c.muted }}>{doneCount} / {ALL_STEPS.length} logged</span>}
+          <span style={{ fontSize: 11, fontFamily: 'monospace', color: c.muted }}>{activeStep.label}</span>
         </div>
         <button onClick={onClose} style={{ width: 34, height: 34, borderRadius: '50%', border: `1px solid ${c.line}`, background: 'transparent', color: c.muted, fontSize: 14, cursor: 'pointer' }}>✕</button>
       </div>
 
-      <div style={{ flex: 1, padding: 20, maxWidth: 480, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
-        {/* Mode picker */}
-        {!mode && (
-          <div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, color: c.text, marginBottom: 8 }}>How do you want to work through this?</h2>
-            <p style={{ fontSize: 13, color: c.muted, lineHeight: 1.5, marginBottom: 24 }}>
-              We'll guide you through every photo and observation needed to build a complete report — {ALL_STEPS.length} items across {GUIDED_CHECKLIST.length} categories.
-            </p>
-
-            <button
-              onClick={() => setMode('wizard')}
-              style={{ width: '100%', textAlign: 'left', background: c.surface, border: `1px solid ${c.line}`, borderRadius: 8, padding: 16, marginBottom: 12, cursor: 'pointer' }}
-            >
-              <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: c.text, marginBottom: 4 }}>Step-by-Step</span>
-              <span style={{ display: 'block', fontSize: 12, color: c.muted, lineHeight: 1.4 }}>One item at a time, in order. Best when you're new or want zero guesswork.</span>
+      {/* Step nav — jump to any step (satellite or any segment), in order but freely skippable */}
+      <div style={{ position: 'sticky', top: 66, background: c.bg, borderBottom: `1px solid ${c.line}`, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', zIndex: 4 }}>
+        {STEPS.map((step, idx) => {
+          const done = doneCount(step), total = step.items.length
+          const complete = step.virtual ? (!!satellite && done === total) : done === total
+          return (
+            <button key={step.key} onClick={() => goStep(idx)} style={{
+              flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
+              padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
+              border: `1px solid ${step.key === activeKey ? c.accent : c.line}`,
+              background: step.key === activeKey ? 'rgba(190,91,29,.15)' : 'transparent',
+              color: step.key === activeKey ? c.accent : (complete ? c.ok : c.muted),
+              fontFamily: 'monospace', fontSize: 10.5, whiteSpace: 'nowrap',
+            }}>
+              {complete ? '✓ ' : (step.virtual ? '◈ ' : '')}{step.label} <span style={{ opacity: 0.7, marginLeft: 3 }}>({done}/{total})</span>
             </button>
+          )
+        })}
+      </div>
 
-            <button
-              onClick={() => setMode('checklist')}
-              style={{ width: '100%', textAlign: 'left', background: c.surface, border: `1px solid ${c.line}`, borderRadius: 8, padding: 16, cursor: 'pointer' }}
-            >
-              <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: c.text, marginBottom: 4 }}>Full Checklist</span>
-              <span style={{ display: 'block', fontSize: 12, color: c.muted, lineHeight: 1.4 }}>See everything at once, tap any item to log it in whatever order you walk the property.</span>
-            </button>
-          </div>
-        )}
+      <div style={{ flex: 1, padding: 20, maxWidth: 560, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
 
-        {/* Wizard mode */}
-        {mode === 'wizard' && (
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-              <div style={{ flex: 1, height: 4, background: c.line, borderRadius: 2, overflow: 'hidden' }}>
-                <div style={{ width: `${((stepIndex + 1) / ALL_STEPS.length) * 100}%`, height: '100%', background: c.accent }} />
-              </div>
-              <span style={{ fontSize: 11, fontFamily: 'monospace', color: c.muted, flexShrink: 0 }}>{stepIndex + 1}/{ALL_STEPS.length}</span>
+        {/* Active step — Satellite Overview (+ Overall Site) or a checklist segment */}
+        {activeSegment && (
+          <>
+            <div style={{ marginBottom: 8 }}>
+              <h2 style={{ fontSize: 19, fontWeight: 700, color: c.text, margin: '0 0 6px' }}>{activeSegment.label}</h2>
+              <p style={{ fontSize: 12.5, color: c.muted, lineHeight: 1.5, marginBottom: 12 }}>{activeSegment.instructions}</p>
+
+              {/* Satellite scan controls — only on the combined first step */}
+              {activeStep.virtual && (
+                <div style={{ background: c.surface, border: `1px solid ${c.line}`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
+                  <button onClick={runSatelliteAnalysis} disabled={satelliteRunning} style={{ fontSize: 12, fontFamily: 'monospace', color: c.accent, background: 'transparent', border: `1px solid ${c.accent}`, borderRadius: 4, padding: '9px 14px', cursor: 'pointer', opacity: satelliteRunning ? 0.5 : 1 }}>
+                    {satelliteRunning ? 'Analyzing…' : satellite ? 'Re-analyze Satellite View' : 'Analyze Satellite View'}
+                  </button>
+                  {satelliteAt && <span style={{ marginLeft: 10, fontSize: 10.5, color: c.muted, fontFamily: 'monospace' }}>Last run {new Date(satelliteAt).toLocaleString()}</span>}
+
+                  {satellite?.overview && <SuggestionBanner text={satellite.overview} />}
+
+                  {satelliteImageUrl && (
+                    <div style={{ marginTop: 14, borderRadius: 6, overflow: 'hidden', border: `1px solid ${c.line}`, lineHeight: 0 }}>
+                      <img src={satelliteImageUrl} alt="Satellite view of the property, cropped in tight" style={{ display: 'block', width: '100%', height: 'auto' }} />
+                    </div>
+                  )}
+
+                  {satellite && (
+                    <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {GUIDED_SEGMENTS.filter(seg => getAreaText(satellite, seg.key).trim()).map(seg => (
+                        <div key={seg.key} style={{ fontSize: 12, color: c.text, lineHeight: 1.5 }}>
+                          <strong style={{ color: c.accent }}>{seg.label}:</strong> {getAreaText(satellite, seg.key)}
+                        </div>
+                      ))}
+                      {GUIDED_SEGMENTS.every(seg => !getAreaText(satellite, seg.key).trim()) && (
+                        <p style={{ fontSize: 12, color: c.muted, margin: 0 }}>Nothing else notable per category — proceed to the walkthrough below.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!activeStep.virtual && getAreaText(satellite, activeSegment.key).trim() && (
+                <div style={{ background: 'rgba(190,91,29,.08)', border: `1px solid ${c.accent}`, borderRadius: 6, padding: '10px 12px', marginBottom: 16, fontSize: 12, color: c.text, lineHeight: 1.5 }}>
+                  <strong style={{ color: c.accent }}>◈ From the satellite scan:</strong> {getAreaText(satellite, activeSegment.key)}
+                </div>
+              )}
             </div>
 
-            <StepForm
-              step={ALL_STEPS[stepIndex]}
-              propertyId={propertyId}
-              user={user}
-              onSaved={() => { markDone(stepIndex); nextStep() }}
-              onSkip={() => nextStep()}
-            />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+              {activeSegment.items.map(item => {
+                const done = itemDone(entries, item)
+                const isOpen = openItemLabel === item.label
+                return (
+                  <div key={item.label}>
+                    <button
+                      onClick={() => setOpenItemLabel(isOpen ? null : item.label)}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                        background: c.surface, border: `1px solid ${isOpen ? c.accent : (done ? c.ok : c.line)}`,
+                        borderRadius: 6, padding: '10px 12px', cursor: 'pointer', textAlign: 'left',
+                      }}
+                    >
+                      <span style={{
+                        width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                        border: `1px solid ${done ? c.ok : c.line}`,
+                        background: done ? c.ok : 'transparent',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 10, color: '#FFFFFF',
+                      }}>{done ? '✓' : ''}</span>
+                      <span style={{ fontSize: 13, color: done ? c.muted : c.text, flex: 1 }}>{item.label}</span>
+                      <span style={{ fontSize: 11, color: c.muted }}>{isOpen ? '▲' : (done ? 'Add another' : '+')}</span>
+                    </button>
+                    {isOpen && (
+                      <ItemInlineForm
+                        item={item}
+                        propertyId={propertyId}
+                        user={user}
+                        onSaved={refreshEntries}
+                        onCancel={() => setOpenItemLabel(null)}
+                      />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
 
-            <button
-              onClick={() => setMode(null)}
-              style={{ width: '100%', marginTop: 16, fontSize: 11, fontFamily: 'monospace', color: c.muted, background: 'none', border: 'none', padding: 8, cursor: 'pointer' }}
-            >
-              ← Switch mode
-            </button>
-          </div>
-        )}
+            {/* Whole-side photo + AI gap check */}
+            {activeSegment.wholeSidePhoto && (
+              <div style={{ background: c.surface, border: `1px solid ${c.line}`, borderRadius: 8, padding: 14, marginBottom: 24 }}>
+                <span style={{ display: 'block', fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: c.accent, marginBottom: 8 }}>
+                  Whole-Side Photo
+                </span>
+                <p style={{ fontSize: 12, color: c.muted, lineHeight: 1.5, margin: '0 0 10px' }}>
+                  Take one wide shot of this whole segment, then run the check for anything the checklist above might have missed.
+                </p>
+                <PhotoUpload propertyId={propertyId} onPhotoUrl={url => setSegPhotoDraft(url)} />
+                {(segPhotoDraft || activeRow?.photo_url) && (
+                  <button onClick={analyzeSegment} disabled={analyzing} style={{ marginTop: 10, fontSize: 11.5, fontFamily: 'monospace', color: c.accent, background: 'transparent', border: `1px solid ${c.accent}`, borderRadius: 4, padding: '7px 12px', cursor: 'pointer', opacity: analyzing ? 0.5 : 1 }}>
+                    {analyzing ? 'Analyzing…' : activeRow?.ai_suggestions ? 'Re-run Gap Check' : 'Run Gap Check'}
+                  </button>
+                )}
+                <SuggestionBanner text={activeRow?.ai_suggestions} />
+              </div>
+            )}
 
-        {/* Checklist mode */}
-        {mode === 'checklist' && (
-          <ChecklistMode
-            propertyId={propertyId}
-            user={user}
-            completed={completed}
-            markDone={markDone}
-            onBack={() => setMode(null)}
-          />
+            {/* Freeform notes — one box per segment, replaces the old standalone Site Notes tab */}
+            <div style={{ background: c.surface, border: `1px solid ${c.line}`, borderRadius: 8, padding: 14, marginBottom: 24 }}>
+              <span style={{ display: 'block', fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: c.accent, marginBottom: 8 }}>
+                Notes
+              </span>
+              <textarea
+                value={notesDraft}
+                onChange={e => setNotesDraft(e.target.value)}
+                placeholder={activeSegment.notePlaceholder || 'Additional notes for this area (optional)…'}
+                rows={3}
+                style={{ ...input, minHeight: 76, resize: 'vertical', fontFamily: 'inherit' }}
+              />
+              <button onClick={saveNotes} disabled={savingNotes} style={{ marginTop: 10, fontSize: 11.5, fontFamily: 'monospace', color: c.accent, background: 'transparent', border: `1px solid ${c.accent}`, borderRadius: 4, padding: '7px 12px', cursor: 'pointer', opacity: savingNotes ? 0.5 : 1 }}>
+                {savingNotes ? 'Saving…' : notesSaved ? '✓ Saved' : 'Save Notes'}
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => goStep(activeIdx - 1)} disabled={activeIdx === 0} style={{ flex: 1, padding: '12px', background: 'transparent', border: `1px solid ${c.line}`, borderRadius: 4, color: activeIdx === 0 ? c.line : c.muted, fontSize: 12.5, fontFamily: 'monospace', cursor: activeIdx === 0 ? 'default' : 'pointer' }}>
+                ← Previous
+              </button>
+              <button onClick={() => goStep(activeIdx + 1)} style={{ flex: 1, padding: '12px', background: c.accent, border: 'none', borderRadius: 4, color: '#FFFFFF', fontSize: 12.5, fontFamily: 'monospace', fontWeight: 700, cursor: 'pointer' }}>
+                {activeIdx === STEPS.length - 1 ? 'Finish' : 'Next Segment →'}
+              </button>
+            </div>
+          </>
         )}
       </div>
-    </div>
-  )
-}
-
-function ChecklistMode({ propertyId, user, completed, markDone, onBack }) {
-  const [activeStepIdx, setActiveStepIdx] = useState(null)
-
-  if (activeStepIdx !== null) {
-    return (
-      <div>
-        <button onClick={() => setActiveStepIdx(null)} style={{ marginBottom: 16, fontSize: 11, fontFamily: 'monospace', color: c.muted, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-          ← Back to checklist
-        </button>
-        <StepForm
-          step={ALL_STEPS[activeStepIdx]}
-          propertyId={propertyId}
-          user={user}
-          onSaved={() => { markDone(activeStepIdx); setActiveStepIdx(null) }}
-          onSkip={() => setActiveStepIdx(null)}
-        />
-      </div>
-    )
-  }
-
-  return (
-    <div>
-      {GUIDED_CHECKLIST.map(group => (
-        <div key={group.zone} style={{ marginBottom: 22 }}>
-          <h3 style={{ fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: c.accent, marginBottom: 4 }}>{group.zone}</h3>
-          <p style={{ fontSize: 12, color: c.muted, marginBottom: 10, lineHeight: 1.4 }}>{group.instructions}</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {group.items.map(item => {
-              const idx = ALL_STEPS.findIndex(s => s.zone === group.zone && s.label === item.label)
-              const done = completed[idx]
-              return (
-                <button
-                  key={item.label}
-                  onClick={() => setActiveStepIdx(idx)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    background: c.surface, border: `1px solid ${done ? c.ok : c.line}`,
-                    borderRadius: 6, padding: '10px 12px', cursor: 'pointer', textAlign: 'left',
-                  }}
-                >
-                  <span style={{
-                    width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
-                    border: `1px solid ${done ? c.ok : c.line}`,
-                    background: done ? c.ok : 'transparent',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 10, color: '#1b1917',
-                  }}>{done ? '✓' : ''}</span>
-                  <span style={{ fontSize: 13, color: done ? c.muted : c.text }}>{item.label}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      ))}
-      <button onClick={onBack} style={{ width: '100%', fontSize: 11, fontFamily: 'monospace', color: c.muted, background: 'none', border: 'none', padding: 8, cursor: 'pointer' }}>
-        ← Switch mode
-      </button>
     </div>
   )
 }

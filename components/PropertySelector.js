@@ -2,10 +2,23 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select'
+import { MapPin, Pencil, Plus, RotateCw, UserPlus } from 'lucide-react'
+import { useAuth } from '@/components/AuthProvider'
+import { authFetch } from '@/lib/authFetch'
 
 const FHSZ_COLOR = { 'Moderate': 'var(--info)', 'High': '#c97c2a', 'Very High': 'var(--warn)' }
 
 export default function PropertySelector({ selected, onSelect, user }) {
+  const { isHomeowner } = useAuth() ?? {}
   const [properties,  setProperties]  = useState([])
   const [creating,    setCreating]    = useState(false)
   const [editing,     setEditing]     = useState(false)
@@ -15,6 +28,11 @@ export default function PropertySelector({ selected, onSelect, user }) {
   const [fhszLoading, setFhszLoading] = useState(false)
   const [suggestions, setSuggestions] = useState([])
   const [locating,    setLocating]    = useState(false)
+  const [inviting,      setInviting]      = useState(false)
+  const [inviteLink,    setInviteLink]    = useState(null)
+  const [inviteCopied,  setInviteCopied]  = useState(false)
+  const [inviteOpen,    setInviteOpen]    = useState(false)
+  const [inviteEmail,   setInviteEmail]   = useState('')
   const debounceRef = useRef(null)
 
   useEffect(() => {
@@ -99,58 +117,190 @@ export default function PropertySelector({ selected, onSelect, user }) {
 
   function startEditing() { setAddress(selected.address); setVisitDate(selected.visit_date ?? ''); setEditing(true) }
 
-  const inputStyle = { flex: 1, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text)', fontSize: 14, padding: '9px 10px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }
+  async function inviteHomeowner() {
+    if (!selected || !inviteEmail.trim()) return
+    setInviting(true); setInviteLink(null); setInviteCopied(false)
+    try {
+      const res = await authFetch('/api/homeowner-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyId: selected.id, email: inviteEmail.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not create invite')
+      setInviteLink(`${window.location.origin}/invite/${data.token}`)
+    } catch (err) {
+      alert('Invite failed: ' + err.message)
+    } finally {
+      setInviting(false)
+    }
+  }
+
+  function copyInviteLink() {
+    if (!inviteLink) return
+    navigator.clipboard.writeText(inviteLink)
+    setInviteCopied(true)
+    setTimeout(() => setInviteCopied(false), 2000)
+  }
 
   if (creating || editing) return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ position: 'relative' }}>
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <input style={{ ...inputStyle, flex: 'none', width: '100%', paddingRight: 40 }} type="text" placeholder="Property address" value={address} onChange={e => onAddressChange(e.target.value)} autoFocus />
-          <button onClick={locateMe} disabled={locating} title="Use current location" style={{ position: 'absolute', right: 8, background: 'none', border: 'none', padding: 4, cursor: locating ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: locating ? 0.4 : 1 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8" strokeDasharray="4 2"/>
-            </svg>
+    <div className="flex flex-col gap-2">
+      <div className="relative">
+        <div className="relative flex items-center">
+          <Input
+            type="text"
+            placeholder="Property address"
+            value={address}
+            onChange={e => onAddressChange(e.target.value)}
+            className="pr-10"
+            autoFocus
+          />
+          <button
+            onClick={locateMe}
+            disabled={locating}
+            title="Use current location"
+            className="absolute right-2 flex items-center justify-center rounded p-1 text-primary disabled:opacity-40"
+          >
+            <MapPin className="size-[18px]" strokeWidth={2} />
           </button>
         </div>
         {suggestions.length > 0 && (
-          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 4, marginTop: 2, boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
-            {suggestions.map((s, i) => <button key={i} onClick={() => selectSuggestion(s)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px', background: 'transparent', border: 'none', borderBottom: i < suggestions.length - 1 ? '1px solid var(--line)' : 'none', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}>{s}</button>)}
+          <div className="absolute inset-x-0 top-full z-50 mt-0.5 rounded-md border border-border bg-card shadow-md">
+            {suggestions.map((s, i) => (
+              <button
+                key={i}
+                onClick={() => selectSuggestion(s)}
+                className={cnBorder(i, suggestions.length)}
+              >
+                {s}
+              </button>
+            ))}
           </div>
         )}
       </div>
-      <input style={{ ...inputStyle, flex: 'none', width: '100%' }} type="date" value={visitDate} onChange={e => setVisitDate(e.target.value)} />
-      {fhszLoading && <p style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)', margin: 0 }}>Looking up fire hazard zone…</p>}
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={editing ? saveEdit : createProperty} disabled={loading} style={{ flex: 1, background: 'var(--accent)', color: 'var(--bg)', border: 'none', borderRadius: 4, fontWeight: 700, fontSize: 13, padding: '9px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+      <Input type="date" value={visitDate} onChange={e => setVisitDate(e.target.value)} />
+      {fhszLoading && <p className="m-0 font-mono text-[11px] text-muted-foreground">Looking up fire hazard zone…</p>}
+      <div className="flex gap-2">
+        <Button onClick={editing ? saveEdit : createProperty} disabled={loading} className="flex-1 uppercase tracking-wide">
           {loading ? 'Saving…' : editing ? 'Save' : 'Create'}
-        </button>
-        <button onClick={() => { setCreating(false); setEditing(false); setSuggestions([]) }} style={{ padding: '9px 16px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+        </Button>
+        <Button variant="outline" onClick={() => { setCreating(false); setEditing(false); setSuggestions([]) }}>
+          Cancel
+        </Button>
       </div>
     </div>
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <select style={{ ...inputStyle }} value={selected?.id ?? ''} onChange={e => { const prop = properties.find(p => p.id === e.target.value); onSelect(prop ?? null) }}>
-          <option value="">— Select a property —</option>
-          {properties.map(p => <option key={p.id} value={p.id}>{p.address}{p.visit_date ? ` (${p.visit_date})` : ''}</option>)}
-        </select>
-        {selected && <button onClick={startEditing} style={{ padding: '9px 12px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>✎</button>}
-        <button onClick={() => setCreating(true)} style={{ padding: '9px 14px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--accent)', fontSize: 18, cursor: 'pointer' }}>+</button>
+    <div className="flex flex-col gap-2">
+      <div className="flex gap-2">
+        <Select
+          value={selected?.id ?? undefined}
+          onValueChange={id => { const prop = properties.find(p => p.id === id); onSelect(prop ?? null) }}
+        >
+          <SelectTrigger className="flex-1">
+            <SelectValue placeholder="— Select a property —" />
+          </SelectTrigger>
+          <SelectContent>
+            {properties.map(p => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.address}{p.visit_date ? ` (${p.visit_date})` : ''}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {selected && (
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={startEditing}
+            title="Edit property"
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <Pencil className="size-4" />
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setCreating(true)}
+          title="Add property"
+          className="border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
+        >
+          <Plus className="size-4" />
+        </Button>
       </div>
       {selected && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div className="flex flex-wrap items-center gap-2">
           {selected.fhsz && (
             <>
-              <span style={{ fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Fire Hazard Zone:</span>
-              <span style={{ fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: FHSZ_COLOR[selected.fhsz] ?? 'var(--text-muted)', border: `1px solid ${FHSZ_COLOR[selected.fhsz] ?? 'var(--line)'}`, borderRadius: 20, padding: '2px 10px' }}>{selected.fhsz}</span>
-              {selected.fhsz_county && <span style={{ fontSize: 9.5, fontFamily: 'monospace', color: 'var(--text-muted)' }}>{selected.fhsz_county} County</span>}
+              <span className="font-mono text-[9.5px] uppercase tracking-wide text-muted-foreground">Fire Hazard Zone:</span>
+              <span
+                className="rounded-full border px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wide"
+                style={{ color: FHSZ_COLOR[selected.fhsz] ?? 'var(--text-muted)', borderColor: FHSZ_COLOR[selected.fhsz] ?? 'var(--line)' }}
+              >
+                {selected.fhsz}
+              </span>
+              {selected.fhsz_county && <span className="font-mono text-[9.5px] text-muted-foreground">{selected.fhsz_county} County</span>}
             </>
           )}
-          {!selected.lat && <button onClick={refreshFHSZ} disabled={fhszLoading} style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)', background: 'none', border: '1px solid var(--line)', borderRadius: 4, padding: '3px 8px', cursor: 'pointer' }}>{fhszLoading ? 'Looking up…' : '↻ Fetch fire data'}</button>}
+          {!selected.lat && (
+            <Button variant="outline" size="sm" onClick={refreshFHSZ} disabled={fhszLoading} className="h-auto gap-1 border-primary/40 px-2 py-1 font-mono text-[10px] normal-case text-primary hover:bg-primary/10 hover:text-primary">
+              <RotateCw className="size-3" />
+              {fhszLoading ? 'Looking up…' : 'Fetch fire data'}
+            </Button>
+          )}
+          {!isHomeowner && !inviteOpen && (
+            <Button variant="outline" size="sm" onClick={() => { setInviteOpen(true); setInviteLink(null) }} className="h-auto gap-1 border-primary/40 px-2 py-1 font-mono text-[10px] normal-case text-primary hover:bg-primary/10 hover:text-primary">
+              <UserPlus className="size-3" />
+              Invite Homeowner
+            </Button>
+          )}
+        </div>
+      )}
+
+      {inviteOpen && !inviteLink && (
+        <div className="flex flex-col gap-1.5 rounded-md border border-border bg-secondary p-3">
+          <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">Homeowner's email</span>
+          <p className="m-0 text-xs text-muted-foreground">The invite link will only work with this exact email — it locks the field on their end so they can't sign up with a different address.</p>
+          <div className="flex gap-2">
+            <Input
+              type="email"
+              placeholder="homeowner@email.com"
+              value={inviteEmail}
+              onChange={e => setInviteEmail(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && inviteHomeowner()}
+              autoFocus
+            />
+            <Button onClick={inviteHomeowner} disabled={inviting || !inviteEmail.trim()} className="h-auto shrink-0 px-3 font-mono text-[10px] normal-case">
+              {inviting ? 'Generating…' : 'Generate Link'}
+            </Button>
+            <Button variant="outline" onClick={() => { setInviteOpen(false); setInviteEmail('') }} className="h-auto shrink-0 px-3 font-mono text-[10px] normal-case">
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {inviteLink && (
+        <div className="flex flex-col gap-1.5 rounded-md border border-border bg-secondary p-3">
+          <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">Invite link for {inviteEmail} — share this separately</span>
+          <div className="flex gap-2">
+            <Input readOnly value={inviteLink} className="font-mono text-xs" onFocus={e => e.target.select()} />
+            <Button variant="outline" size="sm" onClick={copyInviteLink} className="h-auto shrink-0 px-3 font-mono text-[10px] normal-case">
+              {inviteCopied ? '✓ Copied' : 'Copy'}
+            </Button>
+          </div>
+          <button onClick={() => { setInviteOpen(false); setInviteLink(null); setInviteEmail('') }} className="self-start font-mono text-[10px] text-muted-foreground underline">
+            Done
+          </button>
         </div>
       )}
     </div>
   )
+}
+
+function cnBorder(i, len) {
+  const base = 'block w-full border-0 bg-transparent px-3 py-2 text-left font-sans text-[13px] text-foreground'
+  return i < len - 1 ? `${base} border-b border-border` : base
 }

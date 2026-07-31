@@ -6,14 +6,14 @@ import { ZONES } from '@/lib/criteria'
 import InfoModal from './InfoModal'
 
 const c = {
-  surface: '#242220',
-  line:    '#3a352f',
-  accent:  '#be5b1d',
-  text:    '#ece6db',
-  muted:   '#9a9285',
-  ok:      '#6b8e63',
-  warn:    '#b5483a',
-  info:    '#7d8fa6',
+  surface: 'var(--surface)',
+  line:    'var(--line)',
+  accent:  'var(--accent)',
+  text:    'var(--text)',
+  muted:   'var(--text-muted)',
+  ok:      'var(--ok)',
+  warn:    'var(--warn)',
+  info:    'var(--info)',
 }
 
 const BORDER = {
@@ -57,7 +57,7 @@ const DISTANCE_TYPES = [
   'Other',
 ]
 
-const inputStyle = { width: '100%', background: '#1b1917', border: `1px solid ${c.line}`, borderRadius: 4, color: c.text, fontSize: 14, padding: '8px 10px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }
+const inputStyle = { width: '100%', background: 'var(--bg)', border: `1px solid ${c.line}`, borderRadius: 4, color: c.text, fontSize: 14, padding: '8px 10px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }
 
 export default function EntriesList({ entries, onDeleted }) {
   const [expanded,  setExpanded]  = useState(null)
@@ -203,7 +203,7 @@ export default function EntriesList({ entries, onDeleted }) {
                       style={{
                         fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase',
                         background: editData.showDistance ? c.accent : 'transparent',
-                        color: editData.showDistance ? '#1b1917' : c.muted,
+                        color: editData.showDistance ? '#FFFFFF' : c.muted,
                         border: `1px solid ${editData.showDistance ? c.accent : c.line}`,
                         borderRadius: 20, padding: '2px 10px', cursor: 'pointer',
                       }}
@@ -255,7 +255,7 @@ export default function EntriesList({ entries, onDeleted }) {
 
               {/* Actions */}
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => saveEdit(entry.id)} disabled={saving} style={{ flex: 1, background: c.accent, color: '#1b1917', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: '9px', cursor: 'pointer', opacity: saving ? 0.5 : 1 }}>
+                <button onClick={() => saveEdit(entry.id)} disabled={saving} style={{ flex: 1, background: c.accent, color: '#FFFFFF', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: '9px', cursor: 'pointer', opacity: saving ? 0.5 : 1 }}>
                   {saving ? 'Saving…' : 'Save'}
                 </button>
                 <button onClick={() => setEditingId(null)} style={{ padding: '9px 16px', background: 'transparent', border: `1px solid ${c.line}`, borderRadius: 4, color: c.muted, fontSize: 12, cursor: 'pointer' }}>

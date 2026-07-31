@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { parseReportData } from '@/lib/reportSchema';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -10,10 +11,12 @@ const supabase = createClient(
 
 const c = {
   bg: '#E8EDF1', surface: '#FFFFFF', surfaceAlt: '#F3F6F8',
-  navy: '#2C4257', slate: '#5C6685', tan: '#A8876D',
+  navy: '#172431', slate: '#5C6685', tan: '#C1502E',
   border: '#D6DDE3', text: '#1A2632', muted: '#6B7A8D',
   ok: '#3A7D44', warn: '#B5483A',
 };
+
+const LEVEL_COLORS = { 'Low': '#3A7D44', 'Moderate': '#E8A020', 'High': '#C0552A', 'Very High': '#B5483A', 'Severe': '#8B1A1A' };
 
 const ZONE_GUIDE = [
   { title: 'Overall Site', body: 'A whole-property view of wildfire exposure, factoring in slope, prevailing wind, fuel load, and how neighboring properties could contribute to fire spread toward or away from the home.' },
@@ -33,14 +36,7 @@ const ZONE_GUIDE = [
   { title: 'Access & Address', body: 'Ensures fire crews can find and reach the property quickly — visible address numbers and a clear, navigable driveway are essential during an active wildfire response.' },
 ];
 
-function getRiskLevel(md) {
-  const t = (md || '').toLowerCase();
-  if (/overall risk rating\s*\n+\*{0,2}very high/m.test(t)) return { level: 'Very High', color: '#B5483A' };
-  if (/overall risk rating\s*\n+\*{0,2}severe/m.test(t)) return { level: 'Severe', color: '#8B1A1A' };
-  if (/overall risk rating\s*\n+\*{0,2}high/m.test(t)) return { level: 'High', color: '#C0552A' };
-  if (/overall risk rating\s*\n+\*{0,2}low/m.test(t)) return { level: 'Low', color: '#3A7D44' };
-  return { level: 'Moderate', color: '#E8A020' };
-}
+function zoneKey(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
 function StatusPill({ status }) {
   const map = {
@@ -49,20 +45,21 @@ function StatusPill({ status }) {
     'Non-Compliant':      { bg: '#FDECEA', color: c.warn,    label: '✗ Non-Compliant' },
     'Needs Verification': { bg: '#FDF6E8', color: '#8A6D3B', label: '? Needs Verification' },
     'Not Applicable':     { bg: '#F0F3F6', color: c.muted,   label: '— Not Applicable' },
+    'Pending review':     { bg: '#F0F3F6', color: c.muted,   label: '… Pending Review' },
   };
   const s = map[status] || { bg: '#F0F3F6', color: c.muted, label: status };
   return <span style={{ background: s.bg, color: s.color, fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, whiteSpace: 'nowrap' }}>{s.label}</span>;
 }
 
-function RiskBadge({ markdown }) {
-  const { level, color } = getRiskLevel(markdown);
+function RiskBadge({ level }) {
+  const color = LEVEL_COLORS[level] || LEVEL_COLORS.Moderate;
   const levels = ['Low', 'Moderate', 'High', 'Very High'];
   const idx = Math.max(0, levels.indexOf(level));
   return (
     <div style={{ background: c.surface, border: `2px solid ${c.border}`, borderLeft: `6px solid ${color}`, borderRadius: 12, padding: '20px 28px', display: 'flex', alignItems: 'center', gap: 24, marginBottom: 32 }}>
       <div>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: c.muted, textTransform: 'uppercase', marginBottom: 4 }}>Fire Risk Rating</div>
-        <div style={{ fontSize: 32, fontWeight: 800, color, lineHeight: 1 }}>{level}</div>
+        <div style={{ fontSize: 32, fontWeight: 800, color, lineHeight: 1 }}>{level || 'Moderate'}</div>
       </div>
       <div style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'center' }}>
         {levels.map((l, i) => (
@@ -76,6 +73,179 @@ function RiskBadge({ markdown }) {
   );
 }
 
+// Small tap/click-to-reveal tooltip — used to keep the "why" behind a
+// non-compliant/verify finding out of the main reading flow, without
+// relying on hover (unreliable on phones, which is how most homeowners
+// will read this).
+function RationaleTooltip({ text }) {
+  const [open, setOpen] = useState(false);
+  if (!text) return null;
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex', marginLeft: 8 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        aria-label="Why this status was assigned"
+        title={text}
+        style={{ width: 19, height: 19, borderRadius: '50%', border: `1.5px solid ${c.slate}`, background: open ? c.slate : 'none', color: open ? '#fff' : c.slate, fontSize: 11, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1, fontStyle: 'italic', fontFamily: 'Georgia, serif' }}
+      >i</button>
+      {open && (
+        <div style={{ position: 'absolute', bottom: '135%', left: '50%', transform: 'translateX(-50%)', background: c.navy, color: '#fff', fontSize: 12.5, lineHeight: 1.55, padding: '10px 13px', borderRadius: 8, width: 250, zIndex: 30, boxShadow: '0 6px 20px rgba(0,0,0,0.28)' }}>
+          {text}
+          <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderTop: `6px solid ${c.navy}` }} />
+        </div>
+      )}
+    </span>
+  );
+}
+
+function FindingCard({ f }) {
+  const isNC = /non-compliant/i.test(f.status || '');
+  const isOK = /^(base|plus) compliant/i.test(f.status || '');
+  return (
+    <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderLeft: `4px solid ${isNC ? c.warn : isOK ? c.ok : c.border}`, borderRadius: 8, padding: '14px 16px', marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 6 }}>
+        <div style={{ fontWeight: 700, color: c.navy, fontSize: 14.5 }}>{f.category}</div>
+        <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+          <StatusPill status={f.status} />
+          <RationaleTooltip text={f.rationale} />
+        </div>
+      </div>
+      {f.finding && <div style={{ fontSize: 14.5, color: c.text, lineHeight: 1.65 }}>{f.finding}</div>}
+      {f.recommendation && (
+        <div style={{ marginTop: 10, background: c.surfaceAlt, borderRadius: 6, padding: '9px 13px', fontSize: 13.5, color: c.text, lineHeight: 1.6 }}>
+          <strong style={{ color: c.navy }}>Recommendation:</strong> {f.recommendation}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CollapsibleCard({ title, id, isH2, defaultOpen, children }) {
+  const [open, setOpen] = useState(defaultOpen !== false);
+  return (
+    <div id={id} style={{ marginBottom: isH2 ? 28 : 16 }}>
+      <button onClick={() => setOpen(o => !o)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: isH2 ? c.navy : c.surfaceAlt, color: isH2 ? '#fff' : c.navy, border: 'none', borderRadius: isH2 ? (open ? '10px 10px 0 0' : 10) : (open ? '8px 8px 0 0' : 8), padding: isH2 ? '14px 20px' : '10px 16px', cursor: 'pointer', textAlign: 'left' }}>
+        <span style={{ fontWeight: 700, fontSize: isH2 ? 16 : 14 }}>{title}</span>
+        <span style={{ fontSize: 18, opacity: 0.6, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>›</span>
+      </button>
+      {open && (
+        <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '18px 20px' }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ZoneSection({ zone, entries, id }) {
+  const zonePhotos = (entries || []).filter(e => e.photo_url && zoneKey(e.zone) === zoneKey(zone.zone));
+  return (
+    <CollapsibleCard title={zone.zone} id={id} isH2>
+      {(zone.findings || []).map((f, i) => <FindingCard key={i} f={f} />)}
+      {zonePhotos.length > 0 && (
+        <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
+          {zonePhotos.map((e, i) => (
+            <div key={i} style={{ border: `1px solid ${c.border}`, borderRadius: 8, overflow: 'hidden', background: c.surfaceAlt }}>
+              <img src={e.photo_url} alt={e.ai_caption || e.note} style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' }} />
+              <div style={{ padding: '10px 12px' }}>
+                <div style={{ fontSize: 12, color: c.text, lineHeight: 1.5, marginBottom: 6, fontStyle: 'italic' }}>{e.ai_caption || e.note}</div>
+                <StatusPill status={e.status} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </CollapsibleCard>
+  );
+}
+
+function TOC({ items }) {
+  return (
+    <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderLeft: `4px solid ${c.navy}`, borderRadius: 10, padding: '20px 24px', marginBottom: 32 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: c.navy, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>Table of Contents</div>
+      <ol style={{ margin: 0, padding: '0 0 0 20px' }}>
+        {items.map((item, i) => (
+          <li key={i} style={{ marginBottom: 6 }}>
+            <a href={`#${item.id}`} style={{ color: c.slate, fontSize: 14, textDecoration: 'none', fontWeight: 500 }} onClick={e => { e.preventDefault(); document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>{item.title}</a>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function ZoneGuide() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div id="zone-guide" style={{ marginBottom: 32 }}>
+      <button onClick={() => setOpen(o => !o)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: c.navy, color: '#fff', border: 'none', borderRadius: open ? '10px 10px 0 0' : 10, padding: '14px 20px', cursor: 'pointer', textAlign: 'left' }}>
+        <span style={{ fontWeight: 700, fontSize: 16 }}>Understanding the Zones</span>
+        <span style={{ fontSize: 18, opacity: 0.6, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>›</span>
+      </button>
+      {open && (
+        <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '20px 24px' }}>
+          {ZONE_GUIDE.map((z, i) => (
+            <div key={i} style={{ marginBottom: 18, paddingBottom: 18, borderBottom: i < ZONE_GUIDE.length - 1 ? `1px solid ${c.border}` : 'none' }}>
+              <div style={{ fontWeight: 700, color: c.navy, fontSize: 14, marginBottom: 4 }}>{z.title}</div>
+              <div style={{ fontSize: 14, color: c.text, lineHeight: 1.65 }}>{z.body}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PriorityColor(p) {
+  if (/high/i.test(p)) return c.warn;
+  if (/low/i.test(p)) return c.ok;
+  return '#B58A2E';
+}
+
+function ActionPlanTable({ items }) {
+  if (!items?.length) return <p style={{ color: c.muted, fontSize: 14 }}>No outstanding actions.</p>;
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+        <thead>
+          <tr>
+            {['#', 'Action', 'Zone', 'Priority'].map(h => (
+              <th key={h} style={{ background: c.navy, color: '#fff', padding: '10px 14px', textAlign: 'left', fontWeight: 700, fontSize: 12, letterSpacing: '0.04em' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((a, i) => (
+            <tr key={i} style={{ background: i % 2 === 0 ? c.surface : c.surfaceAlt }}>
+              <td style={{ padding: '10px 14px', borderBottom: `1px solid ${c.border}`, color: c.muted }}>{i + 1}</td>
+              <td style={{ padding: '10px 14px', borderBottom: `1px solid ${c.border}`, color: c.text }}>{a.action}</td>
+              <td style={{ padding: '10px 14px', borderBottom: `1px solid ${c.border}`, color: c.text }}>{a.zone}</td>
+              <td style={{ padding: '10px 14px', borderBottom: `1px solid ${c.border}` }}>
+                <span style={{ color: PriorityColor(a.priority), fontWeight: 700, fontSize: 12.5 }}>{a.priority}</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// --- Legacy fallback: reports published before the structured JSON format
+// existed still have a freeform markdown blob in report_markdown. Rather
+// than lose access to those links, fall back to the original markdown
+// renderer for anything that doesn't parse as the new shape.
+
+function legacyRiskLevel(md) {
+  const t = (md || '').toLowerCase();
+  if (/overall risk rating\s*\n+\*{0,2}very high/m.test(t)) return 'Very High';
+  if (/overall risk rating\s*\n+\*{0,2}severe/m.test(t)) return 'Severe';
+  if (/overall risk rating\s*\n+\*{0,2}high/m.test(t)) return 'High';
+  if (/overall risk rating\s*\n+\*{0,2}low/m.test(t)) return 'Low';
+  return 'Moderate';
+}
+
 function fi(text) {
   return (text || '')
     .replace(/\*\*(.+?)\*\*/g, `<strong style="color:${c.navy};font-weight:700">$1</strong>`)
@@ -83,7 +253,7 @@ function fi(text) {
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, `<a href="$2" target="_blank" rel="noopener" style="color:${c.slate};text-decoration:underline">$1</a>`);
 }
 
-function renderLines(lines) {
+function renderLegacyLines(lines) {
   const els = [];
   let i = 0;
   while (i < lines.length) {
@@ -130,7 +300,7 @@ function renderLines(lines) {
   return els;
 }
 
-function parseReport(md) {
+function parseLegacyReport(md) {
   if (!md) return [];
   const sections = [];
   let cur = null;
@@ -143,78 +313,26 @@ function parseReport(md) {
   return sections;
 }
 
-function Section({ section, entries, id, defaultOpen }) {
-  const [open, setOpen] = useState(defaultOpen !== false);
+function LegacySection({ section, entries, id }) {
   const isH2 = section.type === 'h2';
-  const zonePhotos = (entries || []).filter(e =>
-    e.photo_url && e.zone?.toLowerCase().replace(/[^a-z0-9]/g, '') === section.title?.toLowerCase().replace(/[^a-z0-9]/g, '')
-  );
+  const zonePhotos = (entries || []).filter(e => e.photo_url && zoneKey(e.zone) === zoneKey(section.title));
   return (
-    <div id={id} style={{ marginBottom: isH2 ? 28 : 16 }}>
-      <button onClick={() => setOpen(o => !o)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: isH2 ? c.navy : c.surfaceAlt, color: isH2 ? '#fff' : c.navy, border: 'none', borderRadius: isH2 ? (open ? '10px 10px 0 0' : 10) : (open ? '8px 8px 0 0' : 8), padding: isH2 ? '14px 20px' : '10px 16px', cursor: 'pointer', textAlign: 'left' }}>
-        <span style={{ fontWeight: 700, fontSize: isH2 ? 16 : 14 }}>{section.title}</span>
-        <span style={{ fontSize: 18, opacity: 0.6, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>›</span>
-      </button>
-      {open && (
-        <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '18px 20px' }}>
-          {renderLines(section.lines)}
-          {zonePhotos.length > 0 && (
-            <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
-              {zonePhotos.map((e, i) => (
-                <div key={i} style={{ border: `1px solid ${c.border}`, borderRadius: 8, overflow: 'hidden', background: c.surfaceAlt }}>
-                  <img src={e.photo_url} alt={e.ai_caption || e.note} style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' }} />
-                  <div style={{ padding: '10px 12px' }}>
-                    <div style={{ fontSize: 12, color: c.text, lineHeight: 1.5, marginBottom: 6, fontStyle: 'italic' }}>{e.ai_caption || e.note}</div>
-                    <StatusPill status={e.status} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TOC({ sections }) {
-  const h2s = sections.filter(s => s.type === 'h2');
-  return (
-    <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderLeft: `4px solid ${c.navy}`, borderRadius: 10, padding: '20px 24px', marginBottom: 32 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: c.navy, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>Table of Contents</div>
-      <ol style={{ margin: 0, padding: '0 0 0 20px' }}>
-        {h2s.map((s, i) => (
-          <li key={i} style={{ marginBottom: 6 }}>
-            <a href={`#toc-${i}`} style={{ color: c.slate, fontSize: 14, textDecoration: 'none', fontWeight: 500 }} onClick={e => { e.preventDefault(); document.getElementById(`toc-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>{s.title}</a>
-          </li>
-        ))}
-        <li style={{ marginBottom: 6 }}>
-          <a href="#zone-guide" style={{ color: c.slate, fontSize: 14, textDecoration: 'none', fontWeight: 500 }} onClick={e => { e.preventDefault(); document.getElementById('zone-guide')?.scrollIntoView({ behavior: 'smooth' }); }}>Understanding the Zones</a>
-        </li>
-      </ol>
-    </div>
-  );
-}
-
-function ZoneGuide() {
-  const [open, setOpen] = useState(false);
-  return (
-    <div id="zone-guide" style={{ marginBottom: 32 }}>
-      <button onClick={() => setOpen(o => !o)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: c.navy, color: '#fff', border: 'none', borderRadius: open ? '10px 10px 0 0' : 10, padding: '14px 20px', cursor: 'pointer', textAlign: 'left' }}>
-        <span style={{ fontWeight: 700, fontSize: 16 }}>Understanding the Zones</span>
-        <span style={{ fontSize: 18, opacity: 0.6, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>›</span>
-      </button>
-      {open && (
-        <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '20px 24px' }}>
-          {ZONE_GUIDE.map((z, i) => (
-            <div key={i} style={{ marginBottom: 18, paddingBottom: 18, borderBottom: i < ZONE_GUIDE.length - 1 ? `1px solid ${c.border}` : 'none' }}>
-              <div style={{ fontWeight: 700, color: c.navy, fontSize: 14, marginBottom: 4 }}>{z.title}</div>
-              <div style={{ fontSize: 14, color: c.text, lineHeight: 1.65 }}>{z.body}</div>
+    <CollapsibleCard title={section.title} id={id} isH2={isH2}>
+      {renderLegacyLines(section.lines)}
+      {zonePhotos.length > 0 && (
+        <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
+          {zonePhotos.map((e, i) => (
+            <div key={i} style={{ border: `1px solid ${c.border}`, borderRadius: 8, overflow: 'hidden', background: c.surfaceAlt }}>
+              <img src={e.photo_url} alt={e.ai_caption || e.note} style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' }} />
+              <div style={{ padding: '10px 12px' }}>
+                <div style={{ fontSize: 12, color: c.text, lineHeight: 1.5, marginBottom: 6, fontStyle: 'italic' }}>{e.ai_caption || e.note}</div>
+                <StatusPill status={e.status} />
+              </div>
             </div>
           ))}
         </div>
       )}
-    </div>
+    </CollapsibleCard>
   );
 }
 
@@ -247,9 +365,22 @@ export default function ReportPage({ params }) {
     fetchReport();
   }
 
-  const sections = report ? parseReport(report.report_markdown) : [];
+  const reportData = report ? parseReportData(report.report_markdown) : null;
+  const legacy = !!report && !reportData;
+  const legacySections = legacy ? parseLegacyReport(report.report_markdown) : [];
   const entries = report?.entries_snapshot || [];
-  let tocIdx = 0;
+
+  const riskLevel = reportData ? reportData.overallRiskRating : (legacy ? legacyRiskLevel(report.report_markdown) : null);
+
+  const tocItems = reportData
+    ? [
+        { id: 'toc-exec', title: 'Executive Summary' },
+        { id: 'toc-overview', title: 'Site & Environmental Overview' },
+        ...reportData.zones.map((z, i) => ({ id: `toc-zone-${i}`, title: z.zone })),
+        { id: 'toc-action', title: 'Prioritized Action Plan' },
+        { id: 'zone-guide', title: 'Understanding the Zones' },
+      ]
+    : legacySections.filter(s => s.type === 'h2').map((s, i) => ({ id: `toc-${i}`, title: s.title })).concat([{ id: 'zone-guide', title: 'Understanding the Zones' }]);
 
   if (stage === 'loading') return (
     <div style={{ minHeight: '100vh', background: c.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -319,13 +450,51 @@ export default function ReportPage({ params }) {
           <a href="https://wildfireprepared.org/wp-content/uploads/WPH-How-To-Prepare-My-Home-Checklist.pdf" target="_blank" rel="noopener" style={{ color: c.slate }}>official WPH checklist</a>.
         </div>
 
-        <RiskBadge markdown={report?.report_markdown || ''} />
-        <TOC sections={sections} />
+        <RiskBadge level={riskLevel} />
+        <TOC items={tocItems} />
 
-        {sections.map((section, i) => {
-          const id = section.type === 'h2' ? `toc-${tocIdx++}` : undefined;
-          return <Section key={i} section={section} entries={entries} id={id} />;
-        })}
+        {reportData ? (
+          <>
+            <CollapsibleCard title="Executive Summary" id="toc-exec" isH2>
+              {reportData.summaryNarrative && <p style={{ margin: '0 0 16px', color: c.text, lineHeight: 1.75, fontSize: 15 }}>{reportData.summaryNarrative}</p>}
+              {reportData.topPriorities?.filter(Boolean).length > 0 && (
+                <>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: c.navy, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Top Priorities</div>
+                  <ol style={{ margin: '0 0 16px 20px', padding: 0 }}>
+                    {reportData.topPriorities.filter(Boolean).map((p, i) => <li key={i} style={{ marginBottom: 8, color: c.text, lineHeight: 1.7, fontSize: 15 }}>{p}</li>)}
+                  </ol>
+                </>
+              )}
+              {(reportData.wphBase || reportData.wphPlus) && (
+                <>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: c.navy, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>WPH Designation Snapshot</div>
+                  <ul style={{ margin: 0, padding: '0 0 0 20px' }}>
+                    {reportData.wphBase && <li style={{ marginBottom: 6, color: c.text, lineHeight: 1.7, fontSize: 15 }}><strong style={{ color: c.navy }}>Base (Essential):</strong> {reportData.wphBase}</li>}
+                    {reportData.wphPlus && <li style={{ color: c.text, lineHeight: 1.7, fontSize: 15 }}><strong style={{ color: c.navy }}>Plus (Enhanced):</strong> {reportData.wphPlus}</li>}
+                  </ul>
+                </>
+              )}
+            </CollapsibleCard>
+
+            <CollapsibleCard title="Site & Environmental Overview" id="toc-overview" isH2>
+              <p style={{ margin: 0, color: c.text, lineHeight: 1.75, fontSize: 15 }}>{reportData.siteOverview}</p>
+            </CollapsibleCard>
+
+            {reportData.zones.map((zone, i) => (
+              <ZoneSection key={i} zone={zone} entries={entries} id={`toc-zone-${i}`} />
+            ))}
+
+            <CollapsibleCard title="Prioritized Action Plan" id="toc-action" isH2>
+              <ActionPlanTable items={reportData.actionPlan} />
+            </CollapsibleCard>
+          </>
+        ) : (
+          legacySections.map((section, i) => {
+            const h2s = legacySections.filter(s => s.type === 'h2');
+            const id = section.type === 'h2' ? `toc-${h2s.indexOf(section)}` : undefined;
+            return <LegacySection key={i} section={section} entries={entries} id={id} />;
+          })
+        )}
 
         <ZoneGuide />
 
@@ -336,4 +505,3 @@ export default function ReportPage({ params }) {
     </div>
   );
 }
-

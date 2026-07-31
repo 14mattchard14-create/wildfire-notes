@@ -1,6 +1,8 @@
 'use client'
 
 import { CRITERIA_INFO, WPH_SOURCE_URL } from '@/lib/criteria'
+import { Button } from '@/components/ui/button'
+import { X } from 'lucide-react'
 
 export default function InfoModal({ category, onClose }) {
   if (!category) return null
@@ -15,7 +17,9 @@ export default function InfoModal({ category, onClose }) {
             <p style={{ fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>WPH Criteria Guidance</p>
             <h3 style={{ fontSize: 17, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text)', margin: 0 }}>{category}</h3>
           </div>
-          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: '50%', border: '1px solid var(--line)', background: 'transparent', color: 'var(--text-muted)', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>✕</button>
+          <Button onClick={onClose} variant="outline" size="icon" className="size-[30px] rounded-full shrink-0 text-muted-foreground">
+            <X className="size-3.5" />
+          </Button>
         </div>
 
         <p style={{ fontSize: 9.5, fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 8 }}>WPH Base (Essential)</p>

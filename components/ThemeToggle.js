@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Moon, Sun } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 export default function ThemeToggle() {
   const [theme, setTheme] = useState('day')
@@ -19,24 +21,15 @@ export default function ThemeToggle() {
   }
 
   return (
-    <button
+    <Button
+      variant="ghost"
+      size="icon"
       onClick={toggle}
       title={theme === 'day' ? 'Switch to Evening mode' : 'Switch to Day mode'}
-      style={{
-        background: 'none',
-        border: '1px solid var(--line)',
-        borderRadius: 20,
-        padding: '4px 10px',
-        cursor: 'pointer',
-        fontSize: 13,
-        color: 'var(--text-muted)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 5,
-        transition: 'border-color 0.2s',
-      }}
+      className="size-8 hover:bg-white/10"
+      style={{ color: 'var(--header-text)', opacity: 0.75 }}
     >
-      {theme === 'day' ? '🌙' : '☀️'}
-    </button>
+      {theme === 'day' ? <Moon className="size-4" /> : <Sun className="size-4" />}
+    </Button>
   )
 }

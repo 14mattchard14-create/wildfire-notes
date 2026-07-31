@@ -2,20 +2,11 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-
-const c = {
-  bg:      '#1b1917',
-  surface: '#242220',
-  line:    '#3a352f',
-  accent:  '#be5b1d',
-  text:    '#ece6db',
-  muted:   '#9a9285',
-  ok:      '#6b8e63',
-}
+import ThemeToggle from '@/components/ThemeToggle'
 
 const input = {
-  width: '100%', background: c.surface, border: `1px solid ${c.line}`,
-  borderRadius: 4, color: c.text, fontSize: 15, padding: '10px 12px',
+  width: '100%', background: 'var(--surface)', border: '1px solid var(--line)',
+  borderRadius: 4, color: 'var(--text)', fontSize: 15, padding: '10px 12px',
   fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box',
 }
 
@@ -69,16 +60,19 @@ export default function LoginPage() {
   const title = mode === 'reset' ? 'Reset Password' : isSignUp ? 'Create Account' : 'Sign In'
 
   return (
-    <div style={{ minHeight: '100vh', background: c.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div style={{ width: '100%', maxWidth: 400 }}>
         {/* Header */}
-        <div style={{ marginBottom: 32 }}>
-          <span style={{ fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: c.accent, fontFamily: 'monospace', display: 'block', marginBottom: 4 }}>
-            Field Notes · Wildfire Inspection
-          </span>
-          <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: '0.02em', textTransform: 'uppercase', margin: 0, color: c.text }}>
-            {title}
-          </h1>
+        <div style={{ marginBottom: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <span style={{ fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--accent)', fontFamily: 'monospace', display: 'block', marginBottom: 4 }}>
+              Field Notes · Wildfire Inspection
+            </span>
+            <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: '0.02em', textTransform: 'uppercase', margin: 0, color: 'var(--text)' }}>
+              {title}
+            </h1>
+          </div>
+          <ThemeToggle />
         </div>
 
         {/* Mode toggle — only show when not in reset mode */}
@@ -86,8 +80,8 @@ export default function LoginPage() {
           <div style={{ display: 'flex', gap: 6, marginBottom: 24 }}>
             {['password', 'magic'].map(m => (
               <button key={m} onClick={() => setMode(m)} style={{
-                flex: 1, padding: '8px', border: `1px solid ${mode === m ? c.accent : c.line}`,
-                borderRadius: 4, background: 'transparent', color: mode === m ? c.accent : c.muted,
+                flex: 1, padding: '8px', border: `1px solid ${mode === m ? 'var(--accent)' : 'var(--line)'}`,
+                borderRadius: 4, background: 'transparent', color: mode === m ? 'var(--accent)' : 'var(--text-muted)',
                 fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.06em',
                 textTransform: 'uppercase', cursor: 'pointer',
               }}>
@@ -97,31 +91,31 @@ export default function LoginPage() {
           </div>
         )}
 
-        <div style={{ background: c.surface, border: `1px solid ${c.line}`, borderRadius: 6, padding: 20 }}>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 6, padding: 20 }}>
           {/* Name field for signup */}
           {mode === 'password' && isSignUp && (
             <div style={{ marginBottom: 14 }}>
-              <label style={{ display: 'block', fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted, marginBottom: 6 }}>Full Name</label>
+              <label style={{ display: 'block', fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Full Name</label>
               <input style={input} type="text" placeholder="Your name" value={name} onChange={e => setName(e.target.value)} />
             </div>
           )}
 
           {/* Email */}
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: 'block', fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted, marginBottom: 6 }}>Email</label>
+            <label style={{ display: 'block', fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Email</label>
             <input style={input} type="email" placeholder="you@company.com" value={email} onChange={e => setEmail(e.target.value)} />
           </div>
 
           {/* Password */}
           {mode === 'password' && mode !== 'reset' && (
             <div style={{ marginBottom: 8 }}>
-              <label style={{ display: 'block', fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted, marginBottom: 6 }}>Password</label>
+              <label style={{ display: 'block', fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Password</label>
               <input style={input} type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
               {/* Forgot password link */}
               {!isSignUp && (
                 <button onClick={() => { setMode('reset'); setError(null); setMessage(null) }} style={{
-                  background: 'none', border: 'none', color: c.muted, fontSize: 11,
+                  background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 11,
                   fontFamily: 'monospace', cursor: 'pointer', padding: '6px 0', textAlign: 'right', width: '100%',
                 }}>
                   Forgot password?
@@ -131,12 +125,12 @@ export default function LoginPage() {
           )}
 
           {/* Error / success */}
-          {error   && <p style={{ fontSize: 13, color: '#b5483a', margin: '0 0 12px' }}>{error}</p>}
-          {message && <p style={{ fontSize: 13, color: c.ok,      margin: '0 0 12px' }}>{message}</p>}
+          {error   && <p style={{ fontSize: 13, color: 'var(--warn)', margin: '0 0 12px' }}>{error}</p>}
+          {message && <p style={{ fontSize: 13, color: 'var(--ok)',   margin: '0 0 12px' }}>{message}</p>}
 
           {/* Submit */}
           <button onClick={handleSubmit} disabled={loading} style={{
-            width: '100%', background: c.accent, color: '#1b1917', border: 'none',
+            width: '100%', background: 'var(--accent)', color: '#FFFFFF', border: 'none',
             borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em',
             textTransform: 'uppercase', padding: 13, cursor: 'pointer', opacity: loading ? 0.5 : 1, marginTop: 8,
           }}>
@@ -146,14 +140,14 @@ export default function LoginPage() {
           {/* Back / toggle links */}
           {mode === 'reset' ? (
             <button onClick={() => { setMode('password'); setError(null); setMessage(null) }} style={{
-              width: '100%', background: 'transparent', border: 'none', color: c.muted,
+              width: '100%', background: 'transparent', border: 'none', color: 'var(--text-muted)',
               fontSize: 12, fontFamily: 'monospace', marginTop: 12, cursor: 'pointer', textAlign: 'center',
             }}>
               ← Back to sign in
             </button>
           ) : mode === 'password' && (
             <button onClick={() => { setIsSignUp(s => !s); setError(null); setMessage(null) }} style={{
-              width: '100%', background: 'transparent', border: 'none', color: c.muted,
+              width: '100%', background: 'transparent', border: 'none', color: 'var(--text-muted)',
               fontSize: 12, fontFamily: 'monospace', marginTop: 12, cursor: 'pointer', textAlign: 'center',
             }}>
               {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}

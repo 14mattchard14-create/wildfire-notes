@@ -5,6 +5,11 @@ import { supabase } from '@/lib/supabase'
 import { ZONES } from '@/lib/criteria'
 import InfoModal   from './InfoModal'
 import PhotoUpload from './PhotoUpload'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 
 const DISTANCE_ZONES = ['0-5 FT. Noncombustible Zone', '5-30 FT. Defensible Space - Vegetation', '10-30 FT. Defensible Space - Detached Structures & Other Large Items']
 const DISTANCE_TYPES = ['Distance from home','Distance between objects','Distance between tree canopies','Distance between shrubs','Other']
@@ -55,8 +60,6 @@ export default function EntryForm({ propertyId, onSaved, user }) {
   const [saving,       setSaving]       = useState(false)
   const [photoKey,     setPhotoKey]     = useState(0)
 
-  const inputStyle = { width: '100%', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text)', fontSize: 15, padding: '10px 12px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }
-
   async function save() {
     if (!note.trim()) { alert('Add a finding before saving.'); return }
     if (!status)      { alert('Select a status.'); return }
@@ -81,17 +84,22 @@ export default function EntryForm({ propertyId, onSaved, user }) {
       {infoOpen && <InfoModal category={zone} onClose={() => setInfoOpen(false)} />}
       <div style={card}>
         <div style={field}>
-          <label style={{ display: 'block', fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Zone</label>
-          <select style={inputStyle} value={zone} onChange={e => { setZone(e.target.value); if (!DISTANCE_ZONES.includes(e.target.value)) { setShowDist(false); setDistance('') } }}>
-            {ZONES.map(z => <option key={z}>{z}</option>)}
-          </select>
+          <Label>Zone</Label>
+          <Select value={zone} onValueChange={v => { setZone(v); if (!DISTANCE_ZONES.includes(v)) { setShowDist(false); setDistance('') } }}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ZONES.map(z => <SelectItem key={z} value={z}>{z}</SelectItem>)}
+            </SelectContent>
+          </Select>
           <button onClick={() => setInfoOpen(true)} style={{ marginTop: 6, fontSize: 11, fontFamily: 'monospace', color: 'var(--accent)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
             ⓘ Read about this category
           </button>
         </div>
 
         <div style={field}>
-          <label style={{ display: 'block', fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Status</label>
+          <Label>Status</Label>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5 }}>
             {TOP_STATUSES.map(s => <StatusBtn key={s.value} value={s.value} label={s.label} status={status} setStatus={setStatus} />)}
             <StatusBtn value="Not Applicable" label="N/A" status={status} setStatus={setStatus} />
@@ -101,40 +109,40 @@ export default function EntryForm({ propertyId, onSaved, user }) {
         {DISTANCE_ZONES.includes(zone) && (
           <div style={field}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-              <label style={{ fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', margin: 0 }}>Distance</label>
+              <Label className="mb-0">Distance</Label>
               <button onClick={() => { setShowDist(d => !d); if (showDistance) { setDistance(''); setDistanceType('') } }} style={{ fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', background: showDistance ? 'var(--accent)' : 'transparent', color: showDistance ? 'var(--bg)' : 'var(--text-muted)', border: `1px solid ${showDistance ? 'var(--accent)' : 'var(--line)'}`, borderRadius: 20, padding: '2px 10px', cursor: 'pointer' }}>
                 {showDistance ? 'Added' : '+ Add'}
               </button>
             </div>
             {showDistance && (
               <div style={{ display: 'flex', gap: 8 }}>
-                <input style={{ ...inputStyle, flex: '0 0 90px' }} type="text" placeholder="e.g. 8 ft" value={distance} onChange={e => setDistance(e.target.value)} />
-                <input style={{ ...inputStyle, flex: 1 }} type="text" placeholder="between what?" value={distanceType} onChange={e => setDistanceType(e.target.value)} />
+                <Input type="text" placeholder="e.g. 8 ft" value={distance} onChange={e => setDistance(e.target.value)} className="flex-none w-[90px]" />
+                <Input type="text" placeholder="between what?" value={distanceType} onChange={e => setDistanceType(e.target.value)} className="flex-1" />
               </div>
             )}
           </div>
         )}
 
         <div style={field}>
-          <label style={{ display: 'block', fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Finding</label>
-          <input style={inputStyle} type="text" placeholder="Short description of what you observed" value={note} onChange={e => setNote(e.target.value)} />
+          <Label>Finding</Label>
+          <Input type="text" placeholder="Short description of what you observed" value={note} onChange={e => setNote(e.target.value)} />
         </div>
 
         <div style={{ marginBottom: 14 }}>
           <button onClick={() => setShowDetail(d => !d)} style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--accent)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', marginBottom: 8 }}>
             {showDetail ? '– Hide details' : '+ Add longer details'}
           </button>
-          {showDetail && <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} placeholder="Optional — additional context…" value={detail} onChange={e => setDetail(e.target.value)} />}
+          {showDetail && <Textarea placeholder="Optional — additional context…" value={detail} onChange={e => setDetail(e.target.value)} className="min-h-20" />}
         </div>
 
         <div style={field}>
-          <label style={{ display: 'block', fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Photo</label>
+          <Label>Photo</Label>
           <PhotoUpload key={photoKey} propertyId={propertyId} onPhotoUrl={setPhotoUrl} />
         </div>
 
-        <button onClick={save} disabled={saving} style={{ width: '100%', background: 'var(--accent)', color: 'var(--bg)', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 13, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}>
+        <Button onClick={save} disabled={saving} className="w-full text-[13px] font-bold uppercase tracking-wide py-3 h-auto">
           {saving ? 'Saving…' : 'Save Entry'}
-        </button>
+        </Button>
       </div>
     </>
   )

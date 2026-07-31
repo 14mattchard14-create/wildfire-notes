@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
 
 function compressImage(file, maxDim = 800, targetBytes = 700_000) {
   return new Promise((resolve, reject) => {
@@ -66,9 +67,15 @@ export default function PhotoUpload({ propertyId, onPhotoUrl }) {
   return (
     <>
       <input ref={inputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
-      <button type="button" onClick={() => inputRef.current.click()} disabled={uploading} style={{ width: '100%', background: 'var(--surface)', border: '1px dashed var(--line)', borderRadius: 4, padding: 14, textAlign: 'center', fontFamily: 'monospace', fontSize: 12, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-muted)', cursor: 'pointer' }}>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => inputRef.current.click()}
+        disabled={uploading}
+        className="w-full h-auto py-3.5 border-dashed font-mono text-xs tracking-wide uppercase text-muted-foreground font-normal"
+      >
         {uploading ? 'Uploading…' : '+ Take / Upload Photo'}
-      </button>
+      </Button>
     </>
   )
 }
