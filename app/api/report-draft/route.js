@@ -78,7 +78,7 @@ export async function POST(request) {
   const fieldNotes = lines.join('\n')
 
   const entriesList = (entries || []).map(e =>
-    `- [${e.zone}] ${e.status ?? 'Pending review'}: ${e.note || ''}${e.detail ? ' — ' + e.detail : ''}${e.photo_url ? ' [HAS_PHOTO]' : ''}`
+    `- [id:${e.id}] [${e.zone}] ${e.status ?? 'Pending review'}: ${e.note || ''}${e.detail ? ' — ' + e.detail : ''}${e.photo_url ? ' [HAS_PHOTO]' : ''}`
   ).join('\n')
 
   const prompt = `You are an expert wildfire risk assessor writing a formal client-facing report. Use ONLY the field notes provided. Do not invent data.
@@ -113,14 +113,17 @@ Respond with ONLY a single valid JSON object — no markdown code fences, no com
           "finding": "what was observed for this category ACROSS THE WHOLE HOUSE, in plain client-facing language — synthesize every side into one description, e.g. 'Metal mesh present on the front, left, and back; missing on the right side.' Only call out per-side differences when they actually differ; if every side is the same, just say so once",
           "status": "Base Compliant" | "Plus Compliant" | "Non-Compliant" | "Needs Verification" | "Not Applicable" | "Pending review",
           "recommendation": "actionable next step — empty string if fully compliant and nothing is needed",
-          "rationale": "brief explanation of WHY this status was assigned, especially for Non-Compliant/Needs Verification findings — this is shown to the client as a tooltip, so keep it short and specific (reference the relevant WPH requirement if useful)"
+          "rationale": "brief explanation of WHY this status was assigned, especially for Non-Compliant/Needs Verification findings — shown to the client only when they click 'Learn more about this finding' (alongside the finding text above), so it's supporting detail, not something repeated elsewhere"
         }
       ]
     }
   ],
   "actionPlan": [
     { "action": "string", "zone": "string", "priority": "High" | "Medium" | "Low" }
-  ]
+  ],
+  "photoCaptions": {
+    "<exact id from ENTRIES, one entry per [HAS_PHOTO] entry only>": "short caption for that entry's photo, phrased as GUIDANCE rather than a plain description — an imperative action if the entry is Non-Compliant/Needs Verification (e.g. 'Remove shrubs within 5 ft of the house to meet defensible space requirements', not 'Shrubs within 5 ft of house'), or a brief confirmation if it's compliant (e.g. 'Metal mesh vent cover meets code')"
+  }
 }
 
 Rules:
@@ -130,6 +133,7 @@ Rules:
 - In the rare case a zone genuinely has two unrelated issues that don't belong in the same sentence (e.g. two different detached structures with different problems), it's fine to have more than one finding — but default to one finding per zone.
 - If an entry's status is "Pending review" (no status was recorded), use that exact string as the status rather than inventing a compliance determination.
 - "actionPlan" should rank every non-empty recommendation across all zones by urgency — most urgent first.
+- "photoCaptions" is keyed by entry id exactly as written after "id:" in ENTRIES — copy it verbatim, don't invent or reformat it. Only include entries marked [HAS_PHOTO]; skip everything else.
 - Every string field must be present (use "" for an empty recommendation/rationale, never omit the key or use null).`
 
   let reportData

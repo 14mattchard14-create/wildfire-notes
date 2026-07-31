@@ -1,22 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { parseReportData } from '@/lib/reportSchema';
+import { parseReportData, getPhotoCaption } from '@/lib/reportSchema';
+import { reportColors, StatusPill, RiskBadge, CollapsibleCard, priorityColor } from '@/components/ReportView';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-const c = {
-  bg: '#E8EDF1', surface: '#FFFFFF', surfaceAlt: '#F3F6F8',
-  navy: '#172431', slate: '#5C6685', tan: '#C1502E',
-  border: '#D6DDE3', text: '#1A2632', muted: '#6B7A8D',
-  ok: '#3A7D44', warn: '#B5483A',
-};
-
-const LEVEL_COLORS = { 'Low': '#3A7D44', 'Moderate': '#E8A020', 'High': '#C0552A', 'Very High': '#B5483A', 'Severe': '#8B1A1A' };
+const c = reportColors;
 
 const ZONE_GUIDE = [
   { title: 'Overall Site', body: 'A whole-property view of wildfire exposure, factoring in slope, prevailing wind, fuel load, and how neighboring properties could contribute to fire spread toward or away from the home.' },
@@ -38,82 +32,40 @@ const ZONE_GUIDE = [
 
 function zoneKey(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
-function StatusPill({ status }) {
-  const map = {
-    'Base Compliant':     { bg: '#EAF4EB', color: c.ok,     label: '✓ Base Compliant' },
-    'Plus Compliant':     { bg: '#E8F4EA', color: '#2D6E3A', label: '✓✓ Plus Compliant' },
-    'Non-Compliant':      { bg: '#FDECEA', color: c.warn,    label: '✗ Non-Compliant' },
-    'Needs Verification': { bg: '#FDF6E8', color: '#8A6D3B', label: '? Needs Verification' },
-    'Not Applicable':     { bg: '#F0F3F6', color: c.muted,   label: '— Not Applicable' },
-    'Pending review':     { bg: '#F0F3F6', color: c.muted,   label: '… Pending Review' },
-  };
-  const s = map[status] || { bg: '#F0F3F6', color: c.muted, label: status };
-  return <span style={{ background: s.bg, color: s.color, fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, whiteSpace: 'nowrap' }}>{s.label}</span>;
-}
-
-function RiskBadge({ level }) {
-  const color = LEVEL_COLORS[level] || LEVEL_COLORS.Moderate;
-  const levels = ['Low', 'Moderate', 'High', 'Very High'];
-  const idx = Math.max(0, levels.indexOf(level));
-  return (
-    <div style={{ background: c.surface, border: `2px solid ${c.border}`, borderLeft: `6px solid ${color}`, borderRadius: 12, padding: '20px 28px', display: 'flex', alignItems: 'center', gap: 24, marginBottom: 32 }}>
-      <div>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: c.muted, textTransform: 'uppercase', marginBottom: 4 }}>Fire Risk Rating</div>
-        <div style={{ fontSize: 32, fontWeight: 800, color, lineHeight: 1 }}>{level || 'Moderate'}</div>
-      </div>
-      <div style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'center' }}>
-        {levels.map((l, i) => (
-          <div key={l} style={{ flex: 1 }}>
-            <div style={{ height: 8, borderRadius: 4, background: i <= idx ? color : c.border, opacity: i <= idx ? (0.3 + (i / levels.length) * 0.7) : 1 }} />
-            <div style={{ fontSize: 9, color: c.muted, textAlign: 'center', marginTop: 4, fontWeight: i === idx ? 700 : 400 }}>{l}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Small tap/click-to-reveal tooltip — used to keep the "why" behind a
-// non-compliant/verify finding out of the main reading flow, without
-// relying on hover (unreliable on phones, which is how most homeowners
-// will read this).
-function RationaleTooltip({ text }) {
-  const [open, setOpen] = useState(false);
-  if (!text) return null;
-  return (
-    <span style={{ position: 'relative', display: 'inline-flex', marginLeft: 8 }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        aria-label="Why this status was assigned"
-        title={text}
-        style={{ width: 19, height: 19, borderRadius: '50%', border: `1.5px solid ${c.slate}`, background: open ? c.slate : 'none', color: open ? '#fff' : c.slate, fontSize: 11, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1, fontStyle: 'italic', fontFamily: 'Georgia, serif' }}
-      >i</button>
-      {open && (
-        <div style={{ position: 'absolute', bottom: '135%', left: '50%', transform: 'translateX(-50%)', background: c.navy, color: '#fff', fontSize: 12.5, lineHeight: 1.55, padding: '10px 13px', borderRadius: 8, width: 250, zIndex: 30, boxShadow: '0 6px 20px rgba(0,0,0,0.28)' }}>
-          {text}
-          <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderTop: `6px solid ${c.navy}` }} />
-        </div>
-      )}
-    </span>
-  );
-}
-
+// The recommendation is the one thing every homeowner needs to see; the
+// finding description and the "why" behind the status are supporting
+// detail, folded together behind one "Learn more" toggle instead of a
+// separate paragraph plus a tooltip icon that said much the same thing
+// twice.
 function FindingCard({ f }) {
+  const [expanded, setExpanded] = useState(false);
   const isNC = /non-compliant/i.test(f.status || '');
   const isOK = /^(base|plus) compliant/i.test(f.status || '');
+  const hasDetails = !!(f.finding || f.rationale);
   return (
     <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderLeft: `4px solid ${isNC ? c.warn : isOK ? c.ok : c.border}`, borderRadius: 8, padding: '14px 16px', marginBottom: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: hasDetails || f.recommendation ? 8 : 0 }}>
         <div style={{ fontWeight: 700, color: c.navy, fontSize: 14.5 }}>{f.category}</div>
-        <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-          <StatusPill status={f.status} />
-          <RationaleTooltip text={f.rationale} />
-        </div>
+        <StatusPill status={f.status} />
       </div>
-      {f.finding && <div style={{ fontSize: 14.5, color: c.text, lineHeight: 1.65 }}>{f.finding}</div>}
+
+      {hasDetails && (
+        <button
+          onClick={() => setExpanded(x => !x)}
+          style={{ background: 'none', border: 'none', padding: 0, margin: '0 0 8px', color: c.slate, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+        >
+          {expanded ? '▾ Hide details' : '▸ Learn more about this finding'}
+        </button>
+      )}
+      {expanded && (
+        <div style={{ marginBottom: 10, fontSize: 13.5, color: c.text, lineHeight: 1.6 }}>
+          {f.finding && <div style={{ marginBottom: f.rationale ? 6 : 0 }}>{f.finding}</div>}
+          {f.rationale && <div style={{ color: c.muted, fontStyle: 'italic' }}>{f.rationale}</div>}
+        </div>
+      )}
+
       {f.recommendation && (
-        <div style={{ marginTop: 10, background: c.surfaceAlt, borderRadius: 6, padding: '9px 13px', fontSize: 13.5, color: c.text, lineHeight: 1.6 }}>
+        <div style={{ background: c.surfaceAlt, borderRadius: 6, padding: '9px 13px', fontSize: 13.5, color: c.text, lineHeight: 1.6 }}>
           <strong style={{ color: c.navy }}>Recommendation:</strong> {f.recommendation}
         </div>
       )}
@@ -121,24 +73,7 @@ function FindingCard({ f }) {
   );
 }
 
-function CollapsibleCard({ title, id, isH2, defaultOpen, children }) {
-  const [open, setOpen] = useState(defaultOpen !== false);
-  return (
-    <div id={id} style={{ marginBottom: isH2 ? 28 : 16 }}>
-      <button onClick={() => setOpen(o => !o)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: isH2 ? c.navy : c.surfaceAlt, color: isH2 ? '#fff' : c.navy, border: 'none', borderRadius: isH2 ? (open ? '10px 10px 0 0' : 10) : (open ? '8px 8px 0 0' : 8), padding: isH2 ? '14px 20px' : '10px 16px', cursor: 'pointer', textAlign: 'left' }}>
-        <span style={{ fontWeight: 700, fontSize: isH2 ? 16 : 14 }}>{title}</span>
-        <span style={{ fontSize: 18, opacity: 0.6, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>›</span>
-      </button>
-      {open && (
-        <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '18px 20px' }}>
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ZoneSection({ zone, entries, id }) {
+function ZoneSection({ zone, entries, reportData, id }) {
   const zonePhotos = (entries || []).filter(e => e.photo_url && zoneKey(e.zone) === zoneKey(zone.zone));
   return (
     <CollapsibleCard title={zone.zone} id={id} isH2>
@@ -147,9 +82,9 @@ function ZoneSection({ zone, entries, id }) {
         <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
           {zonePhotos.map((e, i) => (
             <div key={i} style={{ border: `1px solid ${c.border}`, borderRadius: 8, overflow: 'hidden', background: c.surfaceAlt }}>
-              <img src={e.photo_url} alt={e.ai_caption || e.note} style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' }} />
+              <img src={e.photo_url} alt={getPhotoCaption(reportData, e)} style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' }} />
               <div style={{ padding: '10px 12px' }}>
-                <div style={{ fontSize: 12, color: c.text, lineHeight: 1.5, marginBottom: 6, fontStyle: 'italic' }}>{e.ai_caption || e.note}</div>
+                <div style={{ fontSize: 12, color: c.text, lineHeight: 1.5, marginBottom: 6, fontStyle: 'italic' }}>{getPhotoCaption(reportData, e)}</div>
                 <StatusPill status={e.status} />
               </div>
             </div>
@@ -160,18 +95,99 @@ function ZoneSection({ zone, entries, id }) {
   );
 }
 
-function TOC({ items }) {
+const SIDEBAR_WIDTH = 280;
+
+// Table of contents as a collapsible left panel instead of an inline card —
+// fixed-position so it never affects document flow itself; the caller
+// shifts the rest of the page over with a matching margin-left when it's
+// open on desktop. On mobile it behaves as a full-height overlay drawer
+// (with a backdrop to dismiss) instead of pushing content, since there's
+// no room to spare on a phone screen.
+//
+// The toggle button is `position: fixed` (so it's reachable no matter how
+// far down the page you've scrolled) but pinned below `topOffset` — the
+// measured height of the navy header above it — so it can never land on top
+// of the header's own title text, and the panel itself only ever occupies
+// the space below the header rather than competing with it for the same row.
+function ReportSidebar({ items, query, onQueryChange, open, onToggle, isMobile, topOffset }) {
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? items.filter(item => item.title.toLowerCase().includes(q) || item.content.includes(q))
+    : items;
+  const width = isMobile ? 'min(300px, 85vw)' : SIDEBAR_WIDTH;
+
   return (
-    <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderLeft: `4px solid ${c.navy}`, borderRadius: 10, padding: '20px 24px', marginBottom: 32 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: c.navy, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>Table of Contents</div>
-      <ol style={{ margin: 0, padding: '0 0 0 20px' }}>
-        {items.map((item, i) => (
-          <li key={i} style={{ marginBottom: 6 }}>
-            <a href={`#${item.id}`} style={{ color: c.slate, fontSize: 14, textDecoration: 'none', fontWeight: 500 }} onClick={e => { e.preventDefault(); document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>{item.title}</a>
-          </li>
-        ))}
-      </ol>
-    </div>
+    <>
+      <button
+        onClick={onToggle}
+        aria-label={open ? 'Collapse table of contents' : 'Expand table of contents'}
+        title="Table of contents"
+        style={{
+          position: 'fixed', top: topOffset + 10, left: open ? width : 0, zIndex: 41,
+          background: c.navy, color: '#fff', border: 'none',
+          borderRadius: '0 8px 8px 0', width: 30, height: 42,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', transition: 'left 0.22s ease', boxShadow: '2px 0 8px rgba(0,0,0,0.18)',
+          fontSize: 15,
+        }}
+      >
+        {open ? '‹' : '☰'}
+      </button>
+
+      {isMobile && open && (
+        <div onClick={onToggle} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 39 }} />
+      )}
+
+      <div style={{
+        position: 'fixed', top: topOffset, left: 0, height: `calc(100vh - ${topOffset}px)`,
+        width,
+        background: c.bg, borderRight: `1px solid ${c.border}`, zIndex: 40, overflowY: 'auto', boxSizing: 'border-box',
+        padding: '20px 18px', transform: open ? 'translateX(0)' : 'translateX(-100%)',
+        transition: 'transform 0.22s ease', boxShadow: open ? '4px 0 24px rgba(44,66,87,0.14)' : 'none',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.muted }}>
+            Table of Contents
+          </div>
+          <button
+            onClick={onToggle}
+            aria-label="Collapse table of contents"
+            style={{ background: 'none', border: 'none', color: c.muted, fontSize: 16, cursor: 'pointer', padding: 4, lineHeight: 1 }}
+          >
+            ✕
+          </button>
+        </div>
+        <input
+          type="text"
+          value={query}
+          onChange={e => onQueryChange(e.target.value)}
+          placeholder="Search the report…"
+          style={{ width: '100%', boxSizing: 'border-box', background: c.surface, border: `1px solid ${c.border}`, borderRadius: 8, color: c.text, fontSize: 13.5, padding: '9px 12px', outline: 'none', marginBottom: 14 }}
+        />
+        <ol style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+          {filtered.map((item, i) => (
+            <li key={i}>
+              <a
+                href={`#${item.id}`}
+                onClick={e => {
+                  e.preventDefault();
+                  document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  if (isMobile) onToggle();
+                }}
+                style={{ display: 'block', color: c.text, fontSize: 14, fontWeight: 500, textDecoration: 'none', padding: '9px 10px', borderRadius: 6 }}
+                onMouseEnter={e => { e.currentTarget.style.background = c.surfaceAlt; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                {item.title}
+              </a>
+            </li>
+          ))}
+          {filtered.length === 0 && (
+            <li style={{ color: c.muted, fontSize: 13, padding: '8px 10px' }}>No matches in the report</li>
+          )}
+        </ol>
+      </div>
+    </>
   );
 }
 
@@ -197,12 +213,6 @@ function ZoneGuide() {
   );
 }
 
-function PriorityColor(p) {
-  if (/high/i.test(p)) return c.warn;
-  if (/low/i.test(p)) return c.ok;
-  return '#B58A2E';
-}
-
 function ActionPlanTable({ items }) {
   if (!items?.length) return <p style={{ color: c.muted, fontSize: 14 }}>No outstanding actions.</p>;
   return (
@@ -222,7 +232,7 @@ function ActionPlanTable({ items }) {
               <td style={{ padding: '10px 14px', borderBottom: `1px solid ${c.border}`, color: c.text }}>{a.action}</td>
               <td style={{ padding: '10px 14px', borderBottom: `1px solid ${c.border}`, color: c.text }}>{a.zone}</td>
               <td style={{ padding: '10px 14px', borderBottom: `1px solid ${c.border}` }}>
-                <span style={{ color: PriorityColor(a.priority), fontWeight: 700, fontSize: 12.5 }}>{a.priority}</span>
+                <span style={{ color: priorityColor(a.priority), fontWeight: 700, fontSize: 12.5 }}>{a.priority}</span>
               </td>
             </tr>
           ))}
@@ -342,11 +352,43 @@ export default function ReportPage({ params }) {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [report, setReport] = useState(null);
+  // Default to the "mobile, closed" state so the very first client render
+  // matches what the server rendered (no window to check yet) — the effect
+  // below corrects it immediately after mount, before the user notices.
+  const [isMobile, setIsMobile] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarQuery, setSidebarQuery] = useState('');
+  // Measured height of the navy header banner, so the sidebar (and its
+  // toggle) can be pinned to start exactly where the header ends instead of
+  // guessing a fixed pixel value — the header's real height varies with how
+  // many of the date/inspector/report-date fields are present.
+  const headerRef = useRef(null);
+  const [headerHeight, setHeaderHeight] = useState(96);
+
+  useEffect(() => {
+    function measure() {
+      if (headerRef.current) setHeaderHeight(headerRef.current.getBoundingClientRect().height);
+    }
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [report]);
 
   useEffect(() => {
     const saved = sessionStorage.getItem(`report_access_${token}`);
     if (saved === 'granted') fetchReport();
   }, [token]);
+
+  useEffect(() => {
+    function updateForWidth() {
+      const mobile = window.innerWidth < 860;
+      setIsMobile(mobile);
+      setSidebarOpen(!mobile);
+    }
+    updateForWidth();
+    window.addEventListener('resize', updateForWidth);
+    return () => window.removeEventListener('resize', updateForWidth);
+  }, []);
 
   async function fetchReport() {
     setStage('loading');
@@ -372,18 +414,33 @@ export default function ReportPage({ params }) {
 
   const riskLevel = reportData ? reportData.overallRiskRating : (legacy ? legacyRiskLevel(report.report_markdown) : null);
 
+  // Each item carries a lowercased `content` blob of everything in that
+  // section (finding text, recommendations, rationale, photo captions, even
+  // the header/disclaimer copy) so the sidebar search matches anything in
+  // the report, not just section titles.
+  const headerAndDisclaimerText = [
+    report?.property_address, report?.inspector_name, report?.visit_date,
+    'wildfire prepared home certification official wph checklist',
+    'this report reflects conditions observed at the time of inspection and is not a guarantee against wildfire damage or loss',
+  ].filter(Boolean).join(' ').toLowerCase();
+
   const tocItems = reportData
     ? [
-        { id: 'toc-exec', title: 'Executive Summary' },
-        { id: 'toc-overview', title: 'Site & Environmental Overview' },
-        ...reportData.zones.map((z, i) => ({ id: `toc-zone-${i}`, title: z.zone })),
-        { id: 'toc-action', title: 'Prioritized Action Plan' },
-        { id: 'zone-guide', title: 'Understanding the Zones' },
+        { id: 'toc-exec', title: 'Executive Summary', content: [headerAndDisclaimerText, reportData.summaryNarrative, ...(reportData.topPriorities || []), reportData.wphBase, reportData.wphPlus, reportData.overallRiskRating].filter(Boolean).join(' ').toLowerCase() },
+        { id: 'toc-overview', title: 'Site & Environmental Overview', content: (reportData.siteOverview || '').toLowerCase() },
+        ...reportData.zones.map((z, i) => ({
+          id: `toc-zone-${i}`,
+          title: z.zone,
+          content: [z.zone, ...(z.findings || []).map(f => [f.category, f.finding, f.status, f.recommendation, f.rationale].filter(Boolean).join(' ')), ...entries.filter(e => e.zone === z.zone).map(e => getPhotoCaption(reportData, e))].join(' ').toLowerCase(),
+        })),
+        { id: 'toc-action', title: 'Prioritized Action Plan', content: (reportData.actionPlan || []).map(a => [a.action, a.zone, a.priority].filter(Boolean).join(' ')).join(' ').toLowerCase() },
+        { id: 'zone-guide', title: 'Understanding the Zones', content: ZONE_GUIDE.map(z => `${z.title} ${z.body}`).join(' ').toLowerCase() },
       ]
-    : legacySections.filter(s => s.type === 'h2').map((s, i) => ({ id: `toc-${i}`, title: s.title })).concat([{ id: 'zone-guide', title: 'Understanding the Zones' }]);
+    : legacySections.filter(s => s.type === 'h2').map((s, i) => ({ id: `toc-${i}`, title: s.title, content: [headerAndDisclaimerText, ...(s.lines || [])].join(' ').toLowerCase() }))
+        .concat([{ id: 'zone-guide', title: 'Understanding the Zones', content: ZONE_GUIDE.map(z => `${z.title} ${z.body}`).join(' ').toLowerCase() }]);
 
   if (stage === 'loading') return (
-    <div style={{ minHeight: '100vh', background: c.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ minHeight: '100vh', background: c.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', colorScheme: 'light' }}>
       <div style={{ textAlign: 'center' }}>
         <div style={{ width: 40, height: 40, border: `3px solid ${c.border}`, borderTop: `3px solid ${c.navy}`, borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 16px' }} />
         <div style={{ color: c.slate, fontSize: 14 }}>Loading your report…</div>
@@ -393,7 +450,7 @@ export default function ReportPage({ params }) {
   );
 
   if (stage === 'error') return (
-    <div style={{ minHeight: '100vh', background: c.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+    <div style={{ minHeight: '100vh', background: c.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, colorScheme: 'light' }}>
       <div style={{ background: c.surface, borderRadius: 16, padding: 40, maxWidth: 400, textAlign: 'center', border: `1px solid ${c.border}` }}>
         <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
         <div style={{ color: c.navy, fontWeight: 700, fontSize: 18, marginBottom: 8 }}>Report Unavailable</div>
@@ -403,7 +460,7 @@ export default function ReportPage({ params }) {
   );
 
   if (stage === 'code') return (
-    <div style={{ minHeight: '100vh', background: c.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: c.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: 'system-ui, -apple-system, sans-serif', colorScheme: 'light' }}>
       <div style={{ background: c.surface, borderRadius: 20, padding: '48px 40px', maxWidth: 420, width: '100%', boxShadow: '0 4px 32px rgba(44,66,87,0.10)', border: `1px solid ${c.border}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 32 }}>
           <div style={{ width: 40, height: 40, background: c.navy, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ fontSize: 20 }}>🔥</span></div>
@@ -425,8 +482,13 @@ export default function ReportPage({ params }) {
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: c.bg, fontFamily: 'system-ui, -apple-system, sans-serif', color: c.text }}>
-      <div style={{ background: c.navy, color: '#fff' }}>
+    <div style={{ minHeight: '100vh', background: c.bg, fontFamily: 'system-ui, -apple-system, sans-serif', color: c.text, colorScheme: 'light' }}>
+      <ReportSidebar items={tocItems} query={sidebarQuery} onQueryChange={setSidebarQuery} open={sidebarOpen} onToggle={() => setSidebarOpen(o => !o)} isMobile={isMobile} topOffset={headerHeight} />
+
+      {/* Header is always full-width and unshifted — the sidebar starts
+          below it (using the measured height above) rather than sharing its
+          row, so it can never overlap the header's own title/info. */}
+      <div ref={headerRef} style={{ background: c.navy, color: '#fff' }}>
         <div style={{ maxWidth: 820, margin: '0 auto', padding: '28px 24px 24px' }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.6, marginBottom: 10 }}>🔥 Wildfire Risk Reduction Assessment</div>
           <h1 style={{ fontSize: 26, fontWeight: 800, margin: '0 0 20px', lineHeight: 1.2 }}>{report?.property_address}</h1>
@@ -442,6 +504,8 @@ export default function ReportPage({ params }) {
         <div style={{ height: 5, background: `linear-gradient(90deg, ${c.tan}, ${c.slate})` }} />
       </div>
 
+      <div style={{ marginLeft: !isMobile && sidebarOpen ? SIDEBAR_WIDTH : 0, transition: 'margin-left 0.22s ease' }}>
+
       <div style={{ maxWidth: 820, margin: '0 auto', padding: '32px 24px 80px' }}>
         <div style={{ background: '#FFF8F0', border: `1px solid ${c.tan}`, borderLeft: `4px solid ${c.tan}`, borderRadius: 10, padding: '14px 18px', marginBottom: 28, fontSize: 13, color: c.text, lineHeight: 1.7 }}>
           This report is intended to give homeowners a clear picture of their wildfire risk, while also outlining the gaps that would need to be addressed before the property could successfully obtain{' '}
@@ -451,7 +515,6 @@ export default function ReportPage({ params }) {
         </div>
 
         <RiskBadge level={riskLevel} />
-        <TOC items={tocItems} />
 
         {reportData ? (
           <>
@@ -481,7 +544,7 @@ export default function ReportPage({ params }) {
             </CollapsibleCard>
 
             {reportData.zones.map((zone, i) => (
-              <ZoneSection key={i} zone={zone} entries={entries} id={`toc-zone-${i}`} />
+              <ZoneSection key={i} zone={zone} entries={entries} reportData={reportData} id={`toc-zone-${i}`} />
             ))}
 
             <CollapsibleCard title="Prioritized Action Plan" id="toc-action" isH2>
@@ -501,6 +564,7 @@ export default function ReportPage({ params }) {
         <div style={{ marginTop: 40, padding: '18px 22px', background: c.surface, border: `1px solid ${c.border}`, borderLeft: `4px solid ${c.tan}`, borderRadius: 10, fontSize: 13, color: c.muted, lineHeight: 1.65 }}>
           This report reflects conditions observed at the time of inspection and is not a guarantee against wildfire damage or loss, nor an official Wildfire Prepared Home designation.
         </div>
+      </div>
       </div>
     </div>
   );

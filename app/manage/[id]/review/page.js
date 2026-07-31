@@ -5,42 +5,161 @@ import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
 import { authFetch } from '@/lib/authFetch'
-import { ZONES, STATUSES } from '@/lib/criteria'
-import { RISK_LEVELS, ACTION_PRIORITIES, parseReportData, blankReportData, emptyFinding, emptyActionItem } from '@/lib/reportSchema'
+import { ZONES } from '@/lib/criteria'
+import { ACTION_PRIORITIES, parseReportData, emptyFinding, emptyActionItem, getPhotoCaption } from '@/lib/reportSchema'
+import { reportColors, StatusPill, RiskBadge, CollapsibleCard, priorityColor } from '@/components/ReportView'
 import ThemeToggle from '@/components/ThemeToggle'
 import BrandLogo from '@/components/BrandLogo'
 import BackNav from '@/components/BackNav'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
-import { Pencil, Check, X, Plus, Trash2 } from 'lucide-react'
+import { Pencil, Check, X, Plus, Trash2, Copy } from 'lucide-react'
 
-// Report status options an entry (and therefore a finding) can carry.
-// "Pending review" isn't in STATUSES (that's only what the inspector can
-// pick when logging an entry) but the AI uses it verbatim for entries that
-// were never given a status, so it needs to be selectable here too.
-const FINDING_STATUSES = [...STATUSES.map(s => s.value), 'Pending review']
-
-const cardStyle = { background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, padding: 16, marginBottom: 16 }
-const sectionTitleStyle = { fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent)', margin: '0 0 14px' }
-const labelStyle = { display: 'block', fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 5 }
-const selectStyle = { width: '100%', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text)', fontSize: 13, padding: '8px 10px', fontFamily: 'inherit' }
+const c = reportColors
 const iconBtnStyle = { background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }
+const focusRing = 'focus:outline-none focus:ring-1 focus:ring-[#C1502E] focus:ring-offset-1 rounded-sm'
+// Editable text that reads as plain report copy until you click into it —
+// same font/size/color as the read-only version, no visible border/box
+// until focused, so the editing surface genuinely looks like the report
+// rather than a form sitting next to it.
+const blend = { border: 'none', background: 'transparent', outline: 'none', width: '100%', fontFamily: 'inherit', padding: '2px 4px', margin: '-2px -4px', boxSizing: 'border-box' }
 
-function Field({ label, children }) {
-  return <div style={{ marginBottom: 12 }}><span style={labelStyle}>{label}</span>{children}</div>
+// One finding, styled exactly like the read-only FindingCard on the
+// published report — category + status pill, a "Learn more" toggle over
+// the finding/rationale text (open by default here since you're editing
+// them, unlike the closed-by-default customer view), and the recommendation
+// always visible below since that's the one thing every customer needs to
+// see. Every piece of text is a blended input/textarea instead of a static
+// string, and status is the same pill component in its `editable` mode.
+function EditableFinding({ f, onChange, onRemove }) {
+  const [expanded, setExpanded] = useState(true)
+  const isNC = /non-compliant/i.test(f.status || '')
+  const isOK = /^(base|plus) compliant/i.test(f.status || '')
+  return (
+    <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderLeft: `4px solid ${isNC ? c.warn : isOK ? c.ok : c.border}`, borderRadius: 8, padding: '14px 16px', marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
+        <input
+          value={f.category}
+          onChange={e => onChange('category', e.target.value)}
+          placeholder="Category / item"
+          className={focusRing}
+          style={{ ...blend, fontWeight: 700, color: c.navy, fontSize: 14.5, flex: 1, minWidth: 0 }}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <StatusPill status={f.status} editable onChange={v => onChange('status', v)} />
+          <button onClick={onRemove} title="Remove finding" style={{ background: 'none', border: 'none', color: c.muted, cursor: 'pointer', display: 'flex', padding: 2 }}>
+            <X size={15} />
+          </button>
+        </div>
+      </div>
+
+      <button
+        onClick={() => setExpanded(x => !x)}
+        style={{ background: 'none', border: 'none', padding: 0, margin: '0 0 8px', color: c.slate, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+      >
+        {expanded ? '▾ Hide details' : '▸ Learn more about this finding'} <span style={{ opacity: 0.6, fontWeight: 400 }}>(what the customer sees when they click it)</span>
+      </button>
+
+      {expanded && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: c.muted, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>What was observed</div>
+          <textarea
+            value={f.finding}
+            onChange={e => onChange('finding', e.target.value)}
+            placeholder="What was observed, across the whole house"
+            rows={2}
+            className={focusRing}
+            style={{ ...blend, resize: 'vertical', fontSize: 13.5, color: c.text, lineHeight: 1.6, marginBottom: 8 }}
+          />
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: c.muted, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Rationale — why this status</div>
+          <textarea
+            value={f.rationale}
+            onChange={e => onChange('rationale', e.target.value)}
+            placeholder="Why this status was assigned"
+            rows={2}
+            className={focusRing}
+            style={{ ...blend, resize: 'vertical', fontSize: 13, color: c.muted, fontStyle: 'italic', lineHeight: 1.55 }}
+          />
+        </div>
+      )}
+
+      <div style={{ background: c.surfaceAlt, borderRadius: 6, padding: '9px 13px' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: c.navy, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Recommendation — always shown</div>
+        <textarea
+          value={f.recommendation}
+          onChange={e => onChange('recommendation', e.target.value)}
+          placeholder="Leave blank if fully compliant"
+          rows={2}
+          className={focusRing}
+          style={{ ...blend, resize: 'vertical', fontSize: 13.5, color: c.text, lineHeight: 1.6 }}
+        />
+      </div>
+    </div>
+  )
 }
 
-// The review page IS the report editor now — no separate raw-markdown step.
-// Every field here maps 1:1 onto what /report/[token] renders for the
-// customer, so what the inspector edits is exactly what gets published.
+const addFindingBtnStyle = { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontFamily: 'monospace', color: c.slate, background: 'none', border: `1px solid ${c.border}`, borderRadius: 4, padding: '6px 10px', cursor: 'pointer' }
+
+function CopyButton({ text }) {
+  const [copied, setCopied] = useState(false)
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      alert('Could not copy automatically — copy it manually: ' + text)
+    }
+  }
+  return (
+    <button onClick={copy} title={copied ? 'Copied!' : 'Copy'} style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', color: copied ? 'var(--ok)' : 'var(--text-muted)', display: 'inline-flex', verticalAlign: 'middle', marginLeft: 5 }}>
+      {copied ? <Check size={13} /> : <Copy size={13} />}
+    </button>
+  )
+}
+
+function zoneKey(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '') }
+
+// Same photo grid the published report shows per zone — matched here too
+// so the inspector can see which photos back up a finding while editing it,
+// not just after publishing. Caption is editable — it's the AI-generated,
+// action-oriented guidance text ("Remove shrubs within 5 ft...") rather
+// than the raw field note, stored in draftData.photoCaptions keyed by
+// entry id.
+function ZonePhotos({ zone, entries, reportData, onCaptionChange }) {
+  const photos = (entries || []).filter(e => e.photo_url && zoneKey(e.zone) === zoneKey(zone))
+  if (!photos.length) return null
+  return (
+    <div style={{ marginTop: 4, marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
+      {photos.map((e, i) => (
+        <div key={i} style={{ border: `1px solid ${c.border}`, borderRadius: 8, overflow: 'hidden', background: c.surfaceAlt }}>
+          <img src={e.photo_url} alt={getPhotoCaption(reportData, e)} style={{ width: '100%', display: 'block', maxHeight: 150, objectFit: 'cover' }} />
+          <div style={{ padding: '7px 9px' }}>
+            <textarea
+              value={getPhotoCaption(reportData, e)}
+              onChange={ev => onCaptionChange(e.id, ev.target.value)}
+              rows={2}
+              className={focusRing}
+              style={{ ...blend, resize: 'vertical', fontSize: 11, color: c.text, lineHeight: 1.4, fontStyle: 'italic', padding: '1px 2px', margin: '-1px -2px' }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// The review page IS the report editor now — no separate raw-markdown step,
+// and it's visually the actual report (same colors/components as
+// /report/[token], via components/ReportView.js) with every field editable
+// in place, not a plain form sitting next to a preview.
 
 export default function PropertyReviewFlow() {
   const { id } = useParams()
   const router = useRouter()
   const { user, loading, isHomeowner, profileReady } = useAuth()
   const [property, setProperty] = useState(null)
-  const [entryCount, setEntryCount] = useState(0)
+  const [entries, setEntries] = useState([])
   const [fetching, setFetching] = useState(true)
 
   const [draftData, setDraftData] = useState(null)
@@ -58,12 +177,19 @@ export default function PropertyReviewFlow() {
 
   const load = useCallback(async () => {
     setFetching(true)
-    const [{ data: prop }, { count }] = await Promise.all([
+    const [{ data: prop }, { data: ents, error: entriesError }] = await Promise.all([
       supabase.from('properties').select('*').eq('id', id).maybeSingle(),
-      supabase.from('entries').select('id', { count: 'exact', head: true }).eq('property_id', id),
+      // select('*') deliberately, not an explicit column list — this table
+      // predates the migrations folder so its exact columns aren't
+      // guaranteed here, and an unknown-column select fails the whole
+      // query silently (which is exactly what happened with `ai_caption`,
+      // a field that gets read defensively elsewhere but was never an
+      // actual column).
+      supabase.from('entries').select('*').eq('property_id', id),
     ])
+    if (entriesError) console.error('Failed to load entries for review page:', entriesError)
     setProperty(prop)
-    setEntryCount(count ?? 0)
+    setEntries(ents ?? [])
     const parsed = parseReportData(prop?.report_draft_markdown)
     if (parsed) { setDraftData(parsed); setLegacyDraft('') }
     else { setDraftData(null); setLegacyDraft(prop?.report_draft_markdown?.trim() ? prop.report_draft_markdown : '') }
@@ -195,6 +321,9 @@ export default function PropertyReviewFlow() {
   }
   function addActionItem() { patch({ actionPlan: [...draftData.actionPlan, emptyActionItem()] }) }
   function removeActionItem(ai) { patch({ actionPlan: draftData.actionPlan.filter((_, i) => i !== ai) }) }
+  function updatePhotoCaption(entryId, value) {
+    patch({ photoCaptions: { ...(draftData.photoCaptions || {}), [entryId]: value } })
+  }
 
   if (loading || (user && !profileReady)) return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -209,6 +338,7 @@ export default function PropertyReviewFlow() {
   )
 
   const CONTENT_WIDTH = 900
+  const reportUrl = shareInfo ? (typeof window !== 'undefined' ? `${window.location.origin}/report/${shareInfo.token}` : shareInfo.token) : ''
   const usedZones = new Set((draftData?.zones || []).map(z => z.zone))
   const availableZones = ZONES.filter(z => !usedZones.has(z))
 
@@ -235,13 +365,13 @@ export default function PropertyReviewFlow() {
           </div>
         )}
 
-        {!fetching && entryCount === 0 && (
+        {!fetching && entries.length === 0 && (
           <div style={{ background: 'rgba(217,164,6,.1)', border: '1px solid var(--warn)', borderRadius: 6, padding: '14px 16px', fontSize: 13, color: 'var(--text)' }}>
             No entries logged for this property yet. Go back and log at least one finding before generating a report.
           </div>
         )}
 
-        {!fetching && entryCount > 0 && (
+        {!fetching && entries.length > 0 && (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, fontSize: 12.5, color: 'var(--text-muted)' }}>
               <span>Customer email:</span>
@@ -294,8 +424,17 @@ export default function PropertyReviewFlow() {
             {shareInfo && property?.report_status === 'published' && (
               <div style={{ background: 'rgba(58,125,68,.15)', border: '1px solid var(--ok)', borderRadius: 6, padding: '12px 16px', marginBottom: 16, fontSize: 12.5, color: 'var(--text)' }}>
                 <div style={{ marginBottom: 8 }}>
-                  <strong style={{ color: 'var(--ok)' }}>✓ Published.</strong> Link: <code style={{ fontFamily: 'monospace' }}>{typeof window !== 'undefined' ? `${window.location.origin}/report/${shareInfo.token}` : shareInfo.token}</code>
-                  {shareInfo.accessCode && <> · Access code: <strong>{shareInfo.accessCode}</strong></>}
+                  <strong style={{ color: 'var(--ok)' }}>✓ Published.</strong> Link:{' '}
+                  <a href={reportUrl} target="_blank" rel="noopener noreferrer" style={{ fontFamily: 'monospace', color: 'var(--ok)', textDecoration: 'underline', wordBreak: 'break-all' }}>
+                    {reportUrl}
+                  </a>
+                  <CopyButton text={reportUrl} />
+                  {shareInfo.accessCode && (
+                    <>
+                      {' '}· Access code: <strong>{shareInfo.accessCode}</strong>
+                      <CopyButton text={shareInfo.accessCode} />
+                    </>
+                  )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
@@ -331,113 +470,150 @@ export default function PropertyReviewFlow() {
             )}
 
             {draftData && (
-              <div>
-                {/* Executive Summary */}
-                <div style={cardStyle}>
-                  <p style={sectionTitleStyle}>Executive Summary</p>
-                  <Field label="Overall Risk Rating">
-                    <select style={selectStyle} value={draftData.overallRiskRating} onChange={e => patch({ overallRiskRating: e.target.value })}>
-                      {RISK_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="Summary Narrative">
-                    <Textarea value={draftData.summaryNarrative} onChange={e => patch({ summaryNarrative: e.target.value })} className="min-h-20" />
-                  </Field>
-                  <Field label="Top Priorities">
+              <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: '20px 16px 4px', colorScheme: 'light' }}>
+                <RiskBadge level={draftData.overallRiskRating} editable onChange={v => patch({ overallRiskRating: v })} />
+
+                <CollapsibleCard title="Executive Summary" isH2 defaultOpen>
+                  <textarea
+                    value={draftData.summaryNarrative}
+                    onChange={e => patch({ summaryNarrative: e.target.value })}
+                    placeholder="2-4 sentences: biggest risks, notable strengths, overall assessment"
+                    rows={3}
+                    className={focusRing}
+                    style={{ ...blend, resize: 'vertical', fontSize: 15, color: c.text, lineHeight: 1.75, marginBottom: 16 }}
+                  />
+                  <div style={{ fontSize: 12, fontWeight: 700, color: c.navy, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Top Priorities</div>
+                  <div style={{ marginBottom: 16 }}>
                     {draftData.topPriorities.map((p, i) => (
-                      <Input key={i} value={p} onChange={e => updateTopPriority(i, e.target.value)} placeholder={`Priority ${i + 1}`} className="mb-2" />
+                      <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+                        <span style={{ fontSize: 15, color: c.text, fontWeight: 700, flexShrink: 0 }}>{i + 1}.</span>
+                        <input
+                          value={p}
+                          onChange={e => updateTopPriority(i, e.target.value)}
+                          placeholder={`Priority ${i + 1}`}
+                          className={focusRing}
+                          style={{ ...blend, fontSize: 15, color: c.text, lineHeight: 1.7 }}
+                        />
+                      </div>
                     ))}
-                  </Field>
-                  <Field label="WPH Base (Essential) Snapshot">
-                    <Textarea value={draftData.wphBase} onChange={e => patch({ wphBase: e.target.value })} className="min-h-16" />
-                  </Field>
-                  <Field label="WPH Plus (Enhanced) Snapshot">
-                    <Textarea value={draftData.wphPlus} onChange={e => patch({ wphPlus: e.target.value })} className="min-h-16" />
-                  </Field>
-                </div>
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: c.navy, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>WPH Designation Snapshot</div>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'baseline' }}>
+                    <strong style={{ color: c.navy, fontSize: 15, flexShrink: 0 }}>Base (Essential):</strong>
+                    <textarea value={draftData.wphBase} onChange={e => patch({ wphBase: e.target.value })} rows={1} className={focusRing} style={{ ...blend, flex: 1, resize: 'vertical', fontSize: 15, color: c.text, lineHeight: 1.7 }} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                    <strong style={{ color: c.navy, fontSize: 15, flexShrink: 0 }}>Plus (Enhanced):</strong>
+                    <textarea value={draftData.wphPlus} onChange={e => patch({ wphPlus: e.target.value })} rows={1} className={focusRing} style={{ ...blend, flex: 1, resize: 'vertical', fontSize: 15, color: c.text, lineHeight: 1.7 }} />
+                  </div>
+                </CollapsibleCard>
 
-                {/* Site Overview */}
-                <div style={cardStyle}>
-                  <p style={sectionTitleStyle}>Site & Environmental Overview</p>
-                  <Textarea value={draftData.siteOverview} onChange={e => patch({ siteOverview: e.target.value })} className="min-h-20" />
-                </div>
+                <CollapsibleCard title="Site & Environmental Overview" isH2 defaultOpen>
+                  <textarea
+                    value={draftData.siteOverview}
+                    onChange={e => patch({ siteOverview: e.target.value })}
+                    placeholder="3-5 sentences: location context, FHSZ status, surrounding fuel load, primary ignition pathways"
+                    rows={4}
+                    className={focusRing}
+                    style={{ ...blend, resize: 'vertical', fontSize: 15, color: c.text, lineHeight: 1.75 }}
+                  />
+                </CollapsibleCard>
 
-                {/* Findings by Zone */}
-                <div style={cardStyle}>
-                  <p style={sectionTitleStyle}>Findings by Zone</p>
-                  {draftData.zones.map((zone, zi) => (
-                    <div key={zi} style={{ border: '1px solid var(--line)', borderRadius: 6, padding: 12, marginBottom: 12, background: 'var(--bg)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                        <select style={{ ...selectStyle, flex: 1 }} value={zone.zone} onChange={e => updateZone(zi, 'zone', e.target.value)}>
+                {draftData.zones.map((zone, zi) => (
+                  <CollapsibleCard
+                    key={zi}
+                    isH2
+                    defaultOpen
+                    headerContent={
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <select
+                          value={zone.zone}
+                          onChange={e => updateZone(zi, 'zone', e.target.value)}
+                          style={{ background: 'transparent', color: '#fff', border: 'none', outline: 'none', fontWeight: 700, fontSize: 16, fontFamily: 'inherit', cursor: 'pointer', flex: 1, minWidth: 0 }}
+                        >
                           {!ZONES.includes(zone.zone) && <option value={zone.zone}>{zone.zone}</option>}
                           {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
                         </select>
-                        <button onClick={() => removeZone(zi)} title="Remove this zone" style={{ ...iconBtnStyle, color: 'var(--warn)' }}>
-                          <Trash2 className="size-4" />
+                        <button onClick={() => removeZone(zi)} title="Remove this zone" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.75)', cursor: 'pointer', display: 'flex', flexShrink: 0 }}>
+                          <Trash2 size={16} />
                         </button>
                       </div>
+                    }
+                  >
+                    {zone.findings.map((f, fi) => (
+                      <EditableFinding
+                        key={fi}
+                        f={f}
+                        onChange={(field, val) => updateFinding(zi, fi, field, val)}
+                        onRemove={() => removeFinding(zi, fi)}
+                      />
+                    ))}
+                    <button onClick={() => addFinding(zi)} style={addFindingBtnStyle}>
+                      <Plus size={13} /> Add Finding
+                    </button>
+                    <ZonePhotos zone={zone.zone} entries={entries} reportData={draftData} onCaptionChange={updatePhotoCaption} />
+                  </CollapsibleCard>
+                ))}
 
-                      {zone.findings.map((f, fi) => (
-                        <div key={fi} style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 6, padding: 12, marginBottom: 8 }}>
-                          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                            <Input value={f.category} onChange={e => updateFinding(zi, fi, 'category', e.target.value)} placeholder="Category / item" className="flex-1 text-[13px] h-8" />
-                            <select style={{ ...selectStyle, width: 170 }} value={f.status} onChange={e => updateFinding(zi, fi, 'status', e.target.value)}>
-                              {FINDING_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                            <button onClick={() => removeFinding(zi, fi)} title="Remove finding" style={{ ...iconBtnStyle, color: 'var(--warn)' }}>
-                              <X className="size-4" />
-                            </button>
-                          </div>
-                          <Field label="Finding">
-                            <Textarea value={f.finding} onChange={e => updateFinding(zi, fi, 'finding', e.target.value)} className="min-h-14 text-[13px]" />
-                          </Field>
-                          <Field label="Recommendation (shown right under the finding)">
-                            <Textarea value={f.recommendation} onChange={e => updateFinding(zi, fi, 'recommendation', e.target.value)} placeholder="Leave blank if fully compliant" className="min-h-14 text-[13px]" />
-                          </Field>
-                          <Field label="Rationale (shown as a ⓘ tooltip, not inline)">
-                            <Textarea value={f.rationale} onChange={e => updateFinding(zi, fi, 'rationale', e.target.value)} placeholder="Why this status was assigned" className="min-h-14 text-[13px]" />
-                          </Field>
-                        </div>
-                      ))}
+                {availableZones.length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 28 }}>
+                    <select
+                      value={addZoneKey}
+                      onChange={e => setAddZoneKey(e.target.value)}
+                      style={{ flex: 1, background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6, color: c.text, fontSize: 13, padding: '8px 10px', fontFamily: 'inherit' }}
+                    >
+                      <option value="">Add a zone…</option>
+                      {availableZones.map(z => <option key={z} value={z}>{z}</option>)}
+                    </select>
+                    <Button variant="outline" onClick={addZone} disabled={!addZoneKey} className="text-[12px] uppercase tracking-wide h-auto py-2 px-3 font-mono normal-case shrink-0">
+                      Add Zone
+                    </Button>
+                  </div>
+                )}
 
-                      <button onClick={() => addFinding(zi)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontFamily: 'monospace', color: 'var(--accent)', background: 'none', border: `1px solid var(--accent)`, borderRadius: 4, padding: '6px 10px', cursor: 'pointer' }}>
-                        <Plus className="size-3.5" /> Add Finding
-                      </button>
-                    </div>
-                  ))}
-
-                  {availableZones.length > 0 && (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <select style={selectStyle} value={addZoneKey} onChange={e => setAddZoneKey(e.target.value)}>
-                        <option value="">Add a zone…</option>
-                        {availableZones.map(z => <option key={z} value={z}>{z}</option>)}
-                      </select>
-                      <Button variant="outline" onClick={addZone} disabled={!addZoneKey} className="text-[12px] uppercase tracking-wide h-auto py-2 px-3 font-mono normal-case shrink-0">
-                        Add Zone
-                      </Button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Action Plan */}
-                <div style={cardStyle}>
-                  <p style={sectionTitleStyle}>Prioritized Action Plan</p>
-                  {draftData.actionPlan.map((a, ai) => (
-                    <div key={ai} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-                      <Input value={a.action} onChange={e => updateActionItem(ai, 'action', e.target.value)} placeholder="Action" className="flex-1 text-[13px] h-8" />
-                      <Input value={a.zone} onChange={e => updateActionItem(ai, 'zone', e.target.value)} placeholder="Zone" className="w-40 text-[13px] h-8" />
-                      <select style={{ ...selectStyle, width: 110 }} value={a.priority} onChange={e => updateActionItem(ai, 'priority', e.target.value)}>
-                        {ACTION_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
-                      </select>
-                      <button onClick={() => removeActionItem(ai)} title="Remove" style={{ ...iconBtnStyle, color: 'var(--warn)' }}>
-                        <X className="size-4" />
-                      </button>
-                    </div>
-                  ))}
-                  <button onClick={addActionItem} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontFamily: 'monospace', color: 'var(--accent)', background: 'none', border: `1px solid var(--accent)`, borderRadius: 4, padding: '6px 10px', cursor: 'pointer' }}>
-                    <Plus className="size-3.5" /> Add Action
+                <CollapsibleCard title="Prioritized Action Plan" isH2 defaultOpen>
+                  <div style={{ overflowX: 'auto', marginBottom: 12 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                      <thead>
+                        <tr>
+                          {['#', 'Action', 'Zone', 'Priority', ''].map(h => (
+                            <th key={h} style={{ background: c.navy, color: '#fff', padding: '10px 14px', textAlign: 'left', fontWeight: 700, fontSize: 12, letterSpacing: '0.04em' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {draftData.actionPlan.map((a, ai) => (
+                          <tr key={ai} style={{ background: ai % 2 === 0 ? c.surface : c.surfaceAlt }}>
+                            <td style={{ padding: '10px 14px', borderBottom: `1px solid ${c.border}`, color: c.muted }}>{ai + 1}</td>
+                            <td style={{ padding: '10px 14px', borderBottom: `1px solid ${c.border}` }}>
+                              <input value={a.action} onChange={e => updateActionItem(ai, 'action', e.target.value)} placeholder="Action" className={focusRing} style={{ ...blend, fontSize: 14, color: c.text }} />
+                            </td>
+                            <td style={{ padding: '10px 14px', borderBottom: `1px solid ${c.border}` }}>
+                              <input value={a.zone} onChange={e => updateActionItem(ai, 'zone', e.target.value)} placeholder="Zone" className={focusRing} style={{ ...blend, fontSize: 14, color: c.text }} />
+                            </td>
+                            <td style={{ padding: '10px 14px', borderBottom: `1px solid ${c.border}` }}>
+                              <select
+                                value={a.priority}
+                                onChange={e => updateActionItem(ai, 'priority', e.target.value)}
+                                style={{ background: 'transparent', border: 'none', outline: 'none', color: priorityColor(a.priority), fontWeight: 700, fontSize: 12.5, fontFamily: 'inherit', cursor: 'pointer' }}
+                              >
+                                {ACTION_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                              </select>
+                            </td>
+                            <td style={{ padding: '10px 14px', borderBottom: `1px solid ${c.border}` }}>
+                              <button onClick={() => removeActionItem(ai)} title="Remove" style={{ background: 'none', border: 'none', color: c.warn, cursor: 'pointer', display: 'flex' }}>
+                                <X size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <button onClick={addActionItem} style={addFindingBtnStyle}>
+                    <Plus size={13} /> Add Action
                   </button>
-                </div>
+                </CollapsibleCard>
               </div>
             )}
           </div>

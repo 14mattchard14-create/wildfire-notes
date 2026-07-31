@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { authFetch } from '@/lib/authFetch'
 import { GUIDED_SEGMENTS, OVERALL_SITE_SEGMENT, STATUSES } from '@/lib/criteria'
 import { parseSatellite, getAreaText } from '@/lib/satellite'
 import PhotoUpload from './PhotoUpload'
 import InfoModal from './InfoModal'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 const c = {
   bg:      'var(--bg)',
@@ -135,8 +136,27 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
   const [notesDraft, setNotesDraft] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
   const [notesSaved, setNotesSaved] = useState(false)
+  const navScrollRef = useRef(null)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
 
   useEffect(() => { setEntries(entriesProp || []) }, [entriesProp])
+
+  // Step-nav horizontal scroll affordance — on mobile there's no visible
+  // scrollbar hinting that the pill row scrolls, so track scroll position
+  // to dim/undim the arrow buttons at each end.
+  const updateNavScrollState = useCallback(() => {
+    const el = navScrollRef.current
+    if (!el) return
+    setCanScrollLeft(el.scrollLeft > 2)
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2)
+  }, [])
+
+  useEffect(() => { updateNavScrollState() }, [updateNavScrollState])
+
+  function scrollNav(dir) {
+    navScrollRef.current?.scrollBy({ left: dir * 180, behavior: 'smooth' })
+  }
 
   const loadSegments = useCallback(async () => {
     const { data } = await supabase.from('guided_segments').select('*').eq('property_id', propertyId)
@@ -229,33 +249,66 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: c.bg, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-      {/* Header */}
-      <div style={{ position: 'sticky', top: 0, background: c.bg, borderBottom: `1px solid ${c.line}`, padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 5 }}>
-        <div>
-          <span style={{ fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase', color: c.accent, display: 'block' }}>Guided Entry</span>
-          <span style={{ fontSize: 11, fontFamily: 'monospace', color: c.muted }}>{activeStep.label}</span>
+      {/* Header + step nav share one sticky wrapper so they always stick
+          together as a unit — two separately-sticky elements with a
+          hardcoded `top` offset between them breaks the moment the header's
+          actual height doesn't match that guess (it didn't), clipping the
+          nav row behind the header. */}
+      <div style={{ position: 'sticky', top: 0, background: c.bg, zIndex: 5 }}>
+        <div style={{ borderBottom: `1px solid ${c.line}`, padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <span style={{ fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase', color: c.accent, display: 'block' }}>Guided Entry</span>
+            <span style={{ fontSize: 11, fontFamily: 'monospace', color: c.muted }}>{activeStep.label}</span>
+          </div>
+          <button onClick={onClose} style={{ width: 34, height: 34, borderRadius: '50%', border: `1px solid ${c.line}`, background: 'transparent', color: c.muted, fontSize: 14, cursor: 'pointer' }}>✕</button>
         </div>
-        <button onClick={onClose} style={{ width: 34, height: 34, borderRadius: '50%', border: `1px solid ${c.line}`, background: 'transparent', color: c.muted, fontSize: 14, cursor: 'pointer' }}>✕</button>
-      </div>
 
-      {/* Step nav — jump to any step (satellite or any segment), in order but freely skippable */}
-      <div style={{ position: 'sticky', top: 66, background: c.bg, borderBottom: `1px solid ${c.line}`, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', zIndex: 4 }}>
-        {STEPS.map((step, idx) => {
-          const done = doneCount(step), total = step.items.length
-          const complete = step.virtual ? (!!satellite && done === total) : done === total
-          return (
-            <button key={step.key} onClick={() => goStep(idx)} style={{
-              flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
-              padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
-              border: `1px solid ${step.key === activeKey ? c.accent : c.line}`,
-              background: step.key === activeKey ? 'rgba(190,91,29,.15)' : 'transparent',
-              color: step.key === activeKey ? c.accent : (complete ? c.ok : c.muted),
-              fontFamily: 'monospace', fontSize: 10.5, whiteSpace: 'nowrap',
-            }}>
-              {complete ? '✓ ' : (step.virtual ? '◈ ' : '')}{step.label} <span style={{ opacity: 0.7, marginLeft: 3 }}>({done}/{total})</span>
-            </button>
-          )
-        })}
+        {/* Step nav — jump to any step (satellite or any segment), in order
+            but freely skippable. Left/right arrow buttons flank the
+            scrollable pill row so it's obvious (and usable with a tap
+            rather than a swipe) that there's more to scroll to on mobile. */}
+        <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${c.line}` }}>
+          <button
+            onClick={() => scrollNav(-1)}
+            disabled={!canScrollLeft}
+            aria-label="Scroll steps left"
+            style={{ flexShrink: 0, width: 30, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', borderRight: `1px solid ${c.line}`, color: canScrollLeft ? c.text : c.line, cursor: canScrollLeft ? 'pointer' : 'default' }}
+          >
+            <ChevronLeft size={16} />
+          </button>
+
+          <div
+            ref={navScrollRef}
+            onScroll={updateNavScrollState}
+            style={{ flex: 1, minWidth: 0, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto' }}
+          >
+            {STEPS.map((step, idx) => {
+              const done = doneCount(step), total = step.items.length
+              const complete = step.virtual ? (!!satellite && done === total) : done === total
+              return (
+                <button key={step.key} onClick={() => goStep(idx)} style={{
+                  flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
+                  padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
+                  border: `1px solid ${step.key === activeKey ? c.accent : c.line}`,
+                  background: step.key === activeKey ? 'rgba(190,91,29,.15)' : 'transparent',
+                  color: step.key === activeKey ? c.accent : (complete ? c.ok : c.muted),
+                  fontFamily: 'monospace', fontSize: 10.5, whiteSpace: 'nowrap',
+                }}>
+                  {complete ? '✓ ' : (step.virtual ? '◈ ' : '')}{step.label} <span style={{ opacity: 0.7, marginLeft: 3 }}>({done}/{total})</span>
+                </button>
+              )
+            })}
+          </div>
+
+          <button
+            onClick={() => scrollNav(1)}
+            disabled={!canScrollRight}
+            aria-label="Scroll steps right"
+            style={{ flexShrink: 0, width: 30, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', borderLeft: `1px solid ${c.line}`, color: canScrollRight ? c.text : c.line, cursor: canScrollRight ? 'pointer' : 'default' }}
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
       </div>
 
       <div style={{ flex: 1, padding: 20, maxWidth: 560, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>

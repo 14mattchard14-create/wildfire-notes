@@ -21,6 +21,114 @@ _Last updated: 2026-07-30_
 - No new npm packages — reuses the existing `entry-photos` Supabase Storage bucket under
   a `satellite/` prefix, no new bucket needed.
 
+## Done this session (2026-07-30, round 21 — sidebar/header boundary, persistent toggle, deeper search)
+
+- **Sidebar no longer shares a row with the header**: the header's own height is now
+  measured via a ref (`headerHeight` state, remeasured on resize/report load) and the
+  sidebar panel is pinned to start exactly at that height (`top: headerHeight`, `height:
+  calc(100vh - headerHeight)`) instead of spanning the full viewport from y:0. The navy
+  header now renders full-width and unshifted above everything (no more marginLeft on it) —
+  only the content below it shifts over when the sidebar is open.
+- **Toggle button is reachable at any scroll position again**: round 20 moved it inline
+  into the header, which meant it scrolled away and became unreachable ("icons gone") once
+  you scrolled past the top. It's back to `position: fixed` (always on screen) but now
+  pinned just below the measured header height, so it can never land on top of the header's
+  own title text either.
+- **Search now covers the whole page, not just structured section fields**: each TOC
+  entry's searchable content blob now also includes the header/property info (address,
+  inspector, visit date), the intro/footer disclaimer copy, the overall risk rating, and
+  per-zone photo captions — on top of the finding/recommendation/rationale/action-plan text
+  already indexed in round 20.
+- Syntax-checked the file.
+
+## Done this session (2026-07-30, round 20 — TOC sidebar polish: header overlap, color, search scope)
+
+- **Toggle button no longer overlaps the header**: the round-19 sidebar toggle was a
+  `position: fixed` button at a raw pixel coordinate, which landed on top of the navy
+  header's own title text. Moved it into the header itself (normal document flow, next to
+  the "🔥 Wildfire Risk Reduction Assessment" label) so it structurally can't overlap
+  anything — it just moves with the header wherever the header is.
+- **Sidebar recolored to match the page**: was navy (matching the header), now uses the
+  same light background/border/text colors as the rest of the report for a more unified
+  look. Added an explicit "✕" close button inside the panel since it's no longer the same
+  color as its own toggle affordance.
+- **Search now matches anything in the report**, not just section titles — each TOC entry
+  now carries a lowercased blob of its section's actual content (finding text, statuses,
+  recommendations, rationale, action items, zone-guide body copy) and the search box
+  filters against title OR content.
+- Syntax-checked the file.
+
+## Done this session (2026-07-30, round 19 — TOC as a collapsible searchable left sidebar)
+
+- **`/report/[token]`**: replaced the inline "Table of Contents" card with a fixed left
+  sidebar panel — collapsible via a small tab button (‹ / ☰) that stays visible either way,
+  with a search box that filters the section list live. On desktop it pushes the report
+  content over (open by default); on narrow screens it behaves as a full-height overlay
+  drawer with a dismissible backdrop instead of squeezing the reading width, and starts
+  closed. Width/behavior is tracked via a `resize` listener rather than CSS media queries,
+  since this file is all inline styles — initializes to the "mobile, closed" state so the
+  first client render matches the server-rendered HTML, then corrects itself in a
+  `useEffect` right after mount.
+- Old inline `TOC` component removed (fully superseded by the sidebar); everything else on
+  the page — risk badge, findings, action plan, zone guide — unchanged.
+- Syntax-checked the file.
+
+## Done this session (2026-07-30, round 18 — trim finding redundancy, AI photo captions)
+
+- **Finding cards were showing the same thing twice**: the inline "finding" paragraph and
+  the rationale tooltip both explained the same issue in different words. Now only the
+  **recommendation** is always visible; category + status pill sit above it, and a
+  **"Learn more about this finding"** text button (replacing the small ⓘ icon) expands to
+  show the finding description + rationale together. Applied to both `/report/[token]`
+  (closed by default) and the review editor (open by default, since you're editing those
+  fields — still has the same toggle so you can preview the closed state).
+- **AI-generated photo captions**: photo captions used to just be the inspector's raw field
+  note (e.g. "Shrubs within 5' of house"). `/api/report-draft` now also asks the AI for a
+  `photoCaptions` map (keyed by entry id) with actionable phrasing — "Remove shrubs within 5
+  ft of the house to meet defensible space requirements" for non-compliant items, a brief
+  confirmation for compliant ones. New `getPhotoCaption()` helper in `lib/reportSchema.js`
+  reads that map with a fallback to the raw note for older reports. Editable inline in the
+  review page's photo grid, read-only on the customer report.
+- Syntax-checked all 4 changed files.
+
+## Done this session (2026-07-30, round 17 — photos in review editor + light/dark clash fix)
+
+- **No photos in the review editor**: the round-16 rebuild only ever fetched an entries
+  *count* on that page, never the rows themselves, so there was nothing to match photos
+  against. Now fetches full entry rows (zone/photo_url/note/ai_caption) and shows the same
+  per-zone photo grid the published report shows, inside each zone card.
+- **"Weird light and dark theme stuff"**: the report canvas (and the published report page)
+  use fixed light brand colors on purpose — regardless of the inspector's app theme or
+  the viewer's OS setting, since it's meant to look identical for every customer. But
+  native form chrome (scrollbar thumbs, etc.) still follows the OS/browser dark-mode
+  preference unless told otherwise, so a light-mode textarea sitting under a dark-mode OS
+  was getting dark-styled scrollbars — a real mismatch. Fixed by setting `colorScheme:
+  'light'` on the report canvas wrapper (review page) and all four page states of
+  `/report/[token]`, forcing native controls to render light regardless of OS/app theme.
+- Syntax-checked both files.
+
+## Done this session (2026-07-30, round 16 — true WYSIWYG review editor + two UI fixes)
+
+- **"Is there a way to edit while it's in its final web report format?"** — yes, and now it
+  actually does that (round 14 built a plain form editor with the right data, but not the
+  right look). New **`components/ReportView.js`** holds the shared visual pieces (colors,
+  `StatusPill`, `RiskBadge`, `CollapsibleCard`) used by *both* the customer report and the
+  review page, with `editable`/`onChange` modes on the pill and risk badge so they render as
+  native selects styled identically to their read-only look. `/manage/[id]/review` now
+  renders the actual navy-header/status-pill/finding-card report layout with every field —
+  risk rating, narrative text, top priorities, findings (category/finding/status/
+  recommendation/rationale), action plan — editable in place as blended, borderless inputs
+  that only show a focus ring when you click in. `/report/[token]` was refactored to import
+  the same shared pieces instead of duplicating them, guaranteeing they stay visually
+  identical.
+- **Guided Entry step-nav clipped behind its header**: the nav pill row was pinned with a
+  hardcoded `top: 66` guess for the header's height, which no longer matched — the header
+  (stacked on top) was covering all but a thin sliver of it. Fixed by merging the header and
+  step-nav into one shared sticky wrapper, so there's no offset to guess at all.
+  Also added left/right arrow buttons flanking the step-nav row (disabled/dimmed at each
+  scroll end) so it's tap-scrollable on mobile, not just swipe-scrollable.
+- Syntax-checked all 4 changed/new files.
+
 ## Done this session (2026-07-30, round 15 — two report-draft fixes)
 
 - **"Unexpected end of JSON input" on generate**: the AI's structured JSON response was
