@@ -27,16 +27,27 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      setLoading(false)
-      loadProfile(session?.user ?? null)
-    })
-
+    // Deliberately *not* also calling supabase.auth.getSession() here.
+    // onAuthStateChange fires immediately on subscribe with the resolved
+    // current session (event 'INITIAL_SESSION'), so it's already the
+    // single source of truth — pairing it with a separate getSession()
+    // call created two independent async reads of the same state that
+    // could resolve in either order. When getSession() finished first
+    // and happened to see a not-yet-hydrated session, it set user=null
+    // and loading=false, which was enough for the "Inspector account
+    // required" guard on every admin page to render before the second
+    // (correct) update from onAuthStateChange arrived — intermittent,
+    // more likely on Vercel than localhost since it's a timing race, not
+    // a logic bug. One listener, one update per real change, no race.
+    let sawFirstEvent = false
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
       setProfileReady(false)
       loadProfile(session?.user ?? null)
+      if (!sawFirstEvent) {
+        sawFirstEvent = true
+        setLoading(false)
+      }
     })
 
     return () => subscription.unsubscribe()

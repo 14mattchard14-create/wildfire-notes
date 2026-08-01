@@ -36,6 +36,30 @@ _Last updated: 2026-07-31_
 - No new npm packages — reuses the existing `entry-photos` Supabase Storage bucket under
   a `satellite/` prefix, no new bucket needed.
 
+## Done this session (2026-08-01, round 48 — fix intermittent "Inspector account required" on live)
+
+Root-caused the "Inspector account required to view this page" screen showing up randomly on
+`/manage`, `/crm`, `/insights`, `/quality`, and the review page in production despite being
+signed in as an inspector.
+
+`components/AuthProvider.js` was calling both `supabase.auth.getSession()` *and* subscribing
+to `supabase.auth.onAuthStateChange()` on mount — two independent async reads of the same
+session state that could resolve in either order. `onAuthStateChange` already fires
+immediately on subscribe with the current resolved session (event `INITIAL_SESSION`), so the
+separate `getSession()` call was redundant and, worse, a race: if it happened to resolve
+first and momentarily saw an unhydrated/null session, it set `user = null` and `loading =
+false` — which was enough for every admin page's `if (!user || isHomeowner)` guard to render
+the block screen before the correct update from `onAuthStateChange` arrived a moment later.
+Timing-dependent, so it showed up more on Vercel than localhost, and "often" rather than
+"always" — exactly what a race condition looks like.
+
+Fix: removed the `getSession()` call entirely; `onAuthStateChange` is now the single source of
+truth for both the initial session and subsequent changes, with `loading` only flipped to
+`false` on that listener's first event. No more duplicate/racing updates.
+
+Syntax-checked the changed file. This needs to be committed and pushed like the last round —
+I don't have push credentials in this sandbox.
+
 ## Done this session (2026-07-31, round 47 — Log Contact: date/time stamp)
 
 Fixed a real gap from round 46: logging a call/text/note wrote `completed_at` on the server
