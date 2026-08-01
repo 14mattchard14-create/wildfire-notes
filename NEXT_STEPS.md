@@ -1,8 +1,29 @@
 # Status — wildfire-notes
 
-_Last updated: 2026-07-31_
+_Last updated: 2026-08-01_
 
 ## ⚠️ Action required — new migration
+
+- Run `supabase/migrations/015_booking_payments.sql` — adds booking fields to `properties`
+  (`lead_source`, `booking_status`, `booking_event_uid`, `intro_call_at`) and two new tables,
+  `crm_payments` and `crm_discounts`. Required for the CRM's Payments section, Discount Codes
+  panel, and the Cal.com webhook to work at all.
+
+## ⚠️ Action required — Cal.com setup (for the booking webhook)
+
+The webhook endpoint (`/api/webhooks/calcom`) is code-complete but inert until you:
+
+1. Create a free Cal.com account, create one event type for the 15-min intro call.
+2. Add a **required** custom booking question with identifier `address` (short text).
+3. Enable the built-in phone number field on the booking form.
+4. Connect your Google Calendar in Cal.com's calendar settings (this alone makes booked calls
+   show up on the calendar automatically — no code involved).
+5. Add a webhook: URL `https://<your-domain>/api/webhooks/calcom`, subscribed to
+   `BOOKING_CREATED`, and copy the signing secret it generates.
+6. Set that secret as the `CAL_COM_WEBHOOK_SECRET` environment variable (in Vercel's project
+   settings, same pattern as `RESEND_API_KEY`) — never commit it to the repo.
+
+Full detail in `BOOKING_PAYMENTS_PLAN.md`.
 
 - Run `supabase/migrations/014_crm_phase2.sql` — adds `crm_message_templates` (seeded with 5
   starter templates), `properties.unsubscribed`/`unsubscribed_at`/`unsubscribe_token`, and
@@ -35,6 +56,36 @@ _Last updated: 2026-07-31_
   troubleshooting).
 - No new npm packages — reuses the existing `entry-photos` Supabase Storage bucket under
   a `satellite/` prefix, no new bucket needed.
+
+## Done this session (2026-08-01, round 49 — booking → CRM → calendar → payments, phase 1)
+
+First build round of the booking/payments initiative — see `BOOKING_PAYMENTS_PLAN.md` for the
+full design discussion and decisions. Four pieces:
+
+- **Add-to-Google-Calendar links.** `lib/googleCalendar.js` builds Google's plain "quick add
+  event" URL — no OAuth, no token storage, no API integration. Wired into every pending
+  CRM follow-up that has a due date (a calendar icon next to Send/Mark Done in the expanded
+  row's history). Deliberately not real two-way sync — see the plan doc for why.
+- **Discount codes.** New `crm_discounts` table + `/api/crm/discounts` (+`/[id]`) + a
+  collapsible "Discount Codes" management panel on `/crm` (create/deactivate/delete, flat-$ or
+  percent). Self-managed, independent of any payment processor.
+- **Payment tracking.** New `crm_payments` table + `/api/crm/payments` (+`/[id]`) + a
+  "Payments" section in each customer's expanded CRM row: record a payment (amount, method,
+  optional discount code — validated and applied server-side, capped so it can't exceed the
+  payment amount), mark paid/refunded, delete. No processor wired up yet — `method: 'stripe'`
+  and a `stripe_payment_intent_id` column exist for when that's added later, but nothing
+  actually charges a card. Verified the discount math (flat + percent + over-cap clamping) and
+  the Cal.com payload parsing against Cal.com's documented example payload with isolated node
+  tests before wiring them in.
+- **Cal.com booking webhook.** New public `/api/webhooks/calcom` route — code-complete, not
+  yet live (needs your Cal.com setup + signing secret, checklist in the ⚠️ section above and
+  in the plan doc). Verifies Cal.com's `x-cal-signature-256` HMAC on every request (tested:
+  valid/invalid/tampered/missing signatures all behave correctly), is idempotent via
+  `properties.booking_event_uid` (safe against retries/duplicate deliveries), and fails loudly
+  with a 422 rather than silently creating an address-less property if the required `address`
+  booking question is ever missing or renamed.
+
+Syntax-checked all ten new/changed files.
 
 ## Done this session (2026-08-01, round 48 — fix intermittent "Inspector account required" on live)
 

@@ -7,7 +7,8 @@ import { authFetch } from '@/lib/authFetch'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Check, Trash2, Plus, Send, RotateCcw, Pencil, X, ChevronDown, ChevronRight, Phone, MessageSquare, StickyNote, Mail, BellOff, Bell } from 'lucide-react'
+import { Check, Trash2, Plus, Send, RotateCcw, Pencil, X, ChevronDown, ChevronRight, Phone, MessageSquare, StickyNote, Mail, BellOff, Bell, CalendarPlus } from 'lucide-react'
+import { googleCalendarLink } from '@/lib/googleCalendar'
 
 // CRM tab — a customer table, grouped by customer (not by property): a
 // customer with more than one property shows as one row with all their
@@ -92,7 +93,7 @@ function EditableField({ value, placeholder, onSave, type = 'text' }) {
   )
 }
 
-function HistoryRow({ f, addressLabel, onSend, onMarkDone, onReopen, onDelete, sending, hasEmail }) {
+function HistoryRow({ f, addressLabel, location, onSend, onMarkDone, onReopen, onDelete, sending, hasEmail }) {
   const overdue = isOverdue(f)
   const label = f.status === 'done' ? 'Done' : f.status === 'skipped' ? 'Skipped' : overdue ? 'Overdue' : 'Pending'
   const color = f.status === 'done' ? 'var(--ok)' : f.status === 'skipped' ? 'var(--text-muted)' : overdue ? 'var(--warn)' : 'var(--accent)'
@@ -116,6 +117,16 @@ function HistoryRow({ f, addressLabel, onSend, onMarkDone, onReopen, onDelete, s
       <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
         {f.status === 'pending' && (
           <>
+            {f.due_date && (
+              <a
+                href={googleCalendarLink({ title: `Follow-up: ${location || 'customer'}`, date: f.due_date, details: f.note || '' })}
+                target="_blank" rel="noopener noreferrer"
+                title="Add to Google Calendar"
+                style={{ ...iconBtn, textDecoration: 'none' }}
+              >
+                <CalendarPlus className="size-3.5" />
+              </a>
+            )}
             <button onClick={() => onSend(f)} disabled={!hasEmail || sending === f.id} title={hasEmail ? 'Send follow-up email now' : 'No customer email on file'} style={{ ...iconBtn, color: hasEmail ? 'var(--accent)' : 'var(--text-muted)', cursor: hasEmail ? 'pointer' : 'not-allowed', opacity: sending === f.id ? 0.5 : 1 }}>
               <Send className="size-3.5" />
             </button>
@@ -247,7 +258,7 @@ function SendEmailForm({ properties, defaultPropertyId, templates, contact, onSe
   )
 }
 
-function CustomerGroupRow({ group, expanded, onToggle, templates, onSaveField, onToggleUnsubscribed, onAddFollowup, onLogContact, onSendEmail, onSend, onMarkDone, onReopen, onDelete, sending }) {
+function CustomerGroupRow({ group, expanded, onToggle, templates, onSaveField, onToggleUnsubscribed, onAddFollowup, onLogContact, onSendEmail, onSend, onMarkDone, onReopen, onDelete, sending, discounts, onAddPayment, onSetPaymentStatus, onDeletePayment }) {
   const router = useRouter()
   const [dueDate, setDueDate] = useState('')
   const [note, setNote] = useState('')
@@ -360,6 +371,7 @@ function CustomerGroupRow({ group, expanded, onToggle, templates, onSaveField, o
                   key={f.id}
                   f={f}
                   addressLabel={multi ? group.properties.find(p => p.id === f.property_id)?.address : null}
+                  location={group.properties.find(p => p.id === f.property_id)?.address || group.properties[0].address}
                   sending={sending}
                   hasEmail={!!group.customer_email}
                   onSend={onSend}
@@ -384,6 +396,16 @@ function CustomerGroupRow({ group, expanded, onToggle, templates, onSaveField, o
             properties={group.properties}
             defaultPropertyId={group.properties[0].id}
             onLog={onLogContact}
+          />
+
+          <PaymentsSection
+            properties={group.properties}
+            defaultPropertyId={group.properties[0].id}
+            payments={group.payments}
+            discounts={discounts}
+            onAdd={onAddPayment}
+            onSetStatus={onSetPaymentStatus}
+            onDelete={onDeletePayment}
           />
 
           <div style={{ border: '1px solid var(--line)', borderRadius: 6, padding: 10, background: 'var(--bg)' }}>
@@ -489,6 +511,177 @@ function TemplatesPanel({ templates, onAdd, onUpdate, onDelete }) {
   )
 }
 
+function formatCents(cents) {
+  return `$${(cents / 100).toFixed(2)}`
+}
+
+function DiscountsPanel({ discounts, onAdd, onUpdate, onDelete }) {
+  const [open, setOpen] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [code, setCode] = useState('')
+  const [label, setLabel] = useState('')
+  const [kind, setKind] = useState('flat')
+  const [amount, setAmount] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  function startAdd() { setAdding(true); setCode(''); setLabel(''); setKind('flat'); setAmount('') }
+
+  async function save() {
+    if (!code.trim() || !amount) return
+    setSaving(true)
+    await onAdd({ code, label, kind, amount })
+    setSaving(false)
+    setAdding(false)
+  }
+
+  return (
+    <div style={{ border: '1px solid var(--line)', borderRadius: 6, marginBottom: 16, background: 'var(--surface)', maxWidth: 720 }}>
+      <button onClick={() => setOpen(o => !o)} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer' }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>Discount Codes ({discounts.length})</span>
+        {open ? <ChevronDown className="size-4" style={{ color: 'var(--text-muted)' }} /> : <ChevronRight className="size-4" style={{ color: 'var(--text-muted)' }} />}
+      </button>
+      {open && (
+        <div style={{ borderTop: '1px solid var(--line)', padding: 14 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 0, marginBottom: 10, lineHeight: 1.6 }}>
+            Self-managed, independent of any payment processor — type a code here when recording a payment on a customer's Payments section to apply it.
+          </p>
+          {discounts.map(d => (
+            <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, border: '1px solid var(--line)', borderRadius: 6, padding: '8px 10px', marginBottom: 6, background: 'var(--bg)', opacity: d.active ? 1 : 0.5 }}>
+              <div style={{ minWidth: 0 }}>
+                <span style={{ fontSize: 12.5, fontWeight: 700, fontFamily: 'monospace', color: 'var(--text)' }}>{d.code}</span>
+                <span style={{ fontSize: 11.5, color: 'var(--text-muted)', marginLeft: 8 }}>
+                  {d.kind === 'percent' ? `${d.amount}% off` : `$${Number(d.amount).toFixed(2)} off`}{d.label ? ` — ${d.label}` : ''}{!d.active ? ' (inactive)' : ''}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                <button onClick={() => onUpdate(d.id, { active: !d.active })} title={d.active ? 'Deactivate' : 'Activate'} style={iconBtn}>
+                  {d.active ? <BellOff className="size-3.5" /> : <Bell className="size-3.5" />}
+                </button>
+                <button onClick={() => onDelete(d.id)} title="Delete" style={iconBtn}><Trash2 className="size-3.5" /></button>
+              </div>
+            </div>
+          ))}
+
+          {adding ? (
+            <div style={{ border: '1px solid var(--line)', borderRadius: 6, padding: 10, background: 'var(--bg)' }}>
+              <input value={code} onChange={e => setCode(e.target.value)} placeholder="Code, e.g. SPRING10" style={{ fontSize: 12.5, padding: '5px 8px', border: '1px solid var(--line)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)', width: '100%', marginBottom: 6, fontFamily: 'inherit' }} />
+              <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Label (optional, e.g. Spring promo)" style={{ fontSize: 12.5, padding: '5px 8px', border: '1px solid var(--line)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)', width: '100%', marginBottom: 6, fontFamily: 'inherit' }} />
+              <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                <Select value={kind} onValueChange={setKind}>
+                  <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="flat">Flat $ off</SelectItem>
+                    <SelectItem value="percent">% off</SelectItem>
+                  </SelectContent>
+                </Select>
+                <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder={kind === 'percent' ? 'e.g. 10' : 'e.g. 25.00'} style={{ fontSize: 12.5, padding: '5px 8px', border: '1px solid var(--line)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)', width: 120, fontFamily: 'inherit' }} />
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <Button onClick={save} disabled={saving} className="text-[11px] font-bold uppercase h-auto py-1.5 px-3">{saving ? 'Saving…' : 'Add Code'}</Button>
+                <Button variant="outline" onClick={() => setAdding(false)} className="text-[11px] font-bold uppercase h-auto py-1.5 px-3">Cancel</Button>
+              </div>
+            </div>
+          ) : (
+            <Button variant="outline" onClick={startAdd} className="flex gap-1.5 text-[11.5px] font-bold uppercase tracking-wide h-auto py-2 px-3">
+              <Plus className="size-3.5" /> New Discount Code
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const PAYMENT_STATUS_META = {
+  pending:  { label: 'Pending',  color: 'var(--accent)' },
+  paid:     { label: 'Paid',     color: 'var(--ok)' },
+  refunded: { label: 'Refunded', color: 'var(--text-muted)' },
+  failed:   { label: 'Failed',   color: 'var(--warn)' },
+}
+
+function PaymentsSection({ properties, defaultPropertyId, payments, discounts, onAdd, onSetStatus, onDelete }) {
+  const [propertyId, setPropertyId] = useState(defaultPropertyId)
+  const [amount, setAmount] = useState('')
+  const [method, setMethod] = useState('cash')
+  const [discountCode, setDiscountCode] = useState('')
+  const [status, setStatus] = useState('paid')
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function submit() {
+    const amountNum = Number(amount)
+    if (!Number.isFinite(amountNum) || amountNum <= 0) return
+    setSaving(true)
+    const ok = await onAdd({
+      propertyId: propertyId || defaultPropertyId, amountCents: Math.round(amountNum * 100),
+      method, status, discountCode: discountCode || undefined, notes,
+    })
+    if (ok) { setAmount(''); setDiscountCode(''); setNotes('') }
+    setSaving(false)
+  }
+
+  return (
+    <div style={{ border: '1px solid var(--line)', borderRadius: 6, padding: 10, marginBottom: 10, background: 'var(--bg)' }}>
+      <div style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>Payments</div>
+
+      {payments.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          {payments.map(p => {
+            const meta = PAYMENT_STATUS_META[p.status] || PAYMENT_STATUS_META.pending
+            return (
+              <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, border: '1px solid var(--line)', borderRadius: 6, padding: '8px 10px', marginBottom: 6, background: 'var(--surface)' }}>
+                <div style={{ minWidth: 0 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{formatCents(p.amount_cents)}</span>
+                  <span style={{ fontSize: 10, fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.05em', color: meta.color, border: `1px solid ${meta.color}`, borderRadius: 20, padding: '1px 7px', marginLeft: 8 }}>{meta.label}</span>
+                  {p.method && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8, textTransform: 'capitalize' }}>{p.method}</span>}
+                  {p.discount_code && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>({p.discount_code}: -{formatCents(p.discount_amount_cents)})</span>}
+                  {p.notes && <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 3 }}>{p.notes}</div>}
+                  <div style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--text-muted)', marginTop: 3 }}>{new Date(p.created_at).toLocaleDateString()}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  {p.status !== 'paid' && <button onClick={() => onSetStatus(p.id, 'paid')} title="Mark paid" style={{ ...iconBtn, color: 'var(--ok)' }}><Check className="size-3.5" /></button>}
+                  {p.status === 'paid' && <button onClick={() => onSetStatus(p.id, 'refunded')} title="Mark refunded" style={iconBtn}><RotateCcw className="size-3.5" /></button>}
+                  <button onClick={() => onDelete(p.id)} title="Delete" style={iconBtn}><Trash2 className="size-3.5" /></button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <PropertyPicker properties={properties} value={propertyId} onChange={setPropertyId} />
+      <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+        <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Amount $" style={{ fontSize: 13, padding: '6px 10px', border: '1px solid var(--line)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)', width: 110, fontFamily: 'inherit' }} />
+        <Select value={method} onValueChange={setMethod}>
+          <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="cash">Cash</SelectItem>
+            <SelectItem value="check">Check</SelectItem>
+            <SelectItem value="venmo">Venmo</SelectItem>
+            <SelectItem value="stripe">Stripe</SelectItem>
+            <SelectItem value="other">Other</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={status} onValueChange={setStatus}>
+          <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="paid">Paid</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+          </SelectContent>
+        </Select>
+        <input list="crm-discount-codes" value={discountCode} onChange={e => setDiscountCode(e.target.value)} placeholder="Discount code (optional)" style={{ fontSize: 13, padding: '6px 10px', border: '1px solid var(--line)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)', width: 160, fontFamily: 'inherit' }} />
+        <datalist id="crm-discount-codes">
+          {discounts.filter(d => d.active).map(d => <option key={d.id} value={d.code} />)}
+        </datalist>
+      </div>
+      <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes (optional)" rows={2} className="mb-2" />
+      <Button onClick={submit} disabled={saving || !amount} className="flex gap-1.5 text-[11.5px] font-bold uppercase tracking-wide h-auto py-2 px-3">
+        <Plus className="size-3.5" /> {saving ? 'Saving…' : 'Record Payment'}
+      </Button>
+    </div>
+  )
+}
+
 function customerKey(p) {
   const email = (p.customer_email || '').trim().toLowerCase()
   if (email) return `email:${email}`
@@ -501,6 +694,8 @@ export default function CrmPage() {
   const [properties, setProperties] = useState([])
   const [followups, setFollowups] = useState([])
   const [templates, setTemplates] = useState([])
+  const [payments, setPayments] = useState([])
+  const [discounts, setDiscounts] = useState([])
   const [fetching, setFetching] = useState(true)
   const [search, setSearch] = useState('')
   const [expandedKey, setExpandedKey] = useState(null)
@@ -514,12 +709,14 @@ export default function CrmPage() {
       supabase.from('properties').select('id, address, customer_name, customer_email, customer_phone, customer_notified_at, unsubscribed, homeowner_status, report_status').order('address'),
       authFetch('/api/crm/followups').then(res => res.json()),
       authFetch('/api/crm/templates').then(res => res.json()),
-    ]).then(([propsRes, followupsData, templatesData]) => {
+      authFetch('/api/crm/payments').then(res => res.json()),
+      authFetch('/api/crm/discounts').then(res => res.json()),
+    ]).then(([propsRes, followupsData, templatesData, paymentsData, discountsData]) => {
       if (propsRes.error) {
-        // Most likely cause: a migration (013_customer_contact.sql or
-        // 014_crm_phase2.sql) hasn't been run yet — a missing column fails
-        // this select outright, not just that one field, and would
-        // otherwise silently render an empty table.
+        // Most likely cause: a migration (013_customer_contact.sql,
+        // 014_crm_phase2.sql, or 015_booking_payments.sql) hasn't been run
+        // yet — a missing column fails this select outright, not just that
+        // one field, and would otherwise silently render an empty table.
         setLoadError(propsRes.error.message)
         setProperties([])
       } else {
@@ -527,6 +724,8 @@ export default function CrmPage() {
       }
       setFollowups(followupsData.followups || [])
       setTemplates(templatesData.templates || [])
+      setPayments(paymentsData.payments || [])
+      setDiscounts(discountsData.discounts || [])
     }).finally(() => setFetching(false))
   }
 
@@ -641,6 +840,39 @@ export default function CrmPage() {
     load()
   }
 
+  async function addPayment(payment) {
+    const res = await authFetch('/api/crm/payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payment) })
+    if (!res.ok) { alert((await res.json()).error || 'Failed to save payment'); return false }
+    load()
+    return true
+  }
+  async function setPaymentStatus(id, status) {
+    const res = await authFetch(`/api/crm/payments/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
+    if (!res.ok) { alert((await res.json()).error || 'Failed to update payment'); return }
+    load()
+  }
+  async function deletePayment(id) {
+    if (!confirm('Delete this payment record?')) return
+    await authFetch(`/api/crm/payments/${id}`, { method: 'DELETE' }).catch(() => {})
+    load()
+  }
+
+  async function addDiscount(d) {
+    const res = await authFetch('/api/crm/discounts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d) })
+    if (!res.ok) { alert((await res.json()).error || 'Failed to save discount'); return }
+    load()
+  }
+  async function updateDiscount(id, d) {
+    const res = await authFetch(`/api/crm/discounts/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d) })
+    if (!res.ok) { alert((await res.json()).error || 'Failed to save discount'); return }
+    load()
+  }
+  async function deleteDiscount(id) {
+    if (!confirm('Delete this discount code?')) return
+    await authFetch(`/api/crm/discounts/${id}`, { method: 'DELETE' }).catch(() => {})
+    load()
+  }
+
   const groupMap = new Map()
   properties.forEach(p => {
     const key = customerKey(p)
@@ -651,6 +883,7 @@ export default function CrmPage() {
   const groups = Array.from(groupMap.entries()).map(([key, props]) => {
     const ids = props.map(p => p.id)
     const groupFollowups = followups.filter(f => ids.includes(f.property_id))
+    const groupPayments = payments.filter(pay => ids.includes(pay.property_id)).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     const pending = groupFollowups.filter(f => f.status === 'pending').sort((a, b) => {
       if (!a.due_date) return 1
       if (!b.due_date) return -1
@@ -667,6 +900,7 @@ export default function CrmPage() {
       customer_phone: props.find(p => p.customer_phone)?.customer_phone || null,
       unsubscribed: props.some(p => p.unsubscribed),
       followups: groupFollowups.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)),
+      payments: groupPayments,
       nextFollowup: pending[0] || null,
       lastContact: sentDates.length ? sentDates[sentDates.length - 1] : null,
     }
@@ -704,6 +938,7 @@ export default function CrmPage() {
       )}
 
       <TemplatesPanel templates={templates} onAdd={addTemplate} onUpdate={updateTemplate} onDelete={deleteTemplate} />
+      <DiscountsPanel discounts={discounts} onAdd={addDiscount} onUpdate={updateDiscount} onDelete={deleteDiscount} />
 
       <input
         value={search}
@@ -743,6 +978,10 @@ export default function CrmPage() {
           onReopen={f => setStatus(f, 'pending')}
           onDelete={deleteFollowup}
           sending={sending}
+          discounts={discounts}
+          onAddPayment={addPayment}
+          onSetPaymentStatus={setPaymentStatus}
+          onDeletePayment={deletePayment}
         />
       ))}
     </div>
