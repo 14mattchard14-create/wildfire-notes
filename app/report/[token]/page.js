@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { parseReportData, getPhotoCaption } from '@/lib/reportSchema';
-import { reportColors, StatusPill, RiskBadge, CollapsibleCard, priorityColor } from '@/components/ReportView';
+import { reportColors, StatusPill, RiskBadge, CollapsibleCard, priorityColor, FindingView, ZonePhotoGrid, ActionPlanTable } from '@/components/ReportView';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -32,65 +32,77 @@ const ZONE_GUIDE = [
 
 function zoneKey(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
-// The recommendation is the one thing every homeowner needs to see; the
-// finding description and the "why" behind the status are supporting
-// detail, folded together behind one "Learn more" toggle instead of a
-// separate paragraph plus a tooltip icon that said much the same thing
-// twice.
-function FindingCard({ f }) {
-  const [expanded, setExpanded] = useState(false);
-  const isNC = /non-compliant/i.test(f.status || '');
-  const isOK = /^(base|plus) compliant/i.test(f.status || '');
-  const hasDetails = !!(f.finding || f.rationale);
-  return (
-    <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderLeft: `4px solid ${isNC ? c.warn : isOK ? c.ok : c.border}`, borderRadius: 8, padding: '14px 16px', marginBottom: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: hasDetails || f.recommendation ? 8 : 0 }}>
-        <div style={{ fontWeight: 700, color: c.navy, fontSize: 14.5 }}>{f.category}</div>
-        <StatusPill status={f.status} />
-      </div>
+// --- In-page keyword search (like browser Ctrl+F) ---
+// The sidebar search box already filters the table of contents against
+// each section's full text (see tocItems' `content` field below), but that
+// only proves a section CONTAINS a match — it doesn't show WHERE. These
+// two helpers walk the actual rendered DOM under a container ref and wrap
+// every matching substring in a <mark>, so a search genuinely highlights
+// hits anywhere in the report body (findings, captions, action items, the
+// zone guide, even the disclaimer), not just section titles.
+const SEARCH_MIN_LEN = 2;
+const MATCH_COLOR = '#FFE58A';
+const ACTIVE_MATCH_COLOR = '#FFB347';
 
-      {hasDetails && (
-        <button
-          onClick={() => setExpanded(x => !x)}
-          style={{ background: 'none', border: 'none', padding: 0, margin: '0 0 8px', color: c.slate, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-        >
-          {expanded ? '▾ Hide details' : '▸ Learn more about this finding'}
-        </button>
-      )}
-      {expanded && (
-        <div style={{ marginBottom: 10, fontSize: 13.5, color: c.text, lineHeight: 1.6 }}>
-          {f.finding && <div style={{ marginBottom: f.rationale ? 6 : 0 }}>{f.finding}</div>}
-          {f.rationale && <div style={{ color: c.muted, fontStyle: 'italic' }}>{f.rationale}</div>}
-        </div>
-      )}
-
-      {f.recommendation && (
-        <div style={{ background: c.surfaceAlt, borderRadius: 6, padding: '9px 13px', fontSize: 13.5, color: c.text, lineHeight: 1.6 }}>
-          <strong style={{ color: c.navy }}>Recommendation:</strong> {f.recommendation}
-        </div>
-      )}
-    </div>
-  );
+function clearHighlights(container) {
+  if (!container) return;
+  container.querySelectorAll('mark[data-report-search]').forEach(mark => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
+  });
+  container.normalize();
 }
 
+function highlightMatches(container, query) {
+  if (!container || !query || query.trim().length < SEARCH_MIN_LEN) return [];
+  const q = query.trim().toLowerCase();
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (!node.nodeValue || !node.nodeValue.toLowerCase().includes(q)) return NodeFilter.FILTER_SKIP;
+      const tag = node.parentElement?.tagName;
+      if (tag === 'SCRIPT' || tag === 'STYLE') return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  const nodes = [];
+  let node;
+  while ((node = walker.nextNode())) nodes.push(node);
+
+  const marks = [];
+  nodes.forEach(textNode => {
+    const text = textNode.nodeValue;
+    const lower = text.toLowerCase();
+    const frag = document.createDocumentFragment();
+    let cursor = 0;
+    let idx = lower.indexOf(q, cursor);
+    while (idx !== -1) {
+      if (idx > cursor) frag.appendChild(document.createTextNode(text.slice(cursor, idx)));
+      const mark = document.createElement('mark');
+      mark.dataset.reportSearch = 'true';
+      mark.style.background = MATCH_COLOR;
+      mark.style.color = 'inherit';
+      mark.style.borderRadius = '2px';
+      mark.textContent = text.slice(idx, idx + q.length);
+      frag.appendChild(mark);
+      marks.push(mark);
+      cursor = idx + q.length;
+      idx = lower.indexOf(q, cursor);
+    }
+    if (cursor < text.length) frag.appendChild(document.createTextNode(text.slice(cursor)));
+    textNode.parentNode.replaceChild(frag, textNode);
+  });
+  return marks;
+}
+
+// FindingView and the zone photo carousel now live in components/ReportView.js
+// (shared with the review page's read-only rendering) — see ZoneSection
+// below for how they're composed here. ZonePhotoGrid takes the full zone
+// object (not just its name) so it can see any extraPhotos/photoOrder added
+// in the review editor.
 function ZoneSection({ zone, entries, reportData, id }) {
-  const zonePhotos = (entries || []).filter(e => e.photo_url && zoneKey(e.zone) === zoneKey(zone.zone));
   return (
     <CollapsibleCard title={zone.zone} id={id} isH2>
-      {(zone.findings || []).map((f, i) => <FindingCard key={i} f={f} />)}
-      {zonePhotos.length > 0 && (
-        <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
-          {zonePhotos.map((e, i) => (
-            <div key={i} style={{ border: `1px solid ${c.border}`, borderRadius: 8, overflow: 'hidden', background: c.surfaceAlt }}>
-              <img src={e.photo_url} alt={getPhotoCaption(reportData, e)} style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' }} />
-              <div style={{ padding: '10px 12px' }}>
-                <div style={{ fontSize: 12, color: c.text, lineHeight: 1.5, marginBottom: 6, fontStyle: 'italic' }}>{getPhotoCaption(reportData, e)}</div>
-                <StatusPill status={e.status} />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      {(zone.findings || []).map((f, i) => <FindingView key={i} f={f} />)}
+      <ZonePhotoGrid zone={zone} entries={entries} reportData={reportData} />
     </CollapsibleCard>
   );
 }
@@ -109,16 +121,49 @@ const SIDEBAR_WIDTH = 280;
 // measured height of the navy header above it — so it can never land on top
 // of the header's own title text, and the panel itself only ever occupies
 // the space below the header rather than competing with it for the same row.
-function ReportSidebar({ items, query, onQueryChange, open, onToggle, isMobile, topOffset }) {
+function ReportSidebar({ items, query, onQueryChange, open, onToggle, isMobile, topOffset, matchCount, activeMatch, onNextMatch, onPrevMatch }) {
   const q = query.trim().toLowerCase();
   const filtered = q
     ? items.filter(item => item.title.toLowerCase().includes(q) || item.content.includes(q))
     : items;
   const width = isMobile ? 'min(300px, 85vw)' : SIDEBAR_WIDTH;
+  const showMatchNav = query.trim().length >= SEARCH_MIN_LEN;
+
+  // The sidebar starts pinned just below the navy header (top: topOffset)
+  // — but that left a permanently blank strip above it once you'd
+  // scrolled the header out of view, since `position: fixed` elements
+  // don't otherwise know anything happened. This effect tracks scroll and
+  // shrinks the offset by exactly how far you've scrolled (never below 0),
+  // so the panel's top edge rises in lockstep with the page — by the time
+  // the header has scrolled fully out of view, the sidebar has expanded to
+  // use the full viewport height. Written as direct style writes via refs
+  // (not React state) so it can run every scroll frame without triggering
+  // a re-render each time.
+  const toggleRef = useRef(null);
+  const panelRef = useRef(null);
+
+  useEffect(() => {
+    function update() {
+      const top = Math.max(0, topOffset - window.scrollY);
+      if (toggleRef.current) toggleRef.current.style.top = `${top + 10}px`;
+      if (panelRef.current) {
+        panelRef.current.style.top = `${top}px`;
+        panelRef.current.style.height = `calc(100vh - ${top}px)`;
+      }
+    }
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, [topOffset]);
 
   return (
     <>
       <button
+        ref={toggleRef}
         onClick={onToggle}
         aria-label={open ? 'Collapse table of contents' : 'Expand table of contents'}
         title="Table of contents"
@@ -138,7 +183,7 @@ function ReportSidebar({ items, query, onQueryChange, open, onToggle, isMobile, 
         <div onClick={onToggle} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 39 }} />
       )}
 
-      <div style={{
+      <div ref={panelRef} style={{
         position: 'fixed', top: topOffset, left: 0, height: `calc(100vh - ${topOffset}px)`,
         width,
         background: c.bg, borderRight: `1px solid ${c.border}`, zIndex: 40, overflowY: 'auto', boxSizing: 'border-box',
@@ -161,9 +206,25 @@ function ReportSidebar({ items, query, onQueryChange, open, onToggle, isMobile, 
           type="text"
           value={query}
           onChange={e => onQueryChange(e.target.value)}
+          onKeyDown={e => {
+            if (e.key !== 'Enter' || !showMatchNav) return;
+            e.preventDefault();
+            e.shiftKey ? onPrevMatch() : onNextMatch();
+          }}
           placeholder="Search the report…"
-          style={{ width: '100%', boxSizing: 'border-box', background: c.surface, border: `1px solid ${c.border}`, borderRadius: 8, color: c.text, fontSize: 13.5, padding: '9px 12px', outline: 'none', marginBottom: 14 }}
+          style={{ width: '100%', boxSizing: 'border-box', background: c.surface, border: `1px solid ${c.border}`, borderRadius: 8, color: c.text, fontSize: 13.5, padding: '9px 12px', outline: 'none', marginBottom: showMatchNav ? 6 : 14 }}
         />
+        {showMatchNav && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, fontSize: 12, color: c.muted }}>
+            <span>{matchCount > 0 ? `${activeMatch + 1} of ${matchCount} matches` : 'No matches'}</span>
+            {matchCount > 0 && (
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button onClick={onPrevMatch} title="Previous match (Shift+Enter)" style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 5, width: 24, height: 24, cursor: 'pointer', color: c.text, fontSize: 13, lineHeight: 1 }}>‹</button>
+                <button onClick={onNextMatch} title="Next match (Enter)" style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 5, width: 24, height: 24, cursor: 'pointer', color: c.text, fontSize: 13, lineHeight: 1 }}>›</button>
+              </div>
+            )}
+          </div>
+        )}
         <ol style={{ margin: 0, padding: 0, listStyle: 'none' }}>
           {filtered.map((item, i) => (
             <li key={i}>
@@ -209,35 +270,6 @@ function ZoneGuide() {
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function ActionPlanTable({ items }) {
-  if (!items?.length) return <p style={{ color: c.muted, fontSize: 14 }}>No outstanding actions.</p>;
-  return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-        <thead>
-          <tr>
-            {['#', 'Action', 'Zone', 'Priority'].map(h => (
-              <th key={h} style={{ background: c.navy, color: '#fff', padding: '10px 14px', textAlign: 'left', fontWeight: 700, fontSize: 12, letterSpacing: '0.04em' }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((a, i) => (
-            <tr key={i} style={{ background: i % 2 === 0 ? c.surface : c.surfaceAlt }}>
-              <td style={{ padding: '10px 14px', borderBottom: `1px solid ${c.border}`, color: c.muted }}>{i + 1}</td>
-              <td style={{ padding: '10px 14px', borderBottom: `1px solid ${c.border}`, color: c.text }}>{a.action}</td>
-              <td style={{ padding: '10px 14px', borderBottom: `1px solid ${c.border}`, color: c.text }}>{a.zone}</td>
-              <td style={{ padding: '10px 14px', borderBottom: `1px solid ${c.border}` }}>
-                <span style={{ color: priorityColor(a.priority), fontWeight: 700, fontSize: 12.5 }}>{a.priority}</span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }
@@ -364,6 +396,12 @@ export default function ReportPage({ params }) {
   // many of the date/inspector/report-date fields are present.
   const headerRef = useRef(null);
   const [headerHeight, setHeaderHeight] = useState(96);
+  // The actual report body — highlightMatches walks this subtree only, so
+  // it never touches the sidebar's own TOC list or the search input itself.
+  const contentRef = useRef(null);
+  const matchElsRef = useRef([]);
+  const [matchCount, setMatchCount] = useState(0);
+  const [activeMatch, setActiveMatch] = useState(0);
 
   useEffect(() => {
     function measure() {
@@ -373,6 +411,35 @@ export default function ReportPage({ params }) {
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
   }, [report]);
+
+  // Re-highlights whenever the search query changes (or the report content
+  // itself first renders) — clears any previous <mark> wrapping first so
+  // repeated searches don't stack highlights or leak marks from an earlier
+  // query.
+  useEffect(() => {
+    const container = contentRef.current;
+    if (!container) return;
+    clearHighlights(container);
+    const marks = highlightMatches(container, sidebarQuery);
+    matchElsRef.current = marks;
+    setMatchCount(marks.length);
+    setActiveMatch(0);
+    if (marks.length > 0) {
+      marks[0].style.background = ACTIVE_MATCH_COLOR;
+      marks[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [sidebarQuery, report]);
+
+  function gotoMatch(delta) {
+    const marks = matchElsRef.current;
+    if (!marks.length) return;
+    const current = marks[activeMatch];
+    if (current) current.style.background = MATCH_COLOR;
+    const next = (activeMatch + delta + marks.length) % marks.length;
+    setActiveMatch(next);
+    marks[next].style.background = ACTIVE_MATCH_COLOR;
+    marks[next].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 
   useEffect(() => {
     const saved = sessionStorage.getItem(`report_access_${token}`);
@@ -483,7 +550,11 @@ export default function ReportPage({ params }) {
 
   return (
     <div style={{ minHeight: '100vh', background: c.bg, fontFamily: 'system-ui, -apple-system, sans-serif', color: c.text, colorScheme: 'light' }}>
-      <ReportSidebar items={tocItems} query={sidebarQuery} onQueryChange={setSidebarQuery} open={sidebarOpen} onToggle={() => setSidebarOpen(o => !o)} isMobile={isMobile} topOffset={headerHeight} />
+      <ReportSidebar
+        items={tocItems} query={sidebarQuery} onQueryChange={setSidebarQuery} open={sidebarOpen}
+        onToggle={() => setSidebarOpen(o => !o)} isMobile={isMobile} topOffset={headerHeight}
+        matchCount={matchCount} activeMatch={activeMatch} onNextMatch={() => gotoMatch(1)} onPrevMatch={() => gotoMatch(-1)}
+      />
 
       {/* Header is always full-width and unshifted — the sidebar starts
           below it (using the measured height above) rather than sharing its
@@ -506,7 +577,7 @@ export default function ReportPage({ params }) {
 
       <div style={{ marginLeft: !isMobile && sidebarOpen ? SIDEBAR_WIDTH : 0, transition: 'margin-left 0.22s ease' }}>
 
-      <div style={{ maxWidth: 820, margin: '0 auto', padding: '32px 24px 80px' }}>
+      <div ref={contentRef} style={{ maxWidth: 820, margin: '0 auto', padding: '32px 24px 80px' }}>
         <div style={{ background: '#FFF8F0', border: `1px solid ${c.tan}`, borderLeft: `4px solid ${c.tan}`, borderRadius: 10, padding: '14px 18px', marginBottom: 28, fontSize: 13, color: c.text, lineHeight: 1.7 }}>
           This report is intended to give homeowners a clear picture of their wildfire risk, while also outlining the gaps that would need to be addressed before the property could successfully obtain{' '}
           <a href="https://wildfireprepared.org/" target="_blank" rel="noopener" style={{ color: c.slate }}>Wildfire Prepared Home certification</a>.

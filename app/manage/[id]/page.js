@@ -7,6 +7,7 @@ import { useAuth } from '@/components/AuthProvider'
 import ThemeToggle from '@/components/ThemeToggle'
 import BrandLogo from '@/components/BrandLogo'
 import BackNav from '@/components/BackNav'
+import AdminSidebar from '@/components/AdminSidebar'
 import EntriesList from '@/components/EntriesList'
 import EntryForm from '@/components/EntryForm'
 import GuidedEntry from '@/components/GuidedEntry'
@@ -76,66 +77,72 @@ export default function PropertyReviewPage() {
   const CONTENT_WIDTH = 900
 
   return (
-    <div style={{ minHeight: '100vh', paddingBottom: 48 }}>
+    <div style={{ minHeight: '100vh' }}>
       <header style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--header-bg)', borderBottom: '1px solid var(--line)' }}>
-        <div style={{ maxWidth: CONTENT_WIDTH, margin: '0 auto', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <BrandLogo />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Button
-              variant="outline"
-              onClick={() => router.push(`/manage/${id}/review`)}
-              disabled={entries.length === 0}
-              title={entries.length === 0 ? 'Log at least one entry first' : undefined}
-              className="gap-1.5 text-[11.5px] font-bold uppercase tracking-wide h-auto py-2 px-3"
-            >
-              <ClipboardList className="size-3.5" /> Review & Publish
-            </Button>
-            <ThemeToggle />
+        <div style={{ padding: '18px 20px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ marginBottom: 4 }}><BrandLogo /></div>
+            <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: '0.02em', textTransform: 'uppercase', margin: 0, color: 'var(--header-text)' }}>Properties</h1>
           </div>
+          <ThemeToggle />
         </div>
       </header>
 
-      <BackNav href="/manage" label="All Properties" maxWidth={CONTENT_WIDTH} />
-
-      <main style={{ maxWidth: CONTENT_WIDTH, margin: '0 auto', padding: '20px 16px 64px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+        <AdminSidebar />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <BackNav href="/manage" label="All Properties" maxWidth="none" />
+          <main style={{ maxWidth: CONTENT_WIDTH, padding: '20px 24px 64px' }}>
         {fetching && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</p>}
 
         {!fetching && (
           <>
-            <div style={{ marginBottom: 16 }}>
-              {editingAddress ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Input
-                    value={addressDraft}
-                    onChange={e => setAddressDraft(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') saveAddress(); if (e.key === 'Escape') setEditingAddress(false) }}
-                    autoFocus
-                    className="h-8 max-w-xs text-[14px]"
-                  />
-                  <button onClick={saveAddress} disabled={savingAddress} title="Save" style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--ok)' }}>
-                    <Check className="size-4" />
-                  </button>
-                  <button onClick={() => setEditingAddress(false)} title="Cancel" style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--text-muted)', opacity: 0.6 }}>
-                    <X className="size-4" />
-                  </button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <h1
-                    onClick={startEditAddress}
-                    title="Click to edit address"
-                    style={{ fontSize: 20, fontWeight: 700, letterSpacing: '0.02em', margin: 0, color: 'var(--text)', cursor: 'pointer' }}
-                  >
-                    {property?.address ?? 'Loading…'}
-                  </h1>
-                  {property && (
-                    <button onClick={startEditAddress} title="Edit address" style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
-                      <Pencil className="size-3.5" />
+            <div style={{ marginBottom: 16, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div>
+                {editingAddress ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Input
+                      value={addressDraft}
+                      onChange={e => setAddressDraft(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveAddress(); if (e.key === 'Escape') setEditingAddress(false) }}
+                      autoFocus
+                      className="h-8 max-w-xs text-[14px]"
+                    />
+                    <button onClick={saveAddress} disabled={savingAddress} title="Save" style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--ok)' }}>
+                      <Check className="size-4" />
                     </button>
-                  )}
-                </div>
-              )}
-              {property?.visit_date && <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)' }}>Visit: {property.visit_date}</span>}
+                    <button onClick={() => setEditingAddress(false)} title="Cancel" style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--text-muted)', opacity: 0.6 }}>
+                      <X className="size-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <h1
+                      onClick={startEditAddress}
+                      title="Click to edit address"
+                      style={{ fontSize: 20, fontWeight: 700, letterSpacing: '0.02em', margin: 0, color: 'var(--text)', cursor: 'pointer' }}
+                    >
+                      {property?.address ?? 'Loading…'}
+                    </h1>
+                    {property && (
+                      <button onClick={startEditAddress} title="Edit address" style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
+                        <Pencil className="size-3.5" />
+                      </button>
+                    )}
+                  </div>
+                )}
+                {property?.visit_date && <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)' }}>Visit: {property.visit_date}</span>}
+              </div>
+
+              <Button
+                variant="outline"
+                onClick={() => router.push(`/manage/${id}/review`)}
+                disabled={entries.length === 0}
+                title={entries.length === 0 ? 'Log at least one entry first' : undefined}
+                className="gap-1.5 text-[11.5px] font-bold uppercase tracking-wide h-auto py-2 px-3 shrink-0"
+              >
+                <ClipboardList className="size-3.5" /> Review & Publish
+              </Button>
             </div>
 
             <Button
@@ -159,7 +166,9 @@ export default function PropertyReviewPage() {
             )}
           </>
         )}
-      </main>
+          </main>
+        </div>
+      </div>
     </div>
   )
 }

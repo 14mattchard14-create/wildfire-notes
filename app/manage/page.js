@@ -9,6 +9,7 @@ import BrandLogo from '@/components/BrandLogo'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Plus, MapPin, Pencil } from 'lucide-react'
+import AdminSidebar from '@/components/AdminSidebar'
 
 const HOMEOWNER_BADGE = {
   invited:     { label: 'Invited',     color: 'var(--text-muted)' },
@@ -123,9 +124,9 @@ export default function PropertiesTablePage() {
   const CONTENT_WIDTH = 1000
 
   return (
-    <div style={{ minHeight: '100vh', paddingBottom: 48 }}>
+    <div style={{ minHeight: '100vh' }}>
       <header style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--header-bg)', borderBottom: '1px solid var(--line)' }}>
-        <div style={{ maxWidth: CONTENT_WIDTH, margin: '0 auto', padding: '18px 16px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ padding: '18px 20px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <div style={{ marginBottom: 4 }}><BrandLogo /></div>
             <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: '0.02em', textTransform: 'uppercase', margin: 0, color: 'var(--header-text)' }}>Properties</h1>
@@ -143,7 +144,9 @@ export default function PropertiesTablePage() {
         </div>
       </header>
 
-      <main style={{ maxWidth: CONTENT_WIDTH, margin: '0 auto', padding: '20px 16px 64px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+        <AdminSidebar />
+        <main style={{ flex: 1, minWidth: 0, maxWidth: CONTENT_WIDTH, padding: '20px 24px 64px' }}>
         <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <Input
             type="text"
@@ -284,7 +287,8 @@ export default function PropertiesTablePage() {
             </table>
           </div>
         )}
-      </main>
+        </main>
+      </div>
     </div>
   )
 }

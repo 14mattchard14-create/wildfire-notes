@@ -1,9 +1,24 @@
 # Status — wildfire-notes
 
-_Last updated: 2026-07-30_
+_Last updated: 2026-07-31_
 
 ## ⚠️ Action required — new migration
 
+- Run `supabase/migrations/014_crm_phase2.sql` — adds `crm_message_templates` (seeded with 5
+  starter templates), `properties.unsubscribed`/`unsubscribed_at`/`unsubscribe_token`, and
+  `crm_followups.channel`/`template_id`. Required for the CRM's template picker, unsubscribe
+  link/toggle, and call/text logging to work at all.
+- Run `supabase/migrations/013_customer_contact.sql` — adds `properties.customer_name` and
+  `properties.customer_phone`. Required for the `/crm` table's Name field and phone column to
+  save anything (email already existed).
+- Run `supabase/migrations/012_crm_followups.sql` — new `crm_followups` table. Required for
+  the new `/crm` tab (scheduling/tracking customer follow-ups, manual "Send Now" emails) to
+  save or send anything.
+- Run `supabase/migrations/011_report_lessons.sql` — new `report_lessons` table. Required for
+  the new `/insights/lessons` page (freeform lessons-learned notes) to save anything.
+- Run `supabase/migrations/010_report_versions.sql` — new `report_versions` table. Required
+  for the review page's per-section edit tracking, the "Final Report" button, and the new
+  `/quality` Report Quality portal to work at all (all three read/write this table).
 - Run `supabase/migrations/009_guided_segment_notes.sql` — adds `guided_segments.notes`.
   Required for the new per-segment Notes box in Guided Entry (replaces the old Site Notes
   tab) to save anything.
@@ -20,6 +35,571 @@ _Last updated: 2026-07-30_
   troubleshooting).
 - No new npm packages — reuses the existing `entry-photos` Supabase Storage bucket under
   a `satellite/` prefix, no new bucket needed.
+
+## Done this session (2026-07-31, round 47 — Log Contact: date/time stamp)
+
+Fixed a real gap from round 46: logging a call/text/note wrote `completed_at` on the server
+but the UI never showed it (the "Emailed/Logged" line only checked `sent_at`, which is
+email-only), so a logged contact silently had no visible timestamp at all. Now:
+
+- `LogContactForm` has a "When" `datetime-local` field, defaulted to right now but editable —
+  for logging something that happened earlier rather than only "right now."
+- `/api/crm/followups` POST accepts an optional `completedAt` and uses it (validated, falls
+  back to now if missing/invalid) instead of always stamping the request time.
+- `HistoryRow` now shows `sent_at || completed_at` with date *and* time (was date-only, and
+  only for emails) for any done/logged entry; the due-date line is now only shown for still-
+  pending items instead of also showing a stale "No due date" on completed ones.
+
+Syntax-checked both changed files.
+
+## Done this session (2026-07-31, round 46 — CRM phase 2: templates, unsubscribe, call/text log, multi-property customers)
+
+Big round based on user feedback on what a real CRM needs. Four additions, all built on the
+existing `crm_followups` log rather than new parallel systems:
+
+- **Message templates.** New `crm_message_templates` table, seeded with 5 drafted templates
+  (Annual Check-In, Home Hardening Progress Report, Service Confirmation, Seasonal Debris
+  Check, General Follow-up) covering the described business patterns — one-and-done
+  inspections, before/after hardening reports, basic service work (e.g. mesh installs), and a
+  maybe-annual debris check. `/api/crm/templates` (+ `/[id]`) for CRUD. A collapsible
+  "Message Templates" panel at the top of `/crm` lets you add/edit/delete more. `{{address}}`
+  and `{{name}}` tokens get substituted when a template is picked in the Send flow.
+- **Unsubscribe tracking.** `properties.unsubscribed`/`unsubscribed_at`/`unsubscribe_token`
+  (a random uuid, not the property id, so the link can't be enumerated). Every follow-up email
+  now has an unsubscribe link in the footer, handled by a new public (no-auth)
+  `/api/crm/unsubscribe` route. `/api/crm/send-followup` refuses to send if the property is
+  marked unsubscribed. Inspectors can also toggle it manually from the CRM (e.g. someone asks
+  to opt out over the phone) — that applies to every property linked to that customer at once.
+  One known gap: the public link only opts out the specific property tied to that token: if
+  the same customer has multiple properties and clicks unsubscribe from an email about one of
+  them, the others aren't automatically covered (the manual toggle in the CRM is group-wide;
+  the email-triggered one isn't yet).
+- **Call/text/note logging.** `crm_followups.channel` (`email`/`call`/`text`/`note`) — logging
+  a call or text is just a `crm_followups` row created directly with `status: 'done'`, no
+  email involved. New "Log a call or text" mini-form in the expanded row, alongside the
+  existing schedule-a-follow-up form. History rows now show a channel icon and "Logged" vs.
+  "Emailed" language.
+- **Multi-property customers.** `/crm` now groups rows by customer identity (matched on
+  email, falling back to phone, falling back to one row per property if neither is on file)
+  instead of one row per property. A customer with several properties shows as a single row
+  listing every linked address; editing name/email/phone updates all of them at once. The
+  history/schedule/log/send actions all gained a property picker that only appears when the
+  customer has more than one property (hidden for the common single-property case, so nothing
+  changed visually there).
+- `/api/crm/send-followup` also now leaves a history record for every send (previously only
+  did if a `followupId` was passed), and accepts a `templateId` to source the subject/body.
+
+Syntax-checked all seven new/changed files.
+
+## Done this session (2026-07-31, round 45 — CRM: split Address/Phone columns + surface load errors)
+
+- `/crm` table now keys off address as the primary column (was name-first, falling back to
+  address) and split the old combined "Contact" column into separate Email and Phone columns
+  — customer name still shows as a subtitle under the address, and is still editable in the
+  expanded row.
+- The properties fetch now surfaces its error instead of silently rendering an empty table.
+  If `013_customer_contact.sql` hasn't been run, selecting `customer_name`/`customer_phone`
+  fails the whole query (not just those two fields) — previously that meant a blank CRM table
+  with no explanation. Now a banner names the actual Postgres error.
+
+Syntax-checked the changed file.
+
+## Done this session (2026-07-31, round 44 — CRM redesigned as a customer table)
+
+Reworked `/crm` from a flat follow-up log into a customer table — one row per property's
+customer, which is the more standard CRM shape (contacts list first, activity log as a
+per-contact detail, not the landing page).
+
+- New migration `013_customer_contact.sql` — added `customer_name` and `customer_phone` to
+  `properties` (only `customer_email` existed before).
+- `app/crm/page.js` rebuilt: each row shows customer name (falls back to address if no name
+  on file) + address, contact info (name/email/phone, all inline-editable via a pencil icon —
+  writes straight to `properties` through the browser Supabase client, no new API route
+  needed), a Report status badge (draft/published/not started), the soonest pending
+  follow-up (overdue ones flagged), and last-contacted date (latest of any sent follow-up
+  email or the existing report-ready notification). Rows are sorted overdue-first, then by
+  soonest due date. A search box filters by name/address/email/phone.
+- Click a row to expand it — shows that customer's full follow-up history (same
+  send/done/reopen/delete actions as before) and a schedule-a-follow-up form, now scoped to
+  that customer instead of needing a property picker.
+- `/api/crm/followups` and `/api/crm/send-followup` (round 43) are unchanged — same data
+  model and manual-only sending, just surfaced through the new table instead of the log UI.
+
+Syntax-checked the changed file.
+
+## Done this session (2026-07-31, round 43 — CRM tab, phase 1: manual follow-up tracking)
+
+First pass on the "mini CRM" idea — a new `/crm` tab for tracking per-customer follow-ups and
+sending reminder emails, built on the existing Resend pipeline. Scoped deliberately: this
+phase is manual only (no rules, no scheduled/automatic sends) — that's a later phase, pending
+a security review of running unattended sends with the service-role key.
+
+- New `crm_followups` table (`supabase/migrations/012_crm_followups.sql`) — one row per
+  scheduled or completed follow-up touchpoint on a property (due date, note, status
+  pending/done/skipped, sent_at/completed_at), not a single column on `properties`, so history
+  of past follow-ups survives.
+- New `/api/crm/followups` (GET list w/ property join, POST create) and
+  `/api/crm/followups/[id]` (PATCH status/reschedule, DELETE), same employee-role-gated
+  pattern as the lessons-learned API.
+- New `/api/crm/send-followup` — manual "Send Now" endpoint. Looks up `properties.customer_email`
+  (same field the report-ready email already uses), sends via the existing `sendEmail()` /
+  Resend wrapper with either a custom message or a generic check-in default, and marks the
+  linked follow-up done if one was passed.
+- New `/crm` tab: added to `AdminSidebar` (Users icon, between Properties and Insights) and a
+  new `app/crm/layout.js` mirroring the `/insights` shell (same header/back-nav/sidebar
+  pattern). `app/crm/page.js` has a schedule-a-follow-up form (property picker, due date,
+  note), Open/Done/All filter tabs, and per-row actions: Send Now, Mark Done, Reopen, Delete.
+  Overdue pending follow-ups are flagged in the row and counted in a banner at the top.
+
+Syntax-checked all six new/changed files (esbuild). Not yet built: any rules engine or
+scheduled/automatic triggering (needs a cron mechanism — Vercel Cron or Supabase `pg_cron` —
+plus the pending security review before running unattended against the service-role key).
+
+## Done this session (2026-07-31, round 42 — corner pill, sidebar auto-scale, click-to-enlarge)
+
+Three follow-ups on the customer report:
+
+- Status pill overlay from round 41 moved fully flush into the photo's top-left corner
+  (`top: 0, left: 0` instead of `top: 6, left: 6`).
+- The TOC sidebar (`app/report/[token]/page.js`) used to stay pinned exactly `topOffset`
+  (the header's height) from the top of the viewport forever, leaving a permanent blank strip
+  above it once you'd scrolled the header out of view. It now tracks scroll: effective offset
+  is `Math.max(0, topOffset - scrollY)`, written directly via refs on every scroll/resize
+  event (not React state, to avoid a re-render per scroll pixel) — so the panel's top edge
+  rises in lockstep with the page and reaches the very top once you've scrolled past where
+  the header used to be, instead of wasting that space.
+- Added a shared `Modal` component in `components/ReportView.js` (backdrop click + Escape to
+  close, body-scroll-locked while open). `FindingView` now opens a larger, roomier version of
+  the finding in that modal when clicked anywhere on the card (the existing inline "Learn
+  more" toggle still works independently — click stops propagation so it doesn't also open
+  the modal). `ZonePhotoGrid` now opens photos full-size in the modal on click, with prev/next
+  arrows to step through the rest of that zone's photos; the lightbox shows the original
+  image without the tile's zoom/pan crop, since that framing was calibrated for the small
+  thumbnail. Both are shared components, so this is live on the customer report *and* the
+  review page's read-mode automatically.
+
+Syntax-checked all three changed files.
+
+## Done this session (2026-07-31, round 41 — photo status pill moved onto the photo)
+
+`ZonePhotoGrid`'s status pill ("✗ Non-Compliant", "? Needs Verification", etc.) used to sit
+in the padded footer below each photo, next to the caption. Moved it to overlay the photo
+itself, pinned top-left (`position: absolute`, plus a subtle drop-shadow filter so it reads
+against busy photo backgrounds). `StatusPill` gained an optional `small` prop (10px font /
+tighter padding vs. the default 11px) used here. This is the shared read-only photo grid —
+live on both the customer report and the review page's read-mode automatically, no separate
+change needed for either. Left the *editable* status dropdown in the review editor's edit-mode
+photo footer alone, since that spot already shares the image's top corners with the zoom/
+remove buttons — flag if you want that moved too.
+
+Syntax-checked the changed file.
+
+## Done this session (2026-07-31, round 40 — real in-page keyword search on the customer report)
+
+The report sidebar's search box already filtered the table-of-contents list against each
+section's full text (findings, recommendations, photo captions, even the disclaimer), not
+just titles — but that only proved a section *contained* a match, never showed *where*.
+Added actual in-page highlighting, like browser Ctrl+F: `app/report/[token]/page.js` now
+walks the real DOM under a new `contentRef` (via `document.createTreeWalker`) whenever the
+search query changes, wraps every matching substring anywhere in the rendered report body in
+a `<mark>`, and auto-scrolls to the first hit. `ReportSidebar` gained a match counter ("3 of
+7 matches") with prev/next buttons, plus Enter/Shift+Enter to step through matches while the
+search box has focus. Old highlights are unwrapped and the DOM normalized before each new
+search so re-searching never stacks marks. Kept the existing TOC-list filtering as-is
+alongside this — both now work together.
+
+Verified the core `highlightMatches`/`clearHighlights` DOM logic in isolation with jsdom
+(multi-node matching, case-insensitivity, re-search not leaking old marks, short-query guard,
+active-match styling) since this is the kind of DOM-manipulation-alongside-React code that's
+easy to get subtly wrong. Syntax-checked the full file with esbuild.
+
+**Note**: this manipulates the DOM directly outside React's own tracking, which is only safe
+because this page's report content is static once loaded (a published, read-only report) —
+don't reuse this pattern on a page where the underlying content can change after mount
+without re-checking it.
+
+## Done this session (2026-07-31, round 39 — logo back in the header, toggle moved to the edge)
+
+Correction to round 38: put `BrandLogo` back in every page's header (the original two-row
+logo-above-title layout, padding `18px 20px 14px`) instead of inside `AdminSidebar` — headers
+are back to how they looked before that round. The collapse/expand toggle stays on
+`AdminSidebar`, but repositioned: it's no longer inline at the sidebar's top next to the logo
+slot, it's now a small round button floating on the sidebar's right edge (half overlapping
+the border), vertically centered — `position: absolute; top: 50%; right: -12px; transform:
+translateY(-50%)`, matching the reference "panel with a chevron" icon style. Sidebar's sticky
+offset (`top`/`minHeight`) restored to the header's actual height (78px).
+
+Syntax-checked all changed files.
+
+## Done this session (2026-07-31, round 38 — collapsible sidebar with logo moved into it)
+
+`AdminSidebar` now collapses/expands via a toggle button at its top (lucide's `SidebarClose`/
+`SidebarOpen` icons — the panel-with-chevron style), width 190px expanded / 56px collapsed,
+collapsed state persisted in `localStorage` (`adminSidebarCollapsed`) so it survives reloads.
+Collapsed mode shows nav icons only (centered, with a `title` tooltip); the logo hides when
+collapsed since there's no room for the text.
+
+`BrandLogo` moved from every page's header into the sidebar itself, top-left, above the nav
+items — headers no longer duplicate it. Since `AdminSidebar` is the one shared component used
+by every admin page (`/manage`, `/manage/[id]`, `/manage/[id]/review`, `/insights/*`,
+`/quality`), this single change already covers "every sidebar" in that section. Headers
+dropped back to a single row (just the page title + controls) now that the logo isn't
+stacked above the title — still the same height across every page.
+
+**Scoped out**: the customer-facing report page (`/report/[token]`) has its own, unrelated
+`ReportSidebar` (mobile TOC + search, already collapsible from an earlier round) — left it
+alone since it serves a different purpose and audience than the admin nav.
+
+Syntax-checked all changed files.
+
+## Done this session (2026-07-31, round 37 — consistent header height + section title everywhere)
+
+`/manage/[id]` and `/manage/[id]/review` had a shorter, single-row header (logo + theme
+toggle only) while `/manage`, `/quality`, and `/insights` had a taller two-row header (logo +
+big section title). Made the two property pages match: same padding (`18px 20px 14px`), same
+logo-then-title stack, title "Properties" (matching what the sidebar highlights for both —
+they're both under the Properties section). Every admin page now has the same header height
+and always shows which section you're in, not just the sidebar.
+
+Syntax-checked both changed files.
+
+## Done this session (2026-07-31, round 36 — page actions out of the header)
+
+`/manage/[id]`'s "Review & Publish" button lived in the sticky header — moved it into the
+page itself, next to the address (right side of the same row), since the header is meant for
+global chrome (logo, theme, sign out) not page-specific actions. Checked every other admin
+page's header for the same pattern (`/manage`, `/manage/[id]/review`, `/quality`,
+`/insights/*`) — none of them had one; this was the only offender.
+
+Syntax-checked the changed file.
+
+## Done this session (2026-07-31, round 35 — Lessons Learned moved into Report Quality)
+
+Lessons Learned is no longer its own `/insights/lessons` page/sidebar entry — moved into
+`/quality` as a second tab ("A/B Pairs" | "Lessons Learned"), since both are the same kind of
+thing: material for improving the report-draft prompt. Extracted the note-taking UI into
+`components/LessonsLearned.js` (shared, no page-level wrapper) so `/quality/page.js` just
+renders it inside the tab. Deleted `app/insights/lessons/`; `AdminSidebar` no longer lists it
+(now just Properties, Activity, Report Quality, with Settings pinned to the bottom).
+`/insights` (Activity) is unchanged otherwise. `/api/lessons` routes are untouched — same
+API, different page consuming it.
+
+Syntax-checked all changed/new files; grepped for stale `/insights/lessons` references and
+fixed the two leftover code comments.
+
+## Done this session (2026-07-31, round 34 — one consistent sidebar + back button everywhere)
+
+Round 33 put `AdminSidebar` only on `/manage`, and `/insights` had its own separate
+Activity/Lessons/Settings sidebar — two different navs depending on where you were.
+Flattened into a single `components/AdminSidebar.js` used on every inspector-facing page
+(`/manage`, `/manage/[id]`, `/manage/[id]/review`, `/insights`, `/insights/lessons`,
+`/insights/settings`, `/quality`): Properties, Activity, Lessons Learned, Settings, Report
+Quality, all in one list, with the current page's item highlighted (`match()` per item,
+checked most-specific-first so e.g. `/insights/lessons` doesn't also light up "Activity").
+
+Every non-home page now has a `BackNav` ("← back to ...") directly under the header — added
+it to `/quality`, and to `/insights` (contextual: `/insights` itself backs to Properties,
+`/insights/lessons` and `/insights/settings` back to Insights Activity). `/manage/[id]` and
+`/manage/[id]/review` already had one from an earlier round. `/manage` itself (the true root)
+intentionally has no back button — there's nothing logical to go back to; say if you want one
+anyway (e.g. back to login).
+
+Syntax-checked all five changed files with esbuild.
+
+## Done this session (2026-07-31, round 33 — new /insights section: activity log + lessons learned)
+
+New standalone section, entry point via an "Insights" button in the `/manage` header next to
+the existing "Report Quality" button (which is untouched — `/quality` stays as the ad-hoc
+AI-draft-vs-Final JSON export tool it already was). `/insights` has its own left-sidebar
+layout (`app/insights/layout.js`) with three sections:
+
+- **Activity** (`/insights`, default) — every property's full `report_versions` history
+  (every AI draft, every section edit, every "Final Report" checkpoint), grouped by property
+  and expandable into a timeline with a field-level diff between each step and the one
+  before it (reuses `diffSectionSlices`). Backed by a new `?scope=all` param on the existing
+  `GET /api/report-version` (no-propertyId branch) — default behavior (ai_draft/final only,
+  for `/quality`) is unchanged; `scope=all` opts into every source.
+- **Lessons Learned** (`/insights/lessons`) — freeform notes a reviewer writes about a
+  pattern worth fixing in future AI-generated drafts, optionally tied to the property that
+  prompted it. New `report_lessons` table + `/api/lessons` (GET/POST) and
+  `/api/lessons/[id]` (PATCH to toggle `applied`, DELETE). This is currently a **manual**
+  feedback loop — the page is a browsable backlog; someone reads it and hand-edits the
+  report-draft prompt. No automatic prompt injection yet.
+- **Settings** (`/insights/settings`) — placeholder only, per request ("add for later").
+
+Syntax-checked all new/changed files with esbuild; no build/runtime testing done yet since
+this needs the new migration run first.
+
+## Done this session (2026-07-31, round 32 — thin gap targets replaced with whole-item targets)
+
+Round 31's `DropGap` z-index fix was real and confirmed via reproduction, but two more rounds
+of real console logs from the user's actual browser kept showing `id: null` on every drop —
+this time because their actual pointermove coordinates only ever moved a few px total per
+drag gesture, never covering the 90+ px distance from a drag handle to the thin (14px)
+`DropGap` strip sitting between items. Not a code bug — the design itself (a narrow strip as
+the only valid drop target, positioned away from the handle) was too hard to reliably hit.
+
+Replaced it with whole-item drop targets: each tile/row/panel is now the drop target itself
+(`data-drop-target` + `data-drop-axis` on the item's own wrapper), hit-tested via
+`dropTargetAt(x, y)` (`elementFromPoint` + `.closest('[data-drop-target]')`), with the
+before/after insertion side decided by which half of the item's bounding box the cursor is
+over. The old `DropGap` component and its separately-rendered gap elements are gone entirely;
+`dropIndicatorStyle(side, axis)` now draws a thin inset-box-shadow edge highlight directly on
+whichever item is currently being dragged over, so the "target area between the cards"
+visual is preserved without needing a separate hit-box element. Applied identically to
+photos (`EditableZonePhotos`), findings, and zone panels. `PhotoCarousel`'s now-unused
+`renderGap` prop was removed from `components/ReportView.js`.
+
+Verified via an isolated Playwright reproduction (real `page.mouse` events, not synthetic DOM
+events) simulating small incremental drags in both directions — confirmed a source item
+correctly reorders past a neighbor once the cursor crosses that neighbor's midpoint, in both
+down and up directions. Syntax-checked both changed files with esbuild; grepped for any
+remaining references to the deleted `dropGapAt`/`DropGap`/old gap-index functions — none
+found.
+
+**Needs a real-browser test** — restart the dev server (`lsof -ti:3010 | xargs kill -9` then
+`npm run dev`), hard refresh, and try dragging a photo tile, a finding, and a zone panel.
+
+## Done this session (2026-07-31, round 31 — the real bug: DropGap z-index shadowing)
+
+Still not working after round 30's selection fix. Added temporary console logging to
+`DragHandle`/`dropGapAt` in the actual file and had the user reproduce it in their real
+browser — the logs showed pointerdown/pointermove/pointerup all firing correctly (drag *was*
+starting), but `dropGapAt` returned `id: null` on every single check, with
+`elementFromPoint` landing on a photo tile's own caption container instead of any gap.
+
+Root cause: `DropGap`'s hit-box deliberately overlaps a few px into each neighboring
+tile/row (via negative margin) so it's easier to land a pointer on than its thin at-rest
+visual indicator. Its `z-index` was only elevated while a drag was `active`, but both it and
+the tiles are `position: relative` — for two `position: relative` siblings at the same
+z-index, DOM order decides painting, so the *following* tile (later in the DOM) always
+painted over that gap's trailing overlap edge. Every gap was missing roughly a third of its
+hit-box, permanently, on the side facing the next item — `elementFromPoint` would report the
+tile there, never the gap. Confirmed with a targeted reproduction isolating just this z-index
+condition (bug reproduces exactly; fix resolves it) in addition to the real browser
+console-log evidence.
+
+Fix: `DropGap` now always has `zIndex: 2` (not conditional on `active`), so it can never be
+shadowed by adjacent content regardless of drag state.
+
+Debug console logging (`[drag] ...`) is still present in `DragHandle`/`dropGapAt` in
+`app/manage/[id]/review/page.js` — remove once confirmed working end-to-end.
+
+## Done this session (2026-07-31, round 30 — native text-selection was hijacking the drag)
+
+Round 29's stale-closure fix was real but incomplete — with a specific symptom reported
+("the grabber selects the whole panel, but it doesn't move"), tracked down one more issue:
+the browser's native click-and-drag text/content selection was taking over the gesture
+instead of `DragHandle`'s own pointer logic. `preventDefault()` on the initial press doesn't
+reliably stop selection from extending onto sibling content as the pointer moves during the
+same gesture — a known browser quirk, not something scoped to just the pressed element.
+
+Fixed by explicitly setting `user-select: none` on `document.body` for the duration of any
+drag (photos, findings, zones), restored on release, plus clearing any selection that starts
+mid-drag as a belt-and-suspenders measure. Verified with a Playwright + Chromium repro that
+deliberately drags the pointer across sibling text content mid-gesture (the exact scenario
+that triggers this) — confirmed no native selection occurs and the reorder completes
+correctly, using the literal `DragHandle` code from the app.
+
+## Done this session (2026-07-31, round 29 — the actual drag bug, found and verified)
+
+Arrows confirmed fixed. Drag itself still silently did nothing on every attempt. This time,
+built an isolated Playwright + Chromium repro of the exact drag mechanism (outside this
+sandbox's network restrictions, using a locally-built libXdamage stub since apt access is
+blocked) to actually simulate a real mouse drag rather than guess again — and found a real
+bug, confirmed with both a minimal reproduction and a fix verification:
+
+- **Root cause**: `dropInGap`/`dropInZoneGap`/`dropInFindingGap` read the dragged item's
+  index from React state (`dragIndex`/`dragZoneIndex`/`dragFinding`) *inside* a closure that
+  gets captured once, at `pointerdown` time, by `DragHandle`'s `window.addEventListener`
+  calls. That closure freezes the state value as it was *before* `onDragStart`'s
+  `setDragIndex(i)` had a chance to commit — so by the time the drop fires on release, it's
+  always reading the pre-drag value (`null`), and the reorder function's guard clause
+  (`if (sourceIndex == null) return`) hits every single time. No visible error, no crash —
+  the drop just quietly never happens. Confirmed with a minimal repro reproducing this exact
+  behavior, then confirmed the fix resolves it, using real simulated mouse events (down,
+  move, up) in headless Chromium.
+- **Fix**: the three drop functions now take the dragged item's index as an explicit
+  function argument (`dropInGap(sourceIndex, gapIndex)`) supplied by the caller from its own
+  render-time value (the tile's own `i`, the zone's own `zi`, the finding's own `fi`) —
+  values that are already correct the instant the handle is pressed, no state round-trip
+  needed. The `dragIndex`/`dragZoneIndex`/`dragFinding` state is now used *only* for visual
+  feedback (dimming the dragged item, highlighting the active gap), where a render's worth
+  of lag doesn't matter.
+
+## Done this session (2026-07-31, round 28 — drag/arrow fixes, part 4)
+
+Round 27 introduced a real regression (findings/zones lost `className="group"`, making
+their drag handles permanently invisible — opacity stuck at 0 with nothing to trigger
+`group-hover`) and the photo handle was still unusable. Rather than patch native
+drag-and-drop again, replaced the whole mechanism:
+
+- **Arrows moved out of the tile strip entirely.** After three rounds of trying to
+  position them precisely enough not to overlap tile content, gave up on overlaying them at
+  all — they now live in the counter row above the strip (`‹  3 / 7  ›`), in normal document
+  flow. There's no tile content in that row for them to ever overlap, structurally.
+- **Fixed the `className="group"` regression** on the zone-panel and finding-row wrappers —
+  this alone should have restored dragging for findings and zone panels.
+- **Replaced native HTML5 drag-and-drop with the Pointer Events API**, for photos, findings,
+  and zone panels alike. Across four rounds, native drag hit a missing `preventDefault`, a
+  missing `dataTransfer.setData`, an invisible handle, and (theorized) a conflict between
+  drag-initiation and the photo strip's horizontal scroll-snap — enough distinct native-DnD
+  footguns that it made more sense to stop relying on the browser's drag session and drive
+  the whole gesture ourselves: `pointerdown` on the handle starts tracking, `pointermove`/
+  `pointerup` on `window` follow the cursor and hit-test via `document.elementFromPoint`
+  against `DropGap` elements (marked with `data-drop-id`), and drop happens on release based
+  on whatever gap the pointer is actually over. Full control, no dependency on the browser's
+  native drag behavior.
+- **`DropGap` hit-boxes are now bigger than their visible indicator** (14px square,
+  independent of the thin 3px line shown at rest) so they're actually easy to land a pointer
+  on, not just visually present.
+
+## Done this session (2026-07-31, round 27 — drag/arrow fixes, part 3)
+
+Round 26's fixes still didn't fully hold — arrows were still off and the photo drag handle
+specifically remained inert (findings/zones worked fine by then). Went deeper on both:
+
+- **Arrows, rebuilt more robustly**: instead of one manually-computed pixel offset, arrows
+  now live inside a small absolutely-positioned overlay sized exactly to the caller's
+  `imageHeight` (+ optional `imageOffsetTop`), and are centered with a plain `top: 50%`
+  *within that overlay* rather than within the whole (variable-height) tile. Less room for
+  arithmetic mistakes than a single guessed number.
+- **Photo drag handle, real fix**: it was sitting absolutely-positioned on top of the image,
+  inside a horizontally-scrolling, scroll-snap track — a combination that's known to make
+  native HTML5 drag unreliable to actually grab. Moved it into normal document flow in the
+  tile's footer (next to the status pill), reusing the same shared `DragHandle` component
+  already proven to work for findings and zones, instead of a bespoke absolutely-positioned
+  div.
+- **New: gap-based drop targets, replacing box-highlighting** — per feedback that the drop
+  target should be *between* boxes, not on top of one. Photos, findings, and zone panels now
+  render a thin `DropGap` strip between every pair of items (plus one before the first and
+  one after the last); it's invisible at rest, widens with a dashed outline once a drag
+  starts, and highlights solid when it's the one currently under the pointer. Dropping in a
+  gap inserts the dragged item exactly there. The reorder math (`reorderZones`,
+  `reorderFindings`, `onReorder` for photos) is unchanged — only what counts as "the drop
+  target" changed, from an existing box to the gap next to it.
+
+## Done this session (2026-07-31, round 26 — drag/arrow fixes, part 2)
+
+Round 25's fixes weren't fully fixed — arrows were still overlapping and the drag handle
+still didn't move anything. Root causes were different from what round 25 addressed:
+
+- **Arrow overlap, actual cause**: the arrows were vertically centered (`top: 50%`) on the
+  *whole* tile, whose height varies with caption/textarea content — not on the fixed-height
+  image. `PhotoCarousel` now takes an `arrowTop` prop (a fixed pixel offset each caller
+  computes from its own image height), so arrows always sit over the image regardless of how
+  tall the caption text below it grows.
+- **Drag handle, actual cause**: `onDragStart` never called `dataTransfer.setData(...)` —
+  several browsers (Firefox, Safari) silently refuse to start a native drag session at all
+  without data set on it, so the handle looked inert even though every handler was wired
+  correctly. Fixed in `DragHandle` and the inline photo-tile handle.
+- **New: drop-target outlines while dragging** — every valid drop target (other photos,
+  findings, zone panels) now shows a faint dashed outline the moment a drag starts, and the
+  one currently under the pointer gets a solid highlighted outline + tint so it's clear
+  exactly where a drop will land. Applies consistently to photo tiles, findings, and zone
+  panels.
+
+## Done this session (2026-07-31, round 25 — drag-handle reorder everywhere, combined add-finding tile)
+
+- **Fixed the carousel arrows overlapping photo captions** — the left/right nav buttons on
+  `PhotoCarousel` sat at a negative offset with no compensating padding, so at narrow tile
+  widths they floated on top of the first/last tile's caption text. The scroll row now
+  reserves side padding for them.
+- **Fixed photo drag-reorder actually being broken** — root cause was a missing
+  `e.preventDefault()` in the tile's `onDrop` handler, which silently no-ops native HTML5
+  drag/drop. Also replaced "whole tile is draggable" (which fought with clicking the
+  remove/zoom buttons and typing in the caption box) with a small dedicated drag-handle pill
+  as the sole drag trigger.
+- **New reusable `DragHandle` component** — a hover-revealed grip-dots icon (Tailwind
+  `group`/`group-hover`), now the one consistent drag-to-reorder affordance used for photo
+  tiles, findings, and zone panels alike, replacing the old ↑/↓ step buttons everywhere they
+  existed.
+- **Findings can now be reordered** within a zone by dragging — previously there was no way
+  to reorder findings at all. New `reorderFindings(zi, from, to)` handler + per-finding drag
+  state.
+- **Zone panels reorder via drag** instead of ArrowUp/ArrowDown buttons — new
+  `reorderZones(from, to)` replaces the old adjacent-swap-only `moveZone`, still saves
+  immediately (not gated behind a section's edit mode, since it's a structural move).
+- **Combined "Add Finding" tile** — the separate "Add Finding" button and "Add Photo" upload
+  control are gone. In their place, a circular "+" tile (tooltip "Add finding") appears as
+  the literal last item in each zone's photo carousel strip; clicking it opens the file
+  picker, uploads the photo, and appends a blank finding in one step
+  (`addFindingWithPhoto`).
+
+## Done this session (2026-07-31, round 24 — photo status/drag-reorder/zoom, toolbar reposition)
+
+- **Photo status pill is now editable** in the review editor (same `StatusPill` component,
+  `editable` mode) — previously photo tiles in edit mode didn't show a status pill at all.
+  Entry-backed photos write straight to `entries.status` (source of truth for field data);
+  manually-added photos store their own `status` on `zone.extraPhotos[]`.
+- **"Add Finding" and "Add Photo" moved next to the photo strip** instead of being stacked
+  full-width rows above/below it — now a small two-button toolbar to the right of the
+  carousel.
+- **Drag-and-drop photo reordering** — each tile is natively draggable; dropping it on
+  another tile reorders the strip and saves `zone.photoOrder`. The existing ‹ › step buttons
+  are still there too as a non-drag fallback.
+- **Non-destructive photo zoom/pan editor** — a new magnifier icon on each tile opens a
+  modal with a zoom slider and drag-to-recenter preview; saves a `{zoom, x, y}` transform to
+  `reportData.photoAdjustments` (keyed by photo id) rather than touching the uploaded file.
+  `photoTransformStyle()` in `lib/reportSchema.js` applies it consistently everywhere the
+  photo renders — the editor tile, the editor's own carousel, and the published customer
+  report all show the same framing.
+- No new migration — everything above lives in the existing JSON blob or, for photo status
+  specifically, the existing `entries.status` column.
+- Syntax-checked every changed file.
+
+## Done this session (2026-07-31, round 23 — photo carousel + full photo/panel editing)
+
+- **Zone photo grids are now horizontal-scroll carousels** instead of a multi-row grid —
+  new `PhotoCarousel` in `components/ReportView.js` (left/right arrow buttons, live "X / Y"
+  counter, scroll-snap). Applied to `ZonePhotoGrid`, so this is live on both the customer
+  report and the review page's read view, not just the editor.
+  `ZonePhotoGrid` now takes the full zone object (not just its name) since it needs
+  `zone.extraPhotos`/`zone.photoOrder` — updated both call sites accordingly.
+- **Photos are now fully editable in the review page**: remove (reversible — hides the photo
+  from the report via a new `reportData.excludedEntryIds` list, original field entry
+  untouched, restorable from a "Hidden from report" strip), add (upload a new photo directly
+  in the editor — reuses the same compress+upload path as `components/PhotoUpload.js`,
+  stored on the zone as `extraPhotos`, not tied to any field entry), and reorder (‹ › buttons
+  per photo, saved as `zone.photoOrder`). New `zonePhotoItems()`/`excludedZonePhotos()`
+  helpers in `lib/reportSchema.js` merge entry-photos and extra-photos into one orderable,
+  filterable list.
+- **Zone panels themselves are reorderable** — ↑/↓ arrows in each zone's header (not gated
+  by that zone's edit mode, since it's a structural move) shift the whole section earlier or
+  later in the report; saves immediately rather than waiting for "Done."
+- No new migration — all of this lives in the existing structured JSON blob
+  (`report_draft_markdown` / `report_markdown`), just new optional keys (`excludedEntryIds`,
+  `zone.extraPhotos`, `zone.photoOrder`) that default to empty/absent for older reports.
+- Syntax-checked every changed file.
+
+## Done this session (2026-07-31, round 22 — per-section report editing, version history, Report Quality portal)
+
+- **Review page now renders pixel-identical to the published report by default.** Every
+  section (Executive Summary, Site Overview, each zone, Action Plan) shows the exact
+  read-only markup the customer sees — `FindingView`, `ZonePhotoGrid`, and `ActionPlanTable`
+  were extracted from `/report/[token]` into `components/ReportView.js` specifically so both
+  pages share the literal same components, not a visually-similar copy. A small pencil icon
+  on each section's header swaps just that section into its existing editable form; a "Done"
+  checkmark saves it and switches back to the read-only look. No more always-on form chrome
+  across the whole page.
+- **Every section save is tracked.** New `report_versions` table
+  (`supabase/migrations/010_report_versions.sql`) stores a full snapshot of the report data
+  every time: (a) a draft is generated (`source: 'ai_draft'`), (b) a section's "Done" button
+  is clicked (`source: 'edit'`, tagged with which section), or (c) the new **"Final Report"**
+  button next to Publish is clicked (`source: 'final'`) — an explicit checkpoint marking the
+  current state as the one worth comparing against the original AI draft.
+- **Per-section history popup**: the small clock icon next to each section's pencil opens a
+  popup showing that section's change log over time — old vs. new, field by field, newest
+  first — using `reportSectionSlice()`/`diffSectionSlices()` in `lib/reportSchema.js`.
+- **New `/api/report-version` route**: POST records a version; GET returns either one
+  property's full history (review page) or every property's `ai_draft`/`final` pairs across
+  the system (the portal below).
+- **New Report Quality portal at `/quality`** (linked from the `/manage` header): lists every
+  property that has both an original AI draft and a "Final Report" checkpoint, with an
+  expandable field-level diff per property, checkboxes, and an "Export Selected as JSON"
+  button that downloads `{ propertyId, address, aiDraft, final, diff }` pairs — meant to be
+  fed back into report-generation prompt improvements over time.
+- Syntax-checked every changed/new file.
 
 ## Done this session (2026-07-30, round 21 — sidebar/header boundary, persistent toggle, deeper search)
 

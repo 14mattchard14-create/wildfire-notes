@@ -170,5 +170,14 @@ Rules:
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
+  // Save the untouched AI output as an 'ai_draft' version — this is the
+  // "A" side of every A/B training pair the Report Quality portal builds
+  // later (paired against whatever gets marked 'final' after edits). Not
+  // fatal if this fails; the report itself already saved successfully.
+  const { error: versionError } = await supabaseAdmin
+    .from('report_versions')
+    .insert({ property_id: propertyId, report_data: reportData, source: 'ai_draft', created_by: user.id })
+  if (versionError) console.error('report-draft: failed to save ai_draft version:', versionError.message)
+
   return Response.json({ draft: reportData })
 }
