@@ -54,6 +54,38 @@ const CHANNEL_META = {
 
 const iconBtn = { background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }
 
+// Lightweight modal using the app's CSS-variable theme (light/dark aware),
+// unlike the fixed-palette Modal in components/ReportView.js which is
+// built for the report's own always-light color scheme.
+function EditModal({ onClose, children }) {
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, maxWidth: 480, width: '100%', maxHeight: '85vh', overflowY: 'auto', padding: 18, position: 'relative' }}
+      >
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex' }}
+        >
+          <X className="size-4" />
+        </button>
+        {children}
+      </div>
+    </div>
+  )
+}
+
 function isOverdue(f) {
   if (!f || f.status !== 'pending' || !f.due_date) return false
   return new Date(f.due_date) < new Date(new Date().toDateString())
@@ -387,6 +419,7 @@ function CustomerGroupRow({ group, expanded, onToggle, templates, onSaveField, o
   const [note, setNote] = useState('')
   const [dueDatePropertyId, setDueDatePropertyId] = useState(group.properties[0].id)
   const [saving, setSaving] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
   const nf = group.nextFollowup
   const overdue = isOverdue(nf)
   const multi = group.properties.length > 1
@@ -410,7 +443,7 @@ function CustomerGroupRow({ group, expanded, onToggle, templates, onSaveField, o
     <div style={{ border: '1px solid var(--line)', borderRadius: 6, marginBottom: 8, background: 'var(--surface)' }}>
       <div
         onClick={onToggle}
-        style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 0.9fr 0.9fr 0.9fr 22px', gap: 10, alignItems: 'center', padding: '10px 12px', cursor: 'pointer' }}
+        style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 0.9fr 0.9fr 0.9fr 22px 22px', gap: 10, alignItems: 'center', padding: '10px 12px', cursor: 'pointer' }}
       >
         <div style={{ minWidth: 0 }}>
           {multi ? (
@@ -464,10 +497,48 @@ function CustomerGroupRow({ group, expanded, onToggle, templates, onSaveField, o
           {group.lastContact ? new Date(group.lastContact).toLocaleDateString() : '—'}
         </div>
 
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <button
+            onClick={e => { e.stopPropagation(); setEditOpen(true) }}
+            title="Edit details"
+            style={{ ...iconBtn, padding: 3 }}
+          >
+            <Pencil className="size-3.5" />
+          </button>
+        </div>
+
         <div style={{ color: 'var(--text-muted)', display: 'flex', justifyContent: 'center' }}>
           {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
         </div>
       </div>
+
+      {editOpen && (
+        <EditModal onClose={() => setEditOpen(false)}>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: '0 0 4px' }}>
+            {group.customer_name || (multi ? `${group.properties.length} properties` : group.properties[0].address)}
+          </h3>
+          <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '0 0 14px' }}>Edit contact info, lead source, and status.</p>
+
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Name</span>
+              <EditableField value={group.customer_name} placeholder="+ add name" onSave={v => onSaveField(group, 'customer_name', v)} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Email</span>
+              <EditableField value={group.customer_email} placeholder="+ add email" onSave={v => onSaveField(group, 'customer_email', v)} type="email" />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Phone</span>
+              <EditableField value={group.customer_phone} placeholder="+ add phone" onSave={v => onSaveField(group, 'customer_phone', v)} type="tel" />
+            </div>
+          </div>
+
+          {group.properties.map(p => (
+            <PropertyDetailsCard key={p.id} property={p} showAddress={multi} onSave={onSaveProperty} />
+          ))}
+        </EditModal>
+      )}
 
       {expanded && (
         <div onClick={e => e.stopPropagation()} style={{ borderTop: '1px solid var(--line)', padding: '12px' }}>

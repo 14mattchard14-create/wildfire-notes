@@ -2,6 +2,30 @@
 
 _Last updated: 2026-08-02_
 
+## ⚠️ Action required — verify a sending domain in Resend
+
+Customer-facing emails ("Send to Customer" on the review page, follow-up emails from CRM) are
+currently failing with a 403 from Resend: `You can only send testing emails to your own email
+address (contact@charred-guard.com). To send emails to other recipients, please verify a domain
+at resend.com/domains, and change the from address to an email using this domain.` Checked via
+the Resend MCP — zero domains are on the account, so every send still goes out from the
+`onboarding@resend.dev` sandbox address, which Resend restricts to the account owner's own
+inbox only.
+
+To fix: add your sending domain (e.g. `charred-guard.com`) at resend.com/domains, add the
+SPF/DKIM DNS records Resend gives you at your domain registrar, wait for verification (usually
+minutes, sometimes longer depending on DNS propagation), then set `RESEND_FROM_EMAIL` in Vercel
+to an address on that domain (e.g. `reports@charred-guard.com`) — `lib/email.js` already reads
+this var and falls back to the sandbox address if it's unset. Say the word and I can create the
+domain in Resend to hand you the exact DNS records to add.
+
+## ⚠️ Action required — this session's commits aren't pushed yet
+
+Two local commits (batch CRM/report/send-flow updates, round 50) are sitting on `main` ahead of
+`origin/main` — I don't have push credentials in this sandbox. Run `git push` from your machine
+to actually deploy them; until then production is still running the old code (no PDF button, no
+send-review modal, old finding-card order, no CRM edit icon).
+
 ## ⚠️ Action required — new migration
 
 - Run `supabase/migrations/015_booking_payments.sql` — adds booking fields to `properties`
@@ -56,6 +80,32 @@ Full detail in `BOOKING_PAYMENTS_PLAN.md`.
   troubleshooting).
 - No new npm packages — reuses the existing `entry-photos` Supabase Storage bucket under
   a `satellite/` prefix, no new bucket needed.
+
+## Done this session (2026-08-02, round 51 — follow-up fixes after round 50 review)
+
+Testing round 50's changes (still un-pushed, see ⚠️ above) surfaced four things:
+
+- **Finding-card order, second spot.** Round 50 reordered "Learn more about this finding" below
+  the Recommendation box in the customer-facing `FindingView` (`components/ReportView.js`), but
+  missed the review page's own edit-mode rendering — `EditableFinding` in
+  `app/manage/[id]/review/page.js` had a second, separate copy of this layout with the same
+  wrong order. Fixed to match: Recommendation always shown first, then the "Learn more" toggle,
+  then the finding/rationale textareas when expanded.
+- **"Where's the PDF?"** — nowhere yet, because round 50 was never pushed (see ⚠️ above); the
+  production site is still running pre-round-50 code. No code change needed here, just a push.
+- **Resend 403 on send** — confirmed via the Resend MCP that this is a real, separate issue:
+  zero domains verified on the account, so Resend is refusing to send to anyone but the account
+  owner's own inbox. Documented above; needs your action (DNS records at your registrar).
+- **CRM "can't pull up the edit popup."** Added a dedicated pencil "Edit details" icon to each
+  CRM row (next to the expand chevron) that opens a proper modal — name/email/phone plus,
+  per-property, homeowner status/report status/lead source/lead notes (the existing
+  `PropertyDetailsCard`, reused as-is). This is in addition to, not instead of, the existing
+  click-to-expand row (which still shows follow-up history, payments, etc.) — the edit icon is
+  a faster, focused path to the fields most often changed. New local `EditModal` component
+  (theme-aware, uses the app's CSS variables — the existing `Modal` in `components/ReportView.js`
+  is hardcoded to the report's own always-light palette, wrong fit for the admin CRM page).
+
+Syntax-checked (babel) both changed files.
 
 ## Done this session (2026-08-02, round 50 — production email fixes + CRM/report batch updates)
 

@@ -61,15 +61,27 @@ function EditableFinding({ f, onChange, onRemove }) {
         </div>
       </div>
 
+      <div style={{ background: c.surfaceAlt, borderRadius: 6, padding: '9px 13px', marginBottom: 8 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: c.navy, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Recommendation — always shown</div>
+        <textarea
+          value={f.recommendation}
+          onChange={e => onChange('recommendation', e.target.value)}
+          placeholder="Leave blank if fully compliant"
+          rows={2}
+          className={focusRing}
+          style={{ ...blend, resize: 'vertical', fontSize: 13.5, color: c.text, lineHeight: 1.6 }}
+        />
+      </div>
+
       <button
         onClick={() => setExpanded(x => !x)}
-        style={{ background: 'none', border: 'none', padding: 0, margin: '0 0 8px', color: c.slate, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+        style={{ background: 'none', border: 'none', padding: 0, margin: expanded ? '0 0 8px' : 0, color: c.slate, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
       >
         {expanded ? '▾ Hide details' : '▸ Learn more about this finding'} <span style={{ opacity: 0.6, fontWeight: 400 }}>(what the customer sees when they click it)</span>
       </button>
 
       {expanded && (
-        <div style={{ marginBottom: 10 }}>
+        <div>
           <div style={{ fontSize: 10.5, fontWeight: 700, color: c.muted, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>What was observed</div>
           <textarea
             value={f.finding}
@@ -90,18 +102,6 @@ function EditableFinding({ f, onChange, onRemove }) {
           />
         </div>
       )}
-
-      <div style={{ background: c.surfaceAlt, borderRadius: 6, padding: '9px 13px' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: c.navy, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Recommendation — always shown</div>
-        <textarea
-          value={f.recommendation}
-          onChange={e => onChange('recommendation', e.target.value)}
-          placeholder="Leave blank if fully compliant"
-          rows={2}
-          className={focusRing}
-          style={{ ...blend, resize: 'vertical', fontSize: 13.5, color: c.text, lineHeight: 1.6 }}
-        />
-      </div>
     </div>
   )
 }
