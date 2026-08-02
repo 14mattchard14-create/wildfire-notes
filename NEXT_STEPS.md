@@ -1,6 +1,6 @@
 # Status — wildfire-notes
 
-_Last updated: 2026-08-01_
+_Last updated: 2026-08-02_
 
 ## ⚠️ Action required — new migration
 
@@ -56,6 +56,52 @@ Full detail in `BOOKING_PAYMENTS_PLAN.md`.
   troubleshooting).
 - No new npm packages — reuses the existing `entry-photos` Supabase Storage bucket under
   a `satellite/` prefix, no new bucket needed.
+
+## Done this session (2026-08-02, round 50 — production email fixes + CRM/report batch updates)
+
+**Part 1 — three silently-broken production systems, all missing env vars in Vercel:**
+
+- `SUPABASE_SERVICE_ROLE_KEY` was unset, breaking server-side writes gated on it (found while
+  testing the Guided Photo Assessment signup flow end-to-end).
+- `NOTIFY_EMAIL` was unset, breaking the `/api/cron/report-reminders` daily digest — the cron
+  route wasn't checking `sendEmail`'s `{skipped: true}` result, so it returned `{"ok":true}`
+  even when nothing was sent. Fixed the env var; flagged the swallowed-skip pattern.
+- `RESEND_API_KEY` was unset in production — **every transactional email the app has ever
+  tried to send since deploy was silently skipped**, including customer report-ready emails
+  and the reminder digest. `lib/email.js`'s `sendEmail()` treats a missing key as a no-op by
+  design (so local dev doesn't need Resend configured), but nothing surfaced that in prod.
+  Added the real key (Sensitive), redeployed, and confirmed via Resend's `list-emails` API
+  that a real send now shows `status: "delivered"` — the two earlier "sent" confirmations this
+  session were false positives, caught and corrected before being reported as fixed.
+
+**Part 2 — four batch feature updates:**
+
+- **CRM lead source.** `app/crm/page.js`'s customer list query never selected `lead_source`/
+  `lead_notes`, so the fields existed in the UI (`PropertyDetailsCard`) but always rendered
+  blank. Fixed the select, and added a lead-source badge to the always-visible collapsed row
+  (previously only visible after expanding). `app/manage/page.js`'s manual property creation
+  now tags `lead_source: 'manual'` (website-guided and Cal.com paths already tagged theirs).
+- **PDF download on the customer report.** Browser print-to-PDF, not server-rendered — no
+  headless-browser infra needed on Vercel Hobby. `/report/[token]` gained a "Download PDF"
+  button that force-expands every collapsible section/finding (`forceOpen` prop threaded
+  through `CollapsibleCard`/`FindingView`/`ZoneSection`), unwraps the photo carousel into a
+  wrapping grid, hides the sidebar/nav, then calls `window.print()`; resets on the browser's
+  `afterprint` event.
+- **"Send to Customer" review-before-send flow.** Publishing (`/api/report-publish`) no longer
+  auto-emails the customer on first publish — it only ever updates the public web link now.
+  Every notification, first send or resend, goes through a new review modal on the review page:
+  clicking "Send to Customer" calls a new read-only `/api/notify-customer-preview` endpoint
+  (built from a shared `buildCustomerNotifyPreview()` in `lib/customerNotify.js`, so the
+  preview is guaranteed identical to what actually sends) that returns the exact recipient,
+  subject, and HTML body without sending or touching the DB; a `Modal` shows all of it plus the
+  report link and access code; only clicking "Confirm & Send" calls the existing
+  `/api/notify-customer` endpoint to actually send.
+- **Report layout.** "Learn more about this finding" now sits below the Recommendation box
+  instead of above it, on both the customer report and the review page (shared `FindingView`
+  in `components/ReportView.js`).
+
+Syntax-checked (babel) all seven changed/new files. `next build` itself can't run in this
+sandbox (no arm64 SWC binary available here — unrelated to these changes).
 
 ## Done this session (2026-08-01, round 49 — booking → CRM → calendar → payments, phase 1)
 

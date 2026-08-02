@@ -13,7 +13,7 @@ import {
 } from '@/lib/reportSchema'
 import {
   reportColors, StatusPill, RiskBadge, CollapsibleCard, priorityColor,
-  FindingView, ZonePhotoGrid, ActionPlanTable, PhotoCarousel,
+  FindingView, ZonePhotoGrid, ActionPlanTable, PhotoCarousel, Modal,
 } from '@/components/ReportView'
 import ThemeToggle from '@/components/ThemeToggle'
 import BrandLogo from '@/components/BrandLogo'
@@ -627,6 +627,8 @@ export default function PropertyReviewFlow() {
   const [savedMsg, setSavedMsg] = useState('')
   const [shareInfo, setShareInfo] = useState(null) // { token, accessCode }
   const [notifyingCustomer, setNotifyingCustomer] = useState(false)
+  const [sendPreview, setSendPreview] = useState(null) // { to, subject, html, reportUrl, accessCode }
+  const [loadingPreview, setLoadingPreview] = useState(false)
   const [editingCustomerEmail, setEditingCustomerEmail] = useState(false)
   const [customerEmailDraft, setCustomerEmailDraft] = useState('')
   const [savingCustomerEmail, setSavingCustomerEmail] = useState(false)
@@ -786,7 +788,7 @@ export default function PropertyReviewFlow() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Publish failed')
-      setProperty(p => ({ ...p, report_status: 'published', ...(data.customerNotify?.sent ? { customer_notified_at: new Date().toISOString() } : {}) }))
+      setProperty(p => ({ ...p, report_status: 'published' }))
       setShareInfo(prev => ({ token: data.token, accessCode: data.accessCode ?? prev?.accessCode ?? null }))
     } catch (err) {
       alert('Could not publish: ' + err.message)
@@ -795,7 +797,28 @@ export default function PropertyReviewFlow() {
     }
   }
 
-  async function notifyCustomer() {
+  // "Send to Customer" always opens the review modal first — publishing
+  // never emails anyone by itself. This fetches the exact email that would
+  // go out (subject, body, recipient) without sending it, so the inspector
+  // can check it before confirming.
+  async function openSendReview() {
+    setLoadingPreview(true)
+    try {
+      const res = await authFetch('/api/notify-customer-preview', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyId: id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not build preview')
+      setSendPreview(data)
+    } catch (err) {
+      alert('Could not prepare send-to-customer preview: ' + err.message)
+    } finally {
+      setLoadingPreview(false)
+    }
+  }
+
+  async function confirmSendToCustomer() {
     setNotifyingCustomer(true)
     try {
       const res = await authFetch('/api/notify-customer', {
@@ -805,6 +828,7 @@ export default function PropertyReviewFlow() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Send failed')
       setProperty(p => ({ ...p, customer_notified_at: new Date().toISOString() }))
+      setSendPreview(null)
     } catch (err) {
       alert('Could not send to customer: ' + err.message)
     } finally {
@@ -1092,14 +1116,52 @@ export default function PropertyReviewFlow() {
                       : 'Not yet sent to the customer'}
                   </span>
                   <button
-                    onClick={notifyCustomer}
-                    disabled={notifyingCustomer}
+                    onClick={openSendReview}
+                    disabled={loadingPreview}
                     style={{ fontSize: 11.5, fontFamily: 'monospace', color: 'var(--ok)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline' }}
                   >
-                    {notifyingCustomer ? 'Sending…' : property?.customer_notified_at ? 'Resend to Customer' : 'Send to Customer'}
+                    {loadingPreview ? 'Preparing…' : property?.customer_notified_at ? 'Resend to Customer' : 'Send to Customer'}
                   </button>
                 </div>
               </div>
+            )}
+
+            {sendPreview && (
+              <Modal onClose={() => setSendPreview(null)} maxWidth={560}>
+                <div style={{ padding: '32px 28px 24px' }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: c.navy, margin: '0 0 4px' }}>Review before sending</h2>
+                  <p style={{ fontSize: 12.5, color: c.muted, margin: '0 0 20px' }}>
+                    This is exactly what the customer will receive. Nothing is sent until you confirm below.
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 16, fontSize: 12.5 }}>
+                    <div><span style={{ color: c.muted }}>To:</span> <strong style={{ color: c.text }}>{sendPreview.to}</strong></div>
+                    <div><span style={{ color: c.muted }}>Subject:</span> <strong style={{ color: c.text }}>{sendPreview.subject}</strong></div>
+                    <div>
+                      <span style={{ color: c.muted }}>Report link:</span>{' '}
+                      <a href={sendPreview.reportUrl} target="_blank" rel="noopener noreferrer" style={{ color: c.navy, textDecoration: 'underline', wordBreak: 'break-all' }}>
+                        {sendPreview.reportUrl}
+                      </a>
+                    </div>
+                    <div><span style={{ color: c.muted }}>Access code:</span> <strong style={{ color: c.text }}>{sendPreview.accessCode}</strong></div>
+                  </div>
+
+                  <div style={{ fontSize: 11.5, color: c.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Email preview</div>
+                  <div
+                    style={{ border: `1px solid ${c.border}`, borderRadius: 8, padding: '16px 18px', background: c.surfaceAlt, maxHeight: 280, overflowY: 'auto' }}
+                    dangerouslySetInnerHTML={{ __html: sendPreview.html }}
+                  />
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
+                    <Button variant="outline" onClick={() => setSendPreview(null)} disabled={notifyingCustomer} className="text-[12px] uppercase tracking-wide h-auto py-2.5 px-4">
+                      Cancel
+                    </Button>
+                    <Button onClick={confirmSendToCustomer} disabled={notifyingCustomer} className="text-[12px] font-bold uppercase tracking-wide h-auto py-2.5 px-4 bg-[var(--ok)] hover:bg-[var(--ok)]/90">
+                      {notifyingCustomer ? 'Sending…' : 'Confirm & Send'}
+                    </Button>
+                  </div>
+                </div>
+              </Modal>
             )}
 
             {!draftData && !legacyDraft && !generating && (

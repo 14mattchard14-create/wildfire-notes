@@ -26,6 +26,25 @@ const REPORT_BADGE = {
   draft:     { label: 'Draft',     color: 'var(--info)' },
 }
 
+// Manual overrides shown in the Property Details section of an expanded CRM
+// row — these mirror the same check constraints as the /manage pipeline
+// (003_homeowner_status.sql, 004_report_pipeline.sql) so a value picked
+// here is always one /manage itself would also accept. '__none__' maps to
+// null (the "hasn't started" state for both fields).
+const HOMEOWNER_STATUS_OPTIONS = [
+  { value: '__none__', label: 'Not started' },
+  { value: 'invited', label: 'Invited' },
+  { value: 'in_progress', label: 'In progress' },
+  { value: 'submitted', label: 'Submitted' },
+  { value: 'done', label: 'Done' },
+]
+
+const REPORT_STATUS_OPTIONS = [
+  { value: '__none__', label: 'Not started' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'published', label: 'Published' },
+]
+
 const CHANNEL_META = {
   email: { label: 'Email', icon: Mail },
   call:  { label: 'Call',  icon: Phone },
@@ -90,6 +109,111 @@ function EditableField({ value, placeholder, onSave, type = 'text' }) {
       <span style={{ fontSize: 12, color: value ? 'var(--text)' : 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value || placeholder}</span>
       <Pencil className="size-2.5" style={{ opacity: 0.4, flexShrink: 0 }} />
     </button>
+  )
+}
+
+// Like EditableField, but keeps the existing "click the address to open
+// /manage/[id]" behavior intact — address is the one field customers
+// navigate by, so editing has to be an explicit secondary action (a pencil
+// icon) rather than replacing the click target entirely.
+function AddressField({ property, onSave, textStyle }) {
+  const router = useRouter()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(property.address || '')
+  const [saving, setSaving] = useState(false)
+
+  function start(e) { e.stopPropagation(); setDraft(property.address || ''); setEditing(true) }
+  function cancel(e) { e.stopPropagation(); setEditing(false) }
+  async function save(e) {
+    e.stopPropagation()
+    if (!draft.trim()) return
+    setSaving(true)
+    await onSave(property.id, draft.trim())
+    setSaving(false)
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+        <input
+          autoFocus
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') save(e); if (e.key === 'Escape') cancel(e) }}
+          style={{ fontSize: 12, padding: '3px 6px', border: '1px solid var(--line)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit', width: 200 }}
+        />
+        <button onClick={save} disabled={saving} style={iconBtn} title="Save"><Check className="size-3" /></button>
+        <button onClick={cancel} style={iconBtn} title="Cancel"><X className="size-3" /></button>
+      </div>
+    )
+  }
+
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0, maxWidth: '100%' }}>
+      <button
+        onClick={e => { e.stopPropagation(); router.push(`/manage/${property.id}`) }}
+        style={{ ...textStyle, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+      >
+        {property.address}
+      </button>
+      <button onClick={start} title="Edit address" style={{ ...iconBtn, flexShrink: 0 }}><Pencil className="size-2.5" style={{ opacity: 0.4 }} /></button>
+    </span>
+  )
+}
+
+// Per-property manual overrides — homeowner/report status, lead source, and
+// lead notes all live on the properties row (not the customer), so unlike
+// name/email/phone these are edited one property at a time. Rendered once
+// per property inside an expanded CRM row.
+function PropertyDetailsCard({ property, showAddress, onSave }) {
+  const [notes, setNotes] = useState(property.lead_notes || '')
+  const [savingNotes, setSavingNotes] = useState(false)
+
+  async function saveNotes() {
+    if (notes === (property.lead_notes || '')) return
+    setSavingNotes(true)
+    await onSave(property.id, 'lead_notes', notes)
+    setSavingNotes(false)
+  }
+
+  return (
+    <div style={{ border: '1px solid var(--line)', borderRadius: 6, padding: 10, marginBottom: 8, background: 'var(--bg)' }}>
+      {showAddress && (
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>
+          <AddressField property={property} onSave={(id, v) => onSave(id, 'address', v)} textStyle={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }} />
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Homeowner Status</span>
+          <Select value={property.homeowner_status || '__none__'} onValueChange={v => onSave(property.id, 'homeowner_status', v === '__none__' ? null : v)}>
+            <SelectTrigger className="w-[160px] h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {HOMEOWNER_STATUS_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Report Status</span>
+          <Select value={property.report_status || '__none__'} onValueChange={v => onSave(property.id, 'report_status', v === '__none__' ? null : v)}>
+            <SelectTrigger className="w-[140px] h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {REPORT_STATUS_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Lead Source</span>
+          <EditableField value={property.lead_source} placeholder="+ add source" onSave={v => onSave(property.id, 'lead_source', v)} />
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Lead Notes</span>
+        <Textarea value={notes} onChange={e => setNotes(e.target.value)} onBlur={saveNotes} placeholder="No lead notes" rows={2} />
+        {savingNotes && <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>Saving…</span>}
+      </div>
+    </div>
   )
 }
 
@@ -258,8 +382,7 @@ function SendEmailForm({ properties, defaultPropertyId, templates, contact, onSe
   )
 }
 
-function CustomerGroupRow({ group, expanded, onToggle, templates, onSaveField, onToggleUnsubscribed, onAddFollowup, onLogContact, onSendEmail, onSend, onMarkDone, onReopen, onDelete, sending, discounts, onAddPayment, onSetPaymentStatus, onDeletePayment }) {
-  const router = useRouter()
+function CustomerGroupRow({ group, expanded, onToggle, templates, onSaveField, onSaveProperty, onToggleUnsubscribed, onAddFollowup, onLogContact, onSendEmail, onSend, onMarkDone, onReopen, onDelete, sending, discounts, onAddPayment, onSetPaymentStatus, onDeletePayment }) {
   const [dueDate, setDueDate] = useState('')
   const [note, setNote] = useState('')
   const [dueDatePropertyId, setDueDatePropertyId] = useState(group.properties[0].id)
@@ -280,6 +403,9 @@ function CustomerGroupRow({ group, expanded, onToggle, templates, onSaveField, o
   const singleStatus = statuses.size === 1 ? [...statuses][0] : null
   const reportBadge = singleStatus ? (REPORT_BADGE[singleStatus] || { label: 'Not started', color: 'var(--text-muted)' }) : { label: 'Multiple', color: 'var(--text-muted)' }
 
+  const sources = new Set(group.properties.map(p => p.lead_source).filter(Boolean))
+  const leadSourceLabel = sources.size === 1 ? [...sources][0] : sources.size > 1 ? 'Multiple sources' : null
+
   return (
     <div style={{ border: '1px solid var(--line)', borderRadius: 6, marginBottom: 8, background: 'var(--surface)' }}>
       <div
@@ -294,24 +420,13 @@ function CustomerGroupRow({ group, expanded, onToggle, templates, onSaveField, o
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 {group.properties.map(p => (
-                  <button
-                    key={p.id}
-                    onClick={e => { e.stopPropagation(); router.push(`/manage/${p.id}`) }}
-                    style={{ fontSize: 11, color: 'var(--accent)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                  >
-                    {p.address}
-                  </button>
+                  <AddressField key={p.id} property={p} onSave={(id, v) => onSaveProperty(id, 'address', v)} textStyle={{ fontSize: 11, color: 'var(--accent)' }} />
                 ))}
               </div>
             </>
           ) : (
             <>
-              <button
-                onClick={e => { e.stopPropagation(); router.push(`/manage/${group.properties[0].id}`) }}
-                style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}
-              >
-                {group.properties[0].address}
-              </button>
+              <AddressField property={group.properties[0]} onSave={(id, v) => onSaveProperty(id, 'address', v)} textStyle={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }} />
               {group.customer_name && <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{group.customer_name}</span>}
             </>
           )}
@@ -329,6 +444,11 @@ function CustomerGroupRow({ group, expanded, onToggle, templates, onSaveField, o
           <span style={{ fontSize: 10, fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.05em', color: reportBadge.color, border: `1px solid ${reportBadge.color}`, borderRadius: 20, padding: '2px 8px' }}>
             {reportBadge.label}
           </span>
+          {leadSourceLabel && (
+            <span title="Lead source" style={{ fontSize: 10, fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', border: '1px solid var(--line)', borderRadius: 20, padding: '2px 8px' }}>
+              {leadSourceLabel}
+            </span>
+          )}
           {group.unsubscribed && (
             <span title="Unsubscribed from follow-up emails" style={{ fontSize: 10, fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 20, padding: '2px 6px', display: 'flex', alignItems: 'center', gap: 3 }}>
               <BellOff className="size-2.5" /> Opted out
@@ -362,6 +482,12 @@ function CustomerGroupRow({ group, expanded, onToggle, templates, onSaveField, o
             >
               {group.unsubscribed ? <><Bell className="size-3" /> Resubscribe</> : <><BellOff className="size-3" /> Mark unsubscribed</>}
             </button>
+          </div>
+
+          <div style={{ marginBottom: 10 }}>
+            {group.properties.map(p => (
+              <PropertyDetailsCard key={p.id} property={p} showAddress={multi} onSave={onSaveProperty} />
+            ))}
           </div>
 
           {group.followups.length > 0 && (
@@ -706,7 +832,7 @@ export default function CrmPage() {
     setFetching(true)
     setLoadError(null)
     Promise.all([
-      supabase.from('properties').select('id, address, customer_name, customer_email, customer_phone, customer_notified_at, unsubscribed, homeowner_status, report_status').order('address'),
+      supabase.from('properties').select('id, address, customer_name, customer_email, customer_phone, customer_notified_at, unsubscribed, homeowner_status, report_status, lead_source, lead_notes').order('address'),
       authFetch('/api/crm/followups').then(res => res.json()),
       authFetch('/api/crm/templates').then(res => res.json()),
       authFetch('/api/crm/payments').then(res => res.json()),

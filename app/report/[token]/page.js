@@ -98,10 +98,10 @@ function highlightMatches(container, query) {
 // below for how they're composed here. ZonePhotoGrid takes the full zone
 // object (not just its name) so it can see any extraPhotos/photoOrder added
 // in the review editor.
-function ZoneSection({ zone, entries, reportData, id }) {
+function ZoneSection({ zone, entries, reportData, id, forceOpen }) {
   return (
-    <CollapsibleCard title={zone.zone} id={id} isH2>
-      {(zone.findings || []).map((f, i) => <FindingView key={i} f={f} />)}
+    <CollapsibleCard title={zone.zone} id={id} isH2 forceOpen={forceOpen}>
+      {(zone.findings || []).map((f, i) => <FindingView key={i} f={f} forceOpen={forceOpen} />)}
       <ZonePhotoGrid zone={zone} entries={entries} reportData={reportData} />
     </CollapsibleCard>
   );
@@ -167,6 +167,7 @@ function ReportSidebar({ items, query, onQueryChange, open, onToggle, isMobile, 
         onClick={onToggle}
         aria-label={open ? 'Collapse table of contents' : 'Expand table of contents'}
         title="Table of contents"
+        className="report-no-print"
         style={{
           position: 'fixed', top: topOffset + 10, left: open ? width : 0, zIndex: 41,
           background: c.navy, color: '#fff', border: 'none',
@@ -183,7 +184,7 @@ function ReportSidebar({ items, query, onQueryChange, open, onToggle, isMobile, 
         <div onClick={onToggle} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 39 }} />
       )}
 
-      <div ref={panelRef} style={{
+      <div ref={panelRef} className="report-no-print" style={{
         position: 'fixed', top: topOffset, left: 0, height: `calc(100vh - ${topOffset}px)`,
         width,
         background: c.bg, borderRight: `1px solid ${c.border}`, zIndex: 40, overflowY: 'auto', boxSizing: 'border-box',
@@ -402,6 +403,31 @@ export default function ReportPage({ params }) {
   const matchElsRef = useRef([]);
   const [matchCount, setMatchCount] = useState(0);
   const [activeMatch, setActiveMatch] = useState(0);
+  // "Download PDF" doesn't generate a file itself — it expands every
+  // collapsible section (so nothing is missing from the printout), waits a
+  // frame for that to render, then hands off to the browser's native print
+  // dialog, where "Save as PDF" is a built-in destination on every modern
+  // browser. Print-only CSS below hides on-screen-only chrome (sidebar,
+  // search, the button itself) and unrolls the photo carousels into a
+  // wrapping grid, since horizontal scroll strips don't paginate.
+  const [printMode, setPrintMode] = useState(false);
+
+  useEffect(() => {
+    if (!printMode) return;
+    const id = requestAnimationFrame(() => window.print());
+    return () => cancelAnimationFrame(id);
+  }, [printMode]);
+
+  useEffect(() => {
+    function onAfterPrint() { setPrintMode(false); }
+    window.addEventListener('afterprint', onAfterPrint);
+    return () => window.removeEventListener('afterprint', onAfterPrint);
+  }, []);
+
+  function downloadPdf() {
+    setSidebarOpen(false);
+    setPrintMode(true);
+  }
 
   useEffect(() => {
     function measure() {
@@ -550,6 +576,16 @@ export default function ReportPage({ params }) {
 
   return (
     <div style={{ minHeight: '100vh', background: c.bg, fontFamily: 'system-ui, -apple-system, sans-serif', color: c.text, colorScheme: 'light' }}>
+      <style>{`
+        @media print {
+          .report-no-print { display: none !important; }
+          .report-carousel-controls { display: none !important; }
+          .report-carousel-track { overflow: visible !important; flex-wrap: wrap !important; }
+          .report-carousel-tile { flex: 0 0 auto !important; }
+          .report-finding-card, .report-card-header { break-inside: avoid; page-break-inside: avoid; }
+          body { background: #fff !important; }
+        }
+      `}</style>
       <ReportSidebar
         items={tocItems} query={sidebarQuery} onQueryChange={setSidebarQuery} open={sidebarOpen}
         onToggle={() => setSidebarOpen(o => !o)} isMobile={isMobile} topOffset={headerHeight}
@@ -561,7 +597,17 @@ export default function ReportPage({ params }) {
           row, so it can never overlap the header's own title/info. */}
       <div ref={headerRef} style={{ background: c.navy, color: '#fff' }}>
         <div style={{ maxWidth: 820, margin: '0 auto', padding: '28px 24px 24px' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.6, marginBottom: 10 }}>🔥 Wildfire Risk Reduction Assessment</div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.6 }}>🔥 Wildfire Risk Reduction Assessment</div>
+            <button
+              className="report-no-print"
+              onClick={downloadPdf}
+              disabled={printMode}
+              style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.12)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 8, padding: '7px 14px', fontSize: 12.5, fontWeight: 700, cursor: printMode ? 'default' : 'pointer' }}
+            >
+              {printMode ? 'Preparing…' : '⬇ Download PDF'}
+            </button>
+          </div>
           <h1 style={{ fontSize: 26, fontWeight: 800, margin: '0 0 20px', lineHeight: 1.2 }}>{report?.property_address}</h1>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 16, paddingBottom: 24, borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
             {[['Date of Assessment', report?.visit_date], ['Inspector', report?.inspector_name], ['Report Date', report?.created_at ? new Date(report.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : null]].filter(([, v]) => v).map(([label, val]) => (
@@ -589,7 +635,7 @@ export default function ReportPage({ params }) {
 
         {reportData ? (
           <>
-            <CollapsibleCard title="Executive Summary" id="toc-exec" isH2>
+            <CollapsibleCard title="Executive Summary" id="toc-exec" isH2 forceOpen={printMode}>
               {reportData.summaryNarrative && <p style={{ margin: '0 0 16px', color: c.text, lineHeight: 1.75, fontSize: 15 }}>{reportData.summaryNarrative}</p>}
               {reportData.topPriorities?.filter(Boolean).length > 0 && (
                 <>
@@ -610,15 +656,15 @@ export default function ReportPage({ params }) {
               )}
             </CollapsibleCard>
 
-            <CollapsibleCard title="Site & Environmental Overview" id="toc-overview" isH2>
+            <CollapsibleCard title="Site & Environmental Overview" id="toc-overview" isH2 forceOpen={printMode}>
               <p style={{ margin: 0, color: c.text, lineHeight: 1.75, fontSize: 15 }}>{reportData.siteOverview}</p>
             </CollapsibleCard>
 
             {reportData.zones.map((zone, i) => (
-              <ZoneSection key={i} zone={zone} entries={entries} reportData={reportData} id={`toc-zone-${i}`} />
+              <ZoneSection key={i} zone={zone} entries={entries} reportData={reportData} id={`toc-zone-${i}`} forceOpen={printMode} />
             ))}
 
-            <CollapsibleCard title="Prioritized Action Plan" id="toc-action" isH2>
+            <CollapsibleCard title="Prioritized Action Plan" id="toc-action" isH2 forceOpen={printMode}>
               <ActionPlanTable items={reportData.actionPlan} />
             </CollapsibleCard>
           </>

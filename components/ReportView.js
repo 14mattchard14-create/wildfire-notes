@@ -86,18 +86,23 @@ export function RiskBadge({ level, editable, onChange }) {
   );
 }
 
-export function CollapsibleCard({ title, id, isH2, defaultOpen, headerContent, children }) {
+// `forceOpen` overrides a collapsed section open regardless of the user's
+// own toggle state — used by the customer report's "Download PDF" flow to
+// expand every section before handing off to the browser's print dialog,
+// without disturbing what the user had open/closed on screen otherwise.
+export function CollapsibleCard({ title, id, isH2, defaultOpen, forceOpen, headerContent, children }) {
   const [open, setOpen] = useState(defaultOpen !== false);
+  const isOpen = open || !!forceOpen;
   return (
     <div id={id} style={{ marginBottom: isH2 ? 28 : 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: isH2 ? c.navy : c.surfaceAlt, color: isH2 ? '#fff' : c.navy, borderRadius: isH2 ? (open ? '10px 10px 0 0' : 10) : (open ? '8px 8px 0 0' : 8), padding: isH2 ? '12px 16px 12px 20px' : '10px 16px' }}>
+      <div className="report-card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: isH2 ? c.navy : c.surfaceAlt, color: isH2 ? '#fff' : c.navy, borderRadius: isH2 ? (isOpen ? '10px 10px 0 0' : 10) : (isOpen ? '8px 8px 0 0' : 8), padding: isH2 ? '12px 16px 12px 20px' : '10px 16px' }}>
         <button onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, textAlign: 'left', flex: headerContent ? '0 1 auto' : 1 }}>
-          <span style={{ fontSize: 18, opacity: 0.6, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>›</span>
+          <span className="report-card-caret" style={{ fontSize: 18, opacity: 0.6, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>›</span>
           {title && <span style={{ fontWeight: 700, fontSize: isH2 ? 16 : 14 }}>{title}</span>}
         </button>
         {headerContent && <div style={{ flex: 1, marginLeft: 10 }}>{headerContent}</div>}
       </div>
-      {open && (
+      {isOpen && (
         <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '18px 20px' }}>
           {children}
         </div>
@@ -180,41 +185,43 @@ function FindingDetail({ f, large }) {
 // Clicking anywhere on the card (other than the inline "Learn more"
 // toggle, which keeps its own quick-peek behavior) opens the same content
 // in a much larger pop-up via Modal.
-export function FindingView({ f }) {
+export function FindingView({ f, forceOpen }) {
   const [expanded, setExpanded] = useState(false);
   const [zoomed, setZoomed] = useState(false);
   const isNC = /non-compliant/i.test(f.status || '');
   const isOK = /^(base|plus) compliant/i.test(f.status || '');
   const hasDetails = !!(f.finding || f.rationale);
+  const isExpanded = expanded || !!forceOpen;
   return (
     <>
       <div
         onClick={() => setZoomed(true)}
+        className="report-finding-card"
         style={{ background: c.surface, border: `1px solid ${c.border}`, borderLeft: `4px solid ${isNC ? c.warn : isOK ? c.ok : c.border}`, borderRadius: 8, padding: '14px 16px', marginBottom: 12, cursor: 'pointer' }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: hasDetails || f.recommendation ? 8 : 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: f.recommendation || hasDetails ? 8 : 0 }}>
           <div style={{ fontWeight: 700, color: c.navy, fontSize: 14.5 }}>{f.category}</div>
           <StatusPill status={f.status} />
         </div>
 
-        {hasDetails && (
-          <button
-            onClick={e => { e.stopPropagation(); setExpanded(x => !x); }}
-            style={{ background: 'none', border: 'none', padding: 0, margin: '0 0 8px', color: c.slate, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-          >
-            {expanded ? '▾ Hide details' : '▸ Learn more about this finding'}
-          </button>
-        )}
-        {expanded && (
-          <div style={{ marginBottom: 10, fontSize: 13.5, color: c.text, lineHeight: 1.6 }}>
-            {f.finding && <div style={{ marginBottom: f.rationale ? 6 : 0 }}>{f.finding}</div>}
-            {f.rationale && <div style={{ color: c.muted, fontStyle: 'italic' }}>{f.rationale}</div>}
+        {f.recommendation && (
+          <div style={{ background: c.surfaceAlt, borderRadius: 6, padding: '9px 13px', fontSize: 13.5, color: c.text, lineHeight: 1.6, marginBottom: hasDetails ? 8 : 0 }}>
+            <strong style={{ color: c.navy }}>Recommendation:</strong> {f.recommendation}
           </div>
         )}
 
-        {f.recommendation && (
-          <div style={{ background: c.surfaceAlt, borderRadius: 6, padding: '9px 13px', fontSize: 13.5, color: c.text, lineHeight: 1.6 }}>
-            <strong style={{ color: c.navy }}>Recommendation:</strong> {f.recommendation}
+        {hasDetails && !forceOpen && (
+          <button
+            onClick={e => { e.stopPropagation(); setExpanded(x => !x); }}
+            style={{ background: 'none', border: 'none', padding: 0, margin: isExpanded ? '0 0 8px' : 0, color: c.slate, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+          >
+            {isExpanded ? '▾ Hide details' : '▸ Learn more about this finding'}
+          </button>
+        )}
+        {isExpanded && (
+          <div style={{ fontSize: 13.5, color: c.text, lineHeight: 1.6 }}>
+            {f.finding && <div style={{ marginBottom: f.rationale ? 6 : 0 }}>{f.finding}</div>}
+            {f.rationale && <div style={{ color: c.muted, fontStyle: 'italic' }}>{f.rationale}</div>}
           </div>
         )}
       </div>
@@ -298,7 +305,7 @@ export function PhotoCarousel({ items, tileWidth = 200, renderItem, countOverrid
   return (
     <div style={{ marginTop: 16 }}>
       {items.length > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 6 }}>
+        <div className="report-carousel-controls" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 6 }}>
           <span style={{ fontSize: 11, color: c.muted, fontFamily: 'monospace' }}>{Math.min(index + 1, total)} / {total}</span>
           <button onClick={() => scroll(-1)} aria-label="Scroll photos left" style={carouselArrowStyle}>‹</button>
           <button onClick={() => scroll(1)} aria-label="Scroll photos right" style={carouselArrowStyle}>›</button>
@@ -307,10 +314,11 @@ export function PhotoCarousel({ items, tileWidth = 200, renderItem, countOverrid
       <div
         ref={scrollRef}
         onScroll={updateIndex}
+        className="report-carousel-track"
         style={{ display: 'flex', alignItems: 'stretch', gap: 12, overflowX: 'auto', scrollSnapType: 'x mandatory', padding: '4px 0 8px', scrollbarWidth: 'none' }}
       >
         {items.map((item, i) => (
-          <div key={item.id ?? i} style={{ scrollSnapAlign: 'start', flex: `0 0 ${tileWidth}px`, width: tileWidth }}>
+          <div key={item.id ?? i} className="report-carousel-tile" style={{ scrollSnapAlign: 'start', flex: `0 0 ${tileWidth}px`, width: tileWidth }}>
             {renderItem(item, i)}
           </div>
         ))}

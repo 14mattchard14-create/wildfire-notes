@@ -101,6 +101,7 @@ export default function PropertiesTablePage() {
       address: address.trim(), visit_date: visitDate || null, created_by: user?.id || null, created_by_name: userName,
       fhsz: fhsz?.fhsz ?? null, fhsz_sra: fhsz?.sra ?? null, fhsz_county: fhsz?.county ?? null, lat: fhsz?.lat ?? null, lng: fhsz?.lng ?? null,
       customer_email: customerEmail.trim() || null,
+      lead_source: 'manual',
     }).select().single()
     setSavingNew(false)
     if (error) { alert('Could not create property: ' + error.message); return }

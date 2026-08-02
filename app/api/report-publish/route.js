@@ -1,6 +1,5 @@
 import { randomBytes } from 'crypto'
 import { getAuthedUser, supabaseAdmin } from '@/lib/auth-server'
-import { notifyCustomerReportReady } from '@/lib/customerNotify'
 
 function generateToken() { return randomBytes(16).toString('hex') }
 function generateAccessCode() { return Math.floor(100000 + Math.random() * 900000).toString() }
@@ -56,18 +55,9 @@ export async function POST(request) {
     .update({ report_status: 'published', shared_report_token: token })
     .eq('id', propertyId)
 
-  // First publish only — republishing updates the same live link, so the
-  // homeowner doesn't need a fresh email every time the report is edited.
-  // Not fatal if this fails (e.g. no homeowner invited yet, or Resend not
-  // configured) — the inspector can still send it manually afterward.
-  let customerNotify = { sent: false, reason: 'not attempted' }
-  try {
-    const origin = new URL(request.url).origin
-    customerNotify = await notifyCustomerReportReady({ propertyId, origin })
-  } catch (err) {
-    console.error('report-publish customer notify error:', err)
-    customerNotify = { sent: false, reason: err.message }
-  }
-
-  return Response.json({ token, accessCode, updated: false, customerNotify })
+  // Publishing only ever puts the report on the web link — it never emails
+  // anyone by itself. Every customer notification, first time or resend,
+  // goes through "Send to Customer" on the review page, which previews the
+  // report + exact email before the inspector confirms.
+  return Response.json({ token, accessCode, updated: false })
 }
