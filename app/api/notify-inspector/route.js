@@ -1,5 +1,5 @@
 import { getAuthedUser, supabaseAdmin } from '@/lib/auth-server'
-import { sendEmail } from '@/lib/email'
+import { sendEmail, parseRecipients } from '@/lib/email'
 
 // Employee-only: manually (re)send the "homeowner finished" notification
 // for a property, without touching its homeowner_status. Useful when the
@@ -22,7 +22,7 @@ export async function POST(request) {
     .maybeSingle()
   if (error || !property) return Response.json({ error: 'Property not found' }, { status: 404 })
 
-  const notifyEmail = process.env.NOTIFY_EMAIL
+  const notifyEmail = parseRecipients(process.env.NOTIFY_EMAIL)
   if (!notifyEmail) return Response.json({ error: 'NOTIFY_EMAIL is not configured' }, { status: 500 })
 
   const result = await sendEmail({

@@ -1,5 +1,5 @@
 import { getAuthedUser, supabaseAdmin } from '@/lib/auth-server'
-import { sendEmail } from '@/lib/email'
+import { sendEmail, parseRecipients } from '@/lib/email'
 
 export async function POST(request) {
   const { user, profile } = await getAuthedUser(request)
@@ -20,7 +20,7 @@ export async function POST(request) {
   // inspector's login created the property — matches Resend's sandbox
   // restriction (only delivers to the account's own verified address)
   // and avoids needing domain verification for this.
-  const notifyEmail = process.env.NOTIFY_EMAIL
+  const notifyEmail = parseRecipients(process.env.NOTIFY_EMAIL)
   if (notifyEmail) {
     await sendEmail({
       to: notifyEmail,
