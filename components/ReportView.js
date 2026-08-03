@@ -406,3 +406,41 @@ export function ZonePhotoGrid({ zone, entries, reportData }) {
     </>
   );
 }
+
+// Read-only card for one identified plant photo — shared by the customer
+// report and the review page's read mode, same pattern as FindingView.
+// Unlike a WPH finding, there's no status pill here (plants aren't a
+// compliance category); the plant ID doubles as the card's title.
+function VegetationCard({ item }) {
+  return (
+    <div className="report-finding-card" style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 14 }}>
+      <img src={item.photoUrl} alt={item.plantId || 'Photographed plant'} style={{ width: '100%', maxHeight: 260, objectFit: 'cover', display: 'block' }} />
+      <div style={{ padding: '14px 16px' }}>
+        {item.zone && <div style={{ fontSize: 10.5, fontWeight: 700, color: c.slate, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>{item.zone}</div>}
+        {item.plantId && <div style={{ fontWeight: 700, color: c.navy, fontSize: 15, marginBottom: 8 }}>{item.plantId}</div>}
+        {item.assessment && <div style={{ fontSize: 13.5, color: c.text, lineHeight: 1.65, marginBottom: item.spacingGuidance ? 8 : 0 }}>{item.assessment}</div>}
+        {item.spacingGuidance && (
+          <div style={{ background: c.surfaceAlt, borderRadius: 6, padding: '9px 12px', fontSize: 12.5, color: c.text, lineHeight: 1.55 }}>
+            <strong style={{ color: c.navy }}>Spacing:</strong> {item.spacingGuidance}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// "Vegetation Considerations" — a report section separate from the WPH
+// zone findings, since a photographed plant isn't a compliance category.
+// `intro` prefaces that plant combination/spacing matters more than any
+// single species; `items` is reportData.vegetationConsiderations. Renders
+// nothing if there are no photographed plants, so an empty section never
+// shows up in the customer report or its table of contents.
+export function VegetationConsiderationsSection({ intro, items }) {
+  if (!items?.length) return null;
+  return (
+    <>
+      {intro && <p style={{ margin: '0 0 16px', color: c.text, lineHeight: 1.75, fontSize: 15, fontStyle: 'italic' }}>{intro}</p>}
+      {items.map((item, i) => <VegetationCard key={i} item={item} />)}
+    </>
+  );
+}

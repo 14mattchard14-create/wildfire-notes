@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { parseReportData, getPhotoCaption } from '@/lib/reportSchema';
-import { reportColors, StatusPill, RiskBadge, CollapsibleCard, priorityColor, FindingView, ZonePhotoGrid, ActionPlanTable } from '@/components/ReportView';
+import { reportColors, StatusPill, RiskBadge, CollapsibleCard, priorityColor, FindingView, ZonePhotoGrid, ActionPlanTable, VegetationConsiderationsSection } from '@/components/ReportView';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -526,6 +526,11 @@ export default function ReportPage({ params }) {
           title: z.zone,
           content: [z.zone, ...(z.findings || []).map(f => [f.category, f.finding, f.status, f.recommendation, f.rationale].filter(Boolean).join(' ')), ...entries.filter(e => e.zone === z.zone).map(e => getPhotoCaption(reportData, e))].join(' ').toLowerCase(),
         })),
+        ...(reportData.vegetationConsiderations?.length ? [{
+          id: 'toc-vegetation',
+          title: 'Vegetation Considerations',
+          content: [reportData.vegetationIntro, ...reportData.vegetationConsiderations.map(v => [v.zone, v.plantId, v.assessment, v.spacingGuidance].filter(Boolean).join(' '))].filter(Boolean).join(' ').toLowerCase(),
+        }] : []),
         { id: 'toc-action', title: 'Prioritized Action Plan', content: (reportData.actionPlan || []).map(a => [a.action, a.zone, a.priority].filter(Boolean).join(' ')).join(' ').toLowerCase() },
         { id: 'zone-guide', title: 'Understanding the Zones', content: ZONE_GUIDE.map(z => `${z.title} ${z.body}`).join(' ').toLowerCase() },
       ]
@@ -680,6 +685,12 @@ export default function ReportPage({ params }) {
             {reportData.zones.map((zone, i) => (
               <ZoneSection key={i} zone={zone} entries={entries} reportData={reportData} id={`toc-zone-${i}`} forceOpen={printMode} />
             ))}
+
+            {reportData.vegetationConsiderations?.length > 0 && (
+              <CollapsibleCard title="Vegetation Considerations" id="toc-vegetation" isH2 forceOpen={printMode}>
+                <VegetationConsiderationsSection intro={reportData.vegetationIntro} items={reportData.vegetationConsiderations} />
+              </CollapsibleCard>
+            )}
 
             <CollapsibleCard title="Prioritized Action Plan" id="toc-action" isH2 forceOpen={printMode}>
               <ActionPlanTable items={reportData.actionPlan} />

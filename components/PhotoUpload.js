@@ -35,8 +35,13 @@ async function uploadToSupabase(dataUrl, propertyId) {
   return data.publicUrl
 }
 
-export default function PhotoUpload({ propertyId, onPhotoUrl }) {
-  const [preview,   setPreview]   = useState(null)
+export default function PhotoUpload({ propertyId, onPhotoUrl, initialUrl }) {
+  // initialUrl seeds the preview when editing an entry that already has a
+  // photo — without it this always starts blank, which is right for new
+  // entries but would silently drop an existing photo on first render of
+  // an edit form (the parent's photoUrl state matches, but the widget
+  // itself would show "+ Take / Upload Photo" as if nothing were set).
+  const [preview,   setPreview]   = useState(initialUrl || null)
   const [uploading, setUploading] = useState(false)
   const inputRef = useRef()
 

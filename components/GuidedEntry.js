@@ -27,36 +27,58 @@ function itemDone(entries, item) {
   return entries.some(e => e.zone === item.zone && e.detail === item.label)
 }
 
-// Inline form for logging a single checklist item. Opens in place under the
-// item row rather than taking over the whole screen — the point of the
-// redesign is that you can move through a side of the house without losing
-// your place.
-function ItemInlineForm({ item, propertyId, user, onSaved, onCancel }) {
-  const [status,   setStatus]   = useState(null)
-  const [note,     setNote]     = useState('')
-  const [photoUrl, setPhotoUrl] = useState(null)
+// Inline form for logging (or editing) a single checklist item entry. Opens
+// in place under the item row rather than taking over the whole screen —
+// the point of the redesign is that you can move through a side of the
+// house without losing your place. Pass `existingEntry` to edit an
+// already-saved entry in place (pre-fills status/note/photo and updates
+// instead of inserting) — omit it to add a new entry, which is the
+// original behavior.
+function ItemInlineForm({ item, propertyId, user, existingEntry, onSaved, onCancel, onDeleted }) {
+  const [status,   setStatus]   = useState(existingEntry?.status || null)
+  const [note,     setNote]     = useState(existingEntry?.note || '')
+  const [photoUrl, setPhotoUrl] = useState(existingEntry?.photo_url || null)
   const [saving,   setSaving]   = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
+  const isEdit = !!existingEntry
 
   async function save() {
     if (!note.trim()) { alert('Add a quick note describing what you see.'); return }
     if (!status)      { alert('Select a status.'); return }
     setSaving(true)
-    const userName = user?.user_metadata?.full_name || user?.email || 'Unknown'
-    const { error } = await supabase.from('entries').insert({
-      property_id: propertyId,
-      zone: item.zone,
-      category: item.zone,
-      status,
-      note: note.trim(),
-      detail: item.label,
-      photo_url: photoUrl || null,
-      created_by: user?.id || null,
-      created_by_name: userName,
-    })
-    setSaving(false)
-    if (error) { alert('Save failed: ' + error.message); return }
+    if (isEdit) {
+      const { error } = await supabase.from('entries')
+        .update({ status, note: note.trim(), photo_url: photoUrl || null })
+        .eq('id', existingEntry.id)
+      setSaving(false)
+      if (error) { alert('Save failed: ' + error.message); return }
+    } else {
+      const userName = user?.user_metadata?.full_name || user?.email || 'Unknown'
+      const { error } = await supabase.from('entries').insert({
+        property_id: propertyId,
+        zone: item.zone,
+        category: item.zone,
+        status,
+        note: note.trim(),
+        detail: item.label,
+        photo_url: photoUrl || null,
+        created_by: user?.id || null,
+        created_by_name: userName,
+      })
+      setSaving(false)
+      if (error) { alert('Save failed: ' + error.message); return }
+    }
     onSaved()
+  }
+
+  async function del() {
+    if (!confirm('Delete this entry? This can\'t be undone.')) return
+    setDeleting(true)
+    const { error } = await supabase.from('entries').delete().eq('id', existingEntry.id)
+    setDeleting(false)
+    if (error) { alert('Delete failed: ' + error.message); return }
+    onDeleted()
   }
 
   return (
@@ -69,7 +91,7 @@ function ItemInlineForm({ item, propertyId, user, onSaved, onCancel }) {
       </button>
 
       <div style={{ marginBottom: 12 }}>
-        <PhotoUpload propertyId={propertyId} onPhotoUrl={setPhotoUrl} />
+        <PhotoUpload propertyId={propertyId} onPhotoUrl={setPhotoUrl} initialUrl={existingEntry?.photo_url} />
       </div>
 
       <div style={{ marginBottom: 12 }}>
@@ -90,11 +112,68 @@ function ItemInlineForm({ item, propertyId, user, onSaved, onCancel }) {
 
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={save} disabled={saving} style={{ flex: 1, background: c.accent, color: '#FFFFFF', border: 'none', borderRadius: 4, fontSize: 12.5, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 11, cursor: 'pointer', opacity: saving ? 0.5 : 1 }}>
-          {saving ? 'Saving…' : 'Save Entry'}
+          {saving ? 'Saving…' : isEdit ? 'Update Entry' : 'Save Entry'}
         </button>
         <button onClick={onCancel} style={{ padding: '11px 14px', background: 'transparent', border: `1px solid ${c.line}`, borderRadius: 4, color: c.muted, fontSize: 12.5, cursor: 'pointer' }}>
           Cancel
         </button>
+        {isEdit && (
+          <button onClick={del} disabled={deleting} style={{ padding: '11px 14px', background: 'transparent', border: `1px solid ${c.warn}`, borderRadius: 4, color: c.warn, fontSize: 12.5, cursor: 'pointer', opacity: deleting ? 0.5 : 1 }}>
+            {deleting ? 'Deleting…' : 'Delete'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Inline form for a single plant photo — deliberately just a photo, no
+// status/note fields, since plants aren't a WPH compliance category. Pass
+// `existingPlant` to replace an already-saved photo (or delete it) instead
+// of adding a new one. Mirrors ItemInlineForm's add/edit/delete shape.
+function PlantInlineForm({ propertyId, zone, existingPlant, onSaved, onCancel, onDeleted }) {
+  const [photoUrl, setPhotoUrl] = useState(existingPlant?.photo_url || null)
+  const [saving,   setSaving]   = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const isEdit = !!existingPlant
+
+  async function save() {
+    if (!photoUrl) { alert('Take a photo of the plant first.'); return }
+    setSaving(true)
+    const { error } = isEdit
+      ? await supabase.from('property_plants').update({ photo_url: photoUrl }).eq('id', existingPlant.id)
+      : await supabase.from('property_plants').insert({ property_id: propertyId, zone, photo_url: photoUrl })
+    setSaving(false)
+    if (error) { alert('Save failed: ' + error.message); return }
+    onSaved()
+  }
+
+  async function del() {
+    if (!confirm('Delete this plant photo? This can\'t be undone.')) return
+    setDeleting(true)
+    const { error } = await supabase.from('property_plants').delete().eq('id', existingPlant.id)
+    setDeleting(false)
+    if (error) { alert('Delete failed: ' + error.message); return }
+    onDeleted()
+  }
+
+  return (
+    <div style={{ background: c.bg, border: `1px solid ${c.line}`, borderRadius: 6, padding: 14, marginTop: 6, marginBottom: 6 }}>
+      <div style={{ marginBottom: 12 }}>
+        <PhotoUpload propertyId={propertyId} onPhotoUrl={setPhotoUrl} initialUrl={existingPlant?.photo_url} />
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={save} disabled={saving || !photoUrl} style={{ flex: 1, background: c.accent, color: '#FFFFFF', border: 'none', borderRadius: 4, fontSize: 12.5, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: 11, cursor: 'pointer', opacity: (saving || !photoUrl) ? 0.5 : 1 }}>
+          {saving ? 'Saving…' : isEdit ? 'Update Photo' : 'Save Photo'}
+        </button>
+        <button onClick={onCancel} style={{ padding: '11px 14px', background: 'transparent', border: `1px solid ${c.line}`, borderRadius: 4, color: c.muted, fontSize: 12.5, cursor: 'pointer' }}>
+          Cancel
+        </button>
+        {isEdit && (
+          <button onClick={del} disabled={deleting} style={{ padding: '11px 14px', background: 'transparent', border: `1px solid ${c.warn}`, borderRadius: 4, color: c.warn, fontSize: 12.5, cursor: 'pointer', opacity: deleting ? 0.5 : 1 }}>
+            {deleting ? 'Deleting…' : 'Delete'}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -126,6 +205,10 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
   const [entries, setEntries] = useState(entriesProp || [])
   const [activeKey, setActiveKey] = useState(SATELLITE_STEP.key)
   const [openItemLabel, setOpenItemLabel] = useState(null)
+  // Within the currently-open item: null = just showing the list of
+  // already-logged entries (no form), 'new' = form open to add another,
+  // or an entry id = form open pre-filled to edit that specific entry.
+  const [itemFormState, setItemFormState] = useState(null)
   const [segRows, setSegRows] = useState({}) // segment_key -> { photo_url, ai_suggestions }
   const [segPhotoDraft, setSegPhotoDraft] = useState(null)
   const [analyzing, setAnalyzing] = useState(false)
@@ -138,9 +221,10 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
   const [savingNotes, setSavingNotes] = useState(false)
   const [notesSaved, setNotesSaved] = useState(false)
   const [plants, setPlants] = useState([]) // all property_plants rows for this property
-  const [plantNameDraft, setPlantNameDraft] = useState('')
-  const [plantNotesDraft, setPlantNotesDraft] = useState('')
-  const [savingPlant, setSavingPlant] = useState(false)
+  const [plantsOpen, setPlantsOpen] = useState(false)
+  // null = list only, 'new' = form open to add a photo, or an entry id =
+  // form open to replace/remove that specific plant's photo.
+  const [plantFormState, setPlantFormState] = useState(null)
   const navScrollRef = useRef(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
@@ -209,33 +293,12 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
     setNotesSaved(true); setTimeout(() => setNotesSaved(false), 2000)
   }
 
-  // Clear the plant add-form whenever the active step changes, so a
-  // half-typed name from one zone can't get submitted against another
-  // (e.g. switching from Front to Left mid-entry).
-  useEffect(() => { setPlantNameDraft(''); setPlantNotesDraft('') }, [activeKey])
-
-  async function addPlant() {
-    const zone = activeStep.plantsZone
-    if (!zone || !plantNameDraft.trim()) return
-    setSavingPlant(true)
-    const { data, error } = await supabase.from('property_plants')
-      .insert({ property_id: propertyId, zone, name: plantNameDraft.trim(), notes: plantNotesDraft.trim() || null })
-      .select().single()
-    setSavingPlant(false)
-    if (error) { alert('Save failed: ' + error.message); return }
-    setPlants(prev => [...prev, data])
-    setPlantNameDraft(''); setPlantNotesDraft('')
-  }
-
-  async function removePlant(id) {
-    const prev = plants
-    setPlants(p => p.filter(pl => pl.id !== id)) // optimistic
-    const { error } = await supabase.from('property_plants').delete().eq('id', id)
-    if (error) { alert('Delete failed: ' + error.message); setPlants(prev) }
-  }
-
+  // After a save/update/delete in the item form, close just the form (not
+  // the whole item panel) so the inspector lands back on the list and can
+  // see the entry they just added/edited, or add another right away —
+  // previously this collapsed the entire item, losing that context.
   function refreshEntries() {
-    setOpenItemLabel(null)
+    setItemFormState(null)
     onSaved?.()
   }
 
@@ -283,6 +346,9 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
     if (idx >= STEPS.length) { onClose(); return }
     setSegPhotoDraft(null)
     setOpenItemLabel(null)
+    setItemFormState(null)
+    setPlantsOpen(false)
+    setPlantFormState(null)
     setActiveKey(STEPS[idx].key)
   }
 
@@ -419,12 +485,18 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
               {activeSegment.items.map(item => {
-                const done = itemDone(entries, item)
+                const itemEntries = entries.filter(e => e.zone === item.zone && e.detail === item.label)
+                const done = itemEntries.length > 0
                 const isOpen = openItemLabel === item.label
+                const editingEntry = itemFormState && itemFormState !== 'new' ? itemEntries.find(en => en.id === itemFormState) : null
                 return (
                   <div key={item.label}>
                     <button
-                      onClick={() => setOpenItemLabel(isOpen ? null : item.label)}
+                      onClick={() => {
+                        const opening = !isOpen
+                        setOpenItemLabel(opening ? item.label : null)
+                        setItemFormState(null)
+                      }}
                       style={{
                         width: '100%', display: 'flex', alignItems: 'center', gap: 10,
                         background: c.surface, border: `1px solid ${isOpen ? c.accent : (done ? c.ok : c.line)}`,
@@ -439,71 +511,123 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
                         fontSize: 10, color: '#FFFFFF',
                       }}>{done ? '✓' : ''}</span>
                       <span style={{ fontSize: 13, color: done ? c.muted : c.text, flex: 1 }}>{item.label}</span>
-                      <span style={{ fontSize: 11, color: c.muted }}>{isOpen ? '▲' : (done ? 'Add another' : '+')}</span>
+                      <span style={{ fontSize: 11, color: c.muted }}>{isOpen ? '▲' : (done ? `${itemEntries.length} logged` : '+')}</span>
                     </button>
                     {isOpen && (
-                      <ItemInlineForm
-                        item={item}
-                        propertyId={propertyId}
-                        user={user}
-                        onSaved={refreshEntries}
-                        onCancel={() => setOpenItemLabel(null)}
-                      />
+                      <div style={{ marginTop: 6, marginBottom: 6 }}>
+                        {/* Already-logged entries for this item — click one to
+                            edit it in place, rather than only ever being able
+                            to add blind new entries next to it. */}
+                        {itemEntries.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+                            {itemEntries.map(en => (
+                              <div key={en.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: c.surface, border: `1px solid ${c.line}`, borderRadius: 6, padding: '9px 11px' }}>
+                                {en.photo_url && <img src={en.photo_url} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 10, fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.04em', color: c.accent, marginBottom: 2 }}>
+                                    {STATUSES.find(s => s.value === en.status)?.label || en.status || 'Pending'}
+                                  </div>
+                                  <div style={{ fontSize: 12.5, color: c.text, lineHeight: 1.4 }}>{en.note}</div>
+                                </div>
+                                <button onClick={() => setItemFormState(en.id)} style={{ fontSize: 11, fontFamily: 'monospace', color: c.accent, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', flexShrink: 0 }}>
+                                  ✎ Edit
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {itemFormState === 'new' || editingEntry ? (
+                          <ItemInlineForm
+                            item={item}
+                            propertyId={propertyId}
+                            user={user}
+                            existingEntry={editingEntry}
+                            onSaved={refreshEntries}
+                            onCancel={() => setItemFormState(null)}
+                            onDeleted={refreshEntries}
+                          />
+                        ) : (
+                          <button onClick={() => setItemFormState('new')} style={{ fontSize: 12, fontFamily: 'monospace', color: c.accent, background: 'transparent', border: `1px solid ${c.accent}`, borderRadius: 4, padding: '8px 12px', cursor: 'pointer' }}>
+                            {done ? '+ Add another entry' : '+ Add entry'}
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 )
               })}
             </div>
 
-            {/* Plants — only on segments tied to a vegetation zone (0-5 ft,
-                5-30 ft defensible space, Overall Site). Just the name here;
-                native status and fire risk get filled in by the AI when
-                the report is generated (see report-draft/route.js), so
-                there's nothing to look up in the field. */}
-            {activeStep.plantsZone && (
-              <div style={{ background: c.surface, border: `1px solid ${c.line}`, borderRadius: 8, padding: 14, marginBottom: 24 }}>
-                <span style={{ display: 'block', fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: c.accent, marginBottom: 8 }}>
-                  Plants
-                </span>
-                <p style={{ fontSize: 12, color: c.muted, lineHeight: 1.5, margin: '0 0 10px' }}>
-                  Log anything you can identify — the report will note whether each is native and its fire risk.
-                </p>
-
-                {plants.filter(p => p.zone === activeStep.plantsZone).length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-                    {plants.filter(p => p.zone === activeStep.plantsZone).map(p => (
-                      <div key={p.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: c.bg, border: `1px solid ${c.line}`, borderRadius: 6, padding: '8px 10px' }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, color: c.text, fontWeight: 600 }}>{p.name}</div>
-                          {p.notes && <div style={{ fontSize: 11.5, color: c.muted, marginTop: 2 }}>{p.notes}</div>}
+            {/* Plants — styled and interacted with exactly like a checklist
+                item above (collapsed row → expand → list of what's already
+                logged, each editable in place, plus an add button), but
+                it's not a WPH compliance category: no status, no note, just
+                a photo. The AI identifies the plant and assesses it when
+                the report is generated (see report-draft/route.js) — that's
+                what "Vegetation Considerations" pulls from. */}
+            {activeStep.plantsZone && (() => {
+              const zonePlants = plants.filter(p => p.zone === activeStep.plantsZone)
+              const plantsDone = zonePlants.length > 0
+              const editingPlant = plantFormState && plantFormState !== 'new' ? zonePlants.find(p => p.id === plantFormState) : null
+              return (
+                <div style={{ marginBottom: 20 }}>
+                  <button
+                    onClick={() => {
+                      const opening = !plantsOpen
+                      setPlantsOpen(opening)
+                      setPlantFormState(null)
+                    }}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                      background: c.surface, border: `1px solid ${plantsOpen ? c.accent : (plantsDone ? c.ok : c.line)}`,
+                      borderRadius: 6, padding: '10px 12px', cursor: 'pointer', textAlign: 'left',
+                    }}
+                  >
+                    <span style={{
+                      width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                      border: `1px solid ${plantsDone ? c.ok : c.line}`,
+                      background: plantsDone ? c.ok : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 10, color: '#FFFFFF',
+                    }}>{plantsDone ? '✓' : ''}</span>
+                    <span style={{ fontSize: 13, color: plantsDone ? c.muted : c.text, flex: 1 }}>Plants</span>
+                    <span style={{ fontSize: 11, color: c.muted }}>{plantsOpen ? '▲' : (plantsDone ? `${zonePlants.length} logged` : '+')}</span>
+                  </button>
+                  {plantsOpen && (
+                    <div style={{ marginTop: 6, marginBottom: 6 }}>
+                      <p style={{ fontSize: 12, color: c.muted, lineHeight: 1.5, margin: '0 0 8px' }}>
+                        Photograph each plant you can get a clear shot of — the report will identify it and note whether it's a good fire-safe choice, plus spacing guidance.
+                      </p>
+                      {zonePlants.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                          {zonePlants.map(p => (
+                            <button key={p.id} onClick={() => setPlantFormState(p.id)} style={{ padding: 0, border: `1px solid ${plantFormState === p.id ? c.accent : c.line}`, borderRadius: 6, overflow: 'hidden', cursor: 'pointer', lineHeight: 0, background: 'none' }}>
+                              <img src={p.photo_url} alt="Logged plant" style={{ width: 64, height: 64, objectFit: 'cover', display: 'block' }} />
+                            </button>
+                          ))}
                         </div>
-                        <button onClick={() => removePlant(p.id)} aria-label={`Remove ${p.name}`} style={{ background: 'none', border: 'none', color: c.muted, fontSize: 15, cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}>✕</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      )}
 
-                <input
-                  style={{ ...input, marginBottom: 8 }}
-                  type="text"
-                  placeholder="Plant name (e.g. Italian cypress)"
-                  value={plantNameDraft}
-                  onChange={e => setPlantNameDraft(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && plantNameDraft.trim()) addPlant() }}
-                />
-                <input
-                  style={{ ...input, marginBottom: 8 }}
-                  type="text"
-                  placeholder="Notes (optional) — e.g. cluster of 3 near the west corner"
-                  value={plantNotesDraft}
-                  onChange={e => setPlantNotesDraft(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && plantNameDraft.trim()) addPlant() }}
-                />
-                <button onClick={addPlant} disabled={savingPlant || !plantNameDraft.trim()} style={{ fontSize: 11.5, fontFamily: 'monospace', color: c.accent, background: 'transparent', border: `1px solid ${c.accent}`, borderRadius: 4, padding: '7px 12px', cursor: 'pointer', opacity: (savingPlant || !plantNameDraft.trim()) ? 0.5 : 1 }}>
-                  {savingPlant ? 'Adding…' : '+ Add Plant'}
-                </button>
-              </div>
-            )}
+                      {(plantFormState === 'new' || editingPlant) ? (
+                        <PlantInlineForm
+                          propertyId={propertyId}
+                          zone={activeStep.plantsZone}
+                          existingPlant={editingPlant}
+                          onSaved={async () => { await loadPlants(); setPlantFormState(null) }}
+                          onCancel={() => setPlantFormState(null)}
+                          onDeleted={async () => { await loadPlants(); setPlantFormState(null) }}
+                        />
+                      ) : (
+                        <button onClick={() => setPlantFormState('new')} style={{ fontSize: 12, fontFamily: 'monospace', color: c.accent, background: 'transparent', border: `1px solid ${c.accent}`, borderRadius: 4, padding: '8px 12px', cursor: 'pointer' }}>
+                          {plantsDone ? '+ Add another plant photo' : '+ Add plant photo'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
 
             {/* Whole-side photo + AI gap check */}
             {activeSegment.wholeSidePhoto && (

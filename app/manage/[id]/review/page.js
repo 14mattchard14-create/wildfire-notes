@@ -14,6 +14,7 @@ import {
 import {
   reportColors, StatusPill, RiskBadge, CollapsibleCard, priorityColor,
   FindingView, ZonePhotoGrid, ActionPlanTable, PhotoCarousel, Modal,
+  VegetationConsiderationsSection,
 } from '@/components/ReportView'
 import ThemeToggle from '@/components/ThemeToggle'
 import BrandLogo from '@/components/BrandLogo'
@@ -873,6 +874,15 @@ export default function PropertyReviewFlow() {
   }
   function addActionItem() { patch({ actionPlan: [...draftData.actionPlan, emptyActionItem()] }) }
   function removeActionItem(ai) { patch({ actionPlan: draftData.actionPlan.filter((_, i) => i !== ai) }) }
+  function updateVegetationItem(vi, field, value) {
+    const vegetationConsiderations = draftData.vegetationConsiderations.map((v, i) => i === vi ? { ...v, [field]: value } : v)
+    patch({ vegetationConsiderations })
+  }
+  // No "add" here — unlike action items, a vegetation entry is tied to an
+  // actual photographed plant (see property_plants / Guided Entry), so
+  // there's nothing meaningful to add without a photo. Remove only, for
+  // dropping a bad/duplicate AI read on an existing photo.
+  function removeVegetationItem(vi) { patch({ vegetationConsiderations: draftData.vegetationConsiderations.filter((_, i) => i !== vi) }) }
   function updatePhotoCaption(entryId, value) {
     patch({ photoCaptions: { ...(draftData.photoCaptions || {}), [entryId]: value } })
   }
@@ -1462,6 +1472,68 @@ export default function PropertyReviewFlow() {
                       Add Zone
                     </Button>
                   </div>
+                )}
+
+                {draftData.vegetationConsiderations?.length > 0 && (
+                  <CollapsibleCard
+                    title="Vegetation Considerations"
+                    isH2
+                    defaultOpen
+                    headerContent={<SectionTools sectionKey="vegetation" editingSection={editingSection} savingSection={savingSection} onEdit={setEditingSection} onDone={saveSection} onHistory={setHistoryFor} />}
+                  >
+                    {editingSection === 'vegetation' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {draftData.vegetationIntro !== undefined && (
+                          <div>
+                            <label style={{ display: 'block', fontSize: 11, color: c.muted, marginBottom: 4 }}>Intro</label>
+                            <textarea
+                              value={draftData.vegetationIntro || ''}
+                              onChange={e => patch({ vegetationIntro: e.target.value })}
+                              rows={2}
+                              className={focusRing}
+                              style={{ ...blend, background: c.surfaceAlt, borderRadius: 6, padding: '8px 10px', fontSize: 13.5, color: c.text, resize: 'vertical' }}
+                            />
+                          </div>
+                        )}
+                        {draftData.vegetationConsiderations.map((v, vi) => (
+                          <div key={vi} style={{ border: `1px solid ${c.border}`, borderRadius: 8, padding: 12, display: 'flex', gap: 12 }}>
+                            {v.photoUrl && <img src={v.photoUrl} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />}
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <div style={{ fontSize: 10.5, color: c.muted }}>{v.zone}</div>
+                              <input
+                                value={v.plantId}
+                                onChange={e => updateVegetationItem(vi, 'plantId', e.target.value)}
+                                placeholder="Plant ID"
+                                className={focusRing}
+                                style={{ ...blend, background: c.surfaceAlt, borderRadius: 4, padding: '6px 8px', fontSize: 14, fontWeight: 700, color: c.navy }}
+                              />
+                              <textarea
+                                value={v.assessment}
+                                onChange={e => updateVegetationItem(vi, 'assessment', e.target.value)}
+                                placeholder="Assessment — native status, fire risk"
+                                rows={2}
+                                className={focusRing}
+                                style={{ ...blend, background: c.surfaceAlt, borderRadius: 4, padding: '6px 8px', fontSize: 13, color: c.text, resize: 'vertical' }}
+                              />
+                              <textarea
+                                value={v.spacingGuidance}
+                                onChange={e => updateVegetationItem(vi, 'spacingGuidance', e.target.value)}
+                                placeholder="Spacing guidance"
+                                rows={2}
+                                className={focusRing}
+                                style={{ ...blend, background: c.surfaceAlt, borderRadius: 4, padding: '6px 8px', fontSize: 13, color: c.text, resize: 'vertical' }}
+                              />
+                            </div>
+                            <button onClick={() => removeVegetationItem(vi)} title="Remove" style={{ background: 'none', border: 'none', color: c.warn, cursor: 'pointer', display: 'flex', alignSelf: 'flex-start' }}>
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <VegetationConsiderationsSection intro={draftData.vegetationIntro} items={draftData.vegetationConsiderations} />
+                    )}
+                  </CollapsibleCard>
                 )}
 
                 <CollapsibleCard

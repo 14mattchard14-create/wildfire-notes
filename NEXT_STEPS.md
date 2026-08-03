@@ -4,8 +4,9 @@ _Last updated: 2026-08-02_
 
 ## ⚠️ Action required — new migration
 
-- Run `supabase/migrations/019_property_plants.sql` — new `property_plants` table. Required for
-  the new Plants field (see round 56 below) to save anything.
+- Run `supabase/migrations/019_property_plants.sql` then `020_plants_photo_only.sql` — creates
+  `property_plants` and adds its `photo_url` column. Required for the Plants field (see round 56
+  below) to save anything. Run both, in order, even if you haven't run 019 yet.
 - Run `supabase/migrations/018_street_view_image.sql` — adds `properties.street_view_image_url`.
   Required for the new Street View companion image (see round 55 below) to save/display at all.
 - Run `supabase/migrations/015_booking_payments.sql` — adds booking fields to `properties`
@@ -61,21 +62,37 @@ Full detail in `BOOKING_PAYMENTS_PLAN.md`.
 - No new npm packages — reuses the existing `entry-photos` Supabase Storage bucket under
   a `satellite/` prefix, no new bucket needed.
 
-## Done this session (2026-08-02, round 56 — Plants field on vegetation zones)
+## Done this session (2026-08-02, round 56 — Plants field: photo capture + Vegetation Considerations report section)
 
-- New `property_plants` table (migration 019, see ⚠️ above — needs to be run): `property_id`,
-  `zone`, `name`, `notes`.
-- Added a "Plants" field to the Guided Entry segments tied to a vegetation zone — Front/Left/
-  Right/Back (all share one list for `0-5 FT. Noncombustible Zone`, since it's the same zone
-  finding regardless of which side you spotted it from), the `5-30 FT Defensible Space —
-  Vegetation` step, and Overall Site. Just a plant name + optional note in the field — no
-  native/risk lookup needed on-site.
-- `/api/report-draft` now feeds the logged plants (grouped by zone) into the report-generation
-  prompt. For any zone with plants logged, the AI names each one, states whether it's native to
-  the region and its general wildfire fuel/fire risk (using its own botanical knowledge — it's
-  told to say so rather than guess if it's not confident on a specific species), and prefaces the
-  list with a note that plant *combination and spacing* — not any one species alone — is what
-  most affects defensible-space risk. Zones with no plants logged get no added commentary.
+Went through two shapes this round — first a text name/notes field folded into each zone's
+finding, then reworked per your follow-up into a pure photo capture with its own report section.
+This describes the final version:
+
+- `property_plants` table (migrations 019 + 020, see ⚠️ above — both need to be run):
+  `property_id`, `zone`, `photo_url`.
+- Guided Entry: "Plants" now shows up styled and interacted with exactly like a checklist item
+  (collapsed row → expand → list of what's logged, click one to replace/delete it, "+ Add
+  another") on the segments tied to a vegetation zone — Front/Left/Right/Back (sharing one list
+  for `0-5 FT. Noncombustible Zone`, since it's the same zone finding regardless of which side you
+  spotted it from), the `5-30 FT Defensible Space — Vegetation` step, and Overall Site. Unlike a
+  real checklist item there's no status/note — just a photo, since plants aren't a WPH compliance
+  category.
+- Checklist items themselves (not just Plants) got the same list/edit treatment while I was in
+  there per your request — clicking an item now shows everything already logged for it, each
+  entry editable (or deletable) in place via a pre-filled form, instead of only ever adding a new
+  blind entry next to it.
+- `/api/report-draft` sends every plant photo straight to the AI as an image (via the Anthropic
+  API's URL image source — no fetch/base64 step needed) alongside the usual text prompt, each one
+  labeled with the zone it came from. The response now includes a new top-level
+  `vegetationConsiderations` array (one entry per photo, in order) with an AI-identified
+  `plantId`, an `assessment` of whether it's a fire-safe/native-appropriate choice, and
+  `spacingGuidance`, plus a one-time `vegetationIntro` prefacing that plant *combination and
+  spacing* — not any single species — is what most drives defensible-space risk. This is a
+  separate report section now, not folded into any zone's finding text.
+- New "Vegetation Considerations" section renders in both the customer report (`/report/[token]`,
+  with its own TOC entry and search indexing) and the review page (read mode via the same shared
+  component, plus an edit mode for correcting the AI's plant ID/assessment/spacing text or
+  dropping a bad photo read).
 
 ## Done this session (2026-08-02, round 55 — Street View companion image on the pre-flight scan)
 
