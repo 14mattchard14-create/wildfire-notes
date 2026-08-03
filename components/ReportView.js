@@ -172,6 +172,9 @@ function FindingDetail({ f, large }) {
         <div style={{ fontWeight: 700, color: c.navy, fontSize: large ? 19 : 14.5 }}>{f.category}</div>
         <StatusPill status={f.status} />
       </div>
+      {large && (f.finding || f.rationale) && (
+        <div style={{ fontSize: 11, fontWeight: 700, color: c.slate, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>Description of Finding</div>
+      )}
       {large && f.finding && <div style={{ marginBottom: f.rationale ? 12 : 16, fontSize: 15, color: c.text, lineHeight: 1.7 }}>{f.finding}</div>}
       {large && f.rationale && <div style={{ marginBottom: 16, fontSize: 14, color: c.muted, fontStyle: 'italic', lineHeight: 1.7 }}>{f.rationale}</div>}
       {f.recommendation && (
@@ -225,6 +228,7 @@ export function FindingView({ f, forceOpen }) {
         )}
         {isExpanded && (
           <div style={{ fontSize: 13.5, color: c.text, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: c.slate, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>Description of Finding</div>
             {f.finding && <div style={{ marginBottom: f.rationale ? 6 : 0 }}>{f.finding}</div>}
             {f.rationale && <div style={{ color: c.muted, fontStyle: 'italic' }}>{f.rationale}</div>}
           </div>

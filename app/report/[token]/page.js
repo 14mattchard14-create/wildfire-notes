@@ -608,7 +608,10 @@ export default function ReportPage({ params }) {
               {printMode ? 'Preparing…' : '⬇ Download PDF'}
             </button>
           </div>
-          <h1 style={{ fontSize: 26, fontWeight: 800, margin: '0 0 20px', lineHeight: 1.2 }}>{report?.property_address}</h1>
+          {/* Explicit white here — the global `h1 { color: var(--text) }` rule
+              in globals.css otherwise wins over the navy header's inherited
+              white, rendering this near-invisible (dark text on dark navy). */}
+          <h1 style={{ fontSize: 26, fontWeight: 800, margin: '0 0 20px', lineHeight: 1.2, color: '#fff' }}>{report?.property_address}</h1>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 16, paddingBottom: 24, borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
             {[['Date of Assessment', report?.visit_date], ['Inspector', report?.inspector_name], ['Report Date', report?.created_at ? new Date(report.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : null]].filter(([, v]) => v).map(([label, val]) => (
               <div key={label}>
