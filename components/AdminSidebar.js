@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { Home, Users, Activity, Sparkles, Settings, SidebarClose, SidebarOpen } from 'lucide-react'
+import { Home, Users, Activity, Sparkles, Settings, SidebarClose, SidebarOpen, Calculator } from 'lucide-react'
 
 // Persistent left-nav for every inspector-facing admin page — same list,
 // same highlighting, everywhere (properties table, a single property, the
@@ -16,6 +16,7 @@ const NAV = [
   { href: '/insights/settings', label: 'Settings', icon: Settings, match: p => p.startsWith('/insights/settings') },
   { href: '/insights', label: 'Activity', icon: Activity, match: p => p === '/insights' },
   { href: '/quality', label: 'Report Quality', icon: Sparkles, match: p => p.startsWith('/quality') },
+  { href: '/estimate', label: 'Estimate', icon: Calculator, match: p => p.startsWith('/estimate') },
   { href: '/crm', label: 'CRM', icon: Users, match: p => p.startsWith('/crm') },
   { href: '/manage', label: 'Properties', icon: Home, match: p => p === '/manage' || p.startsWith('/manage/') },
 ]
@@ -23,7 +24,7 @@ const NAV = [
 // Rendered in NAV's intended display order — the array above is ordered
 // for match-priority, not display, so we sort it here. Settings is pinned
 // to the very bottom regardless of what else is added to this list later.
-const DISPLAY_ORDER = ['/manage', '/crm', '/insights', '/quality']
+const DISPLAY_ORDER = ['/manage', '/crm', '/estimate', '/insights', '/quality']
 const ORDERED_NAV = DISPLAY_ORDER.map(href => NAV.find(item => item.href === href))
 const SETTINGS_ITEM = NAV.find(item => item.href === '/insights/settings')
 

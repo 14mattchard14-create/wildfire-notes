@@ -4,6 +4,9 @@ _Last updated: 2026-08-02_
 
 ## ⚠️ Action required — new migration
 
+- Run `supabase/migrations/022_mitigation_price_rates.sql` — creates `mitigation_price_rates`
+  (seeded with draft placeholder rates) and adds `property_measurements.category`. Required for
+  the new /estimate tab (see round 58 below) to work at all.
 - Run `supabase/migrations/021_property_measurements.sql` — creates `property_measurements`.
   Required for the new Measurements capture (see round 57 below) to save anything.
 - Run `supabase/migrations/019_property_plants.sql` then `020_plants_photo_only.sql` — creates
@@ -63,6 +66,30 @@ Full detail in `BOOKING_PAYMENTS_PLAN.md`.
   troubleshooting).
 - No new npm packages — reuses the existing `entry-photos` Supabase Storage bucket under
   a `satellite/` prefix, no new bucket needed.
+
+## Done this session (2026-08-02, round 58 — /estimate tab: draft cost rates + computed property estimates)
+
+- `mitigation_price_rates` table (migration 022, see ⚠️ above): `category` (unique), `unit`
+  (ft / sq ft), `rate_low`, `rate_high`, `notes` — seeded with 9 draft categories/rates covering
+  the measurable WPH mitigations (fencing, wall clearance, gutter guards, vegetation clearance/
+  thinning, groundcover conversion, decking, siding, roofing). These are placeholder starting
+  points, not sourced pricing — edit them on the new tab before trusting any total. Fixed-cost,
+  non-dimensional items (vent covers, window/door replacement) aren't covered — the rate table
+  is unit-priced (ft/sq ft) only, matching what the Measurements capture flow supports.
+- Guided Entry's Measurements form now has a category picker (sourced live from
+  `mitigation_price_rates`) instead of a free unit toggle — picking a category locks in the unit,
+  since the category is what gets matched to a rate later. `property_measurements.category` is
+  nullable for backward compatibility with anything captured before this round.
+- `/api/report-draft` now also selects and backfills `category` into
+  `reportData.mitigationMeasurements`, same positional-match pattern as zone/label/unit. The
+  review page's Mitigation Measurements edit mode got a category dropdown too, so a measurement
+  that came back uncategorized (or miscategorized) can be fixed without regenerating the report.
+- New `/estimate` tab (own sidebar entry): the rate table above, fully editable in place, plus a
+  "Property Estimates" list — every property with at least one captured measurement, showing a
+  computed total cost range and an expandable line-item breakdown (dimension × rate, per
+  measurement). Unmatched/uncategorized/not-yet-estimated measurements are flagged rather than
+  silently dropped from the total. All client-side Supabase reads/writes, no new API routes —
+  same pattern as the rest of this app's operational CRUD.
 
 ## Done this session (2026-08-02, round 57 — Mitigation Measurements: dimension capture for cost estimates)
 

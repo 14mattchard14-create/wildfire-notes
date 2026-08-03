@@ -32,7 +32,7 @@ export async function POST(request) {
     supabaseAdmin.from('guided_segments').select('segment_key, notes').eq('property_id', propertyId),
     supabaseAdmin.from('priorities').select('*').eq('property_id', propertyId).order('rank'),
     supabaseAdmin.from('property_plants').select('zone, photo_url').eq('property_id', propertyId).not('photo_url', 'is', null).order('created_at'),
-    supabaseAdmin.from('property_measurements').select('zone, label, unit, photo_url, reference_type').eq('property_id', propertyId).order('created_at'),
+    supabaseAdmin.from('property_measurements').select('zone, label, category, unit, photo_url, reference_type').eq('property_id', propertyId).order('created_at'),
   ])
 
   if (!property) return Response.json({ error: 'Property not found' }, { status: 404 })
@@ -244,6 +244,7 @@ Rules:
       ...m,
       zone: measurementRows?.[i]?.zone || m.zone || '',
       label: measurementRows?.[i]?.label || m.label || '',
+      category: measurementRows?.[i]?.category || '',
       unit: measurementRows?.[i]?.unit || m.unit || '',
       photoUrl: measurementRows?.[i]?.photo_url || '',
     })).filter(m => m.photoUrl)

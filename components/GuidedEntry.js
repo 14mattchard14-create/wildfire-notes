@@ -179,30 +179,44 @@ function PlantInlineForm({ propertyId, zone, existingPlant, onSaved, onCancel, o
   )
 }
 
-const MEASUREMENT_UNITS = ['ft', 'sq ft']
-
 // Inline form for a single dimension capture — a photo of the thing being
 // measured with a standard sheet of paper laid flat in the same shot as a
-// scale reference, plus a short label and unit. No manual dimension entry:
-// report-draft sends the photo to Claude vision, which locates the paper
-// (known 8.5x11in size), locates the measured item, and computes an
-// estimated real-world dimension from the two — see report-draft/route.js.
-// Available on every segment (unlike Plants, which is vegetation-zones
-// only), since mitigations needing a size estimate can turn up anywhere:
-// fence runs, brush clearance width, tank-to-structure distance, etc.
+// scale reference, plus a short label and a mitigation category. No manual
+// dimension entry: report-draft sends the photo to Claude vision, which
+// locates the paper (known 8.5x11in size), locates the measured item, and
+// computes an estimated real-world dimension from the two — see
+// report-draft/route.js. Available on every segment (unlike Plants, which
+// is vegetation-zones only), since mitigations needing a size estimate can
+// turn up anywhere: fence runs, brush clearance width, tank-to-structure
+// distance, etc.
+//
+// Category drives the unit (ft vs. sq ft) rather than the inspector picking
+// it directly — the category IS the thing that gets priced later on the
+// /estimate tab (see mitigation_price_rates, migration 022), so matching
+// has to be an exact category lookup, not fuzzy label text.
 function MeasurementInlineForm({ propertyId, zone, existingMeasurement, onSaved, onCancel, onDeleted }) {
   const [label,    setLabel]    = useState(existingMeasurement?.label || '')
-  const [unit,     setUnit]     = useState(existingMeasurement?.unit || MEASUREMENT_UNITS[0])
+  const [category, setCategory] = useState(existingMeasurement?.category || '')
+  const [rates,    setRates]    = useState([])
   const [photoUrl, setPhotoUrl] = useState(existingMeasurement?.photo_url || null)
   const [saving,   setSaving]   = useState(false)
   const [deleting, setDeleting] = useState(false)
   const isEdit = !!existingMeasurement
 
+  useEffect(() => {
+    supabase.from('mitigation_price_rates').select('category, unit').order('category')
+      .then(({ data }) => setRates(data || []))
+  }, [])
+
+  const selectedRate = rates.find(r => r.category === category)
+  const unit = selectedRate?.unit || existingMeasurement?.unit || ''
+
   async function save() {
     if (!label.trim()) { alert('Describe what you\'re measuring (e.g. "brush clearance run").'); return }
+    if (!category) { alert('Pick a mitigation category — it\'s how the Estimate tab matches this to a cost rate.'); return }
     if (!photoUrl) { alert('Take a photo first — lay a standard sheet of paper flat in the same shot as what you\'re measuring, for scale.'); return }
     setSaving(true)
-    const payload = { label: label.trim(), unit, photo_url: photoUrl, reference_type: 'letter_paper' }
+    const payload = { label: label.trim(), category, unit, photo_url: photoUrl, reference_type: 'letter_paper' }
     const { error } = isEdit
       ? await supabase.from('property_measurements').update(payload).eq('id', existingMeasurement.id)
       : await supabase.from('property_measurements').insert({ property_id: propertyId, zone, ...payload })
@@ -226,16 +240,18 @@ function MeasurementInlineForm({ propertyId, zone, existingMeasurement, onSaved,
         Lay a standard sheet of paper (8.5×11") flat in the same shot as what you're measuring — the report generator uses it as a scale reference to estimate the real-world size.
       </p>
       <input style={{ ...input, marginBottom: 10 }} type="text" placeholder='What are you measuring? (e.g. "brush clearance run")' value={label} onChange={e => setLabel(e.target.value)} />
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-        {MEASUREMENT_UNITS.map(u => (
-          <button key={u} onClick={() => setUnit(u)} style={{
-            padding: '6px 14px', border: `1px solid ${unit === u ? c.accent : c.line}`,
-            borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontSize: 11.5,
-            color: unit === u ? c.accent : c.muted,
-            background: unit === u ? 'rgba(190,91,29,.15)' : 'transparent',
-          }}>{u}</button>
-        ))}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+        <select value={category} onChange={e => setCategory(e.target.value)} style={{ ...input, flex: 1 }}>
+          <option value="">Mitigation category…</option>
+          {rates.map(r => <option key={r.category} value={r.category}>{r.category}</option>)}
+        </select>
+        {unit && <span style={{ fontSize: 11, fontFamily: 'monospace', color: c.muted, whiteSpace: 'nowrap' }}>in {unit}</span>}
       </div>
+      {rates.length === 0 && (
+        <p style={{ fontSize: 11.5, color: c.warn, lineHeight: 1.5, margin: '-6px 0 12px' }}>
+          No mitigation categories set up yet — add some on the Estimate tab first.
+        </p>
+      )}
       <div style={{ marginBottom: 12 }}>
         <PhotoUpload propertyId={propertyId} onPhotoUrl={setPhotoUrl} initialUrl={existingMeasurement?.photo_url} />
       </div>
@@ -770,7 +786,7 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
                               {m.photo_url && <img src={m.photo_url} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />}
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: 12.5, color: c.text, lineHeight: 1.4 }}>{m.label}</div>
-                                <div style={{ fontSize: 10, fontFamily: 'monospace', color: c.muted, marginTop: 2 }}>{m.unit}</div>
+                                <div style={{ fontSize: 10, fontFamily: 'monospace', color: c.muted, marginTop: 2 }}>{m.category ? `${m.category} · ${m.unit}` : (m.unit || 'uncategorized')}</div>
                               </div>
                               <button onClick={() => setMeasurementFormState(m.id)} style={{ fontSize: 11, fontFamily: 'monospace', color: c.accent, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', flexShrink: 0 }}>
                                 ✎ Edit

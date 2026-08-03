@@ -648,6 +648,14 @@ export default function PropertyReviewFlow() {
   const [historyFor, setHistoryFor] = useState(null)
   const [markingFinal, setMarkingFinal] = useState(false)
   const [finalMsg, setFinalMsg] = useState('')
+  // Mitigation categories for fixing up an uncategorized/miscategorized
+  // measurement without leaving the review page — see mitigation_price_rates,
+  // migration 022, and the /estimate tab that prices against it.
+  const [rateCategories, setRateCategories] = useState([])
+  useEffect(() => {
+    supabase.from('mitigation_price_rates').select('category').order('category')
+      .then(({ data }) => setRateCategories((data || []).map(r => r.category)))
+  }, [])
 
   const load = useCallback(async () => {
     setFetching(true)
@@ -1566,6 +1574,15 @@ export default function PropertyReviewFlow() {
                                 className={focusRing}
                                 style={{ ...blend, background: c.surfaceAlt, borderRadius: 4, padding: '6px 8px', fontSize: 14, fontWeight: 700, color: c.navy }}
                               />
+                              <select
+                                value={m.category || ''}
+                                onChange={e => updateMeasurementItem(mi, 'category', e.target.value)}
+                                className={focusRing}
+                                style={{ ...blend, background: c.surfaceAlt, borderRadius: 4, padding: '6px 8px', fontSize: 12.5, color: m.category ? c.text : c.warn }}
+                              >
+                                <option value="">Uncategorized — won't be priced on the Estimate tab</option>
+                                {rateCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                              </select>
                               <div style={{ display: 'flex', gap: 8 }}>
                                 <input
                                   type="number"
