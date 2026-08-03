@@ -137,6 +137,10 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
   const [notesDraft, setNotesDraft] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
   const [notesSaved, setNotesSaved] = useState(false)
+  const [plants, setPlants] = useState([]) // all property_plants rows for this property
+  const [plantNameDraft, setPlantNameDraft] = useState('')
+  const [plantNotesDraft, setPlantNotesDraft] = useState('')
+  const [savingPlant, setSavingPlant] = useState(false)
   const navScrollRef = useRef(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
@@ -168,6 +172,16 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
 
   useEffect(() => { loadSegments() }, [loadSegments])
 
+  // All plants for this property, loaded once — filtered per-zone at
+  // render time (front/left/right/back all share the same zone, so this
+  // avoids four separate queries for what's really one shared list).
+  const loadPlants = useCallback(async () => {
+    const { data } = await supabase.from('property_plants').select('*').eq('property_id', propertyId).order('created_at')
+    setPlants(data || [])
+  }, [propertyId])
+
+  useEffect(() => { loadPlants() }, [loadPlants])
+
   const activeIdx = STEPS.findIndex(s => s.key === activeKey)
   const activeStep = STEPS[activeIdx]
   const activeSegment = activeStep
@@ -193,6 +207,31 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
     if (error) { alert('Save failed: ' + error.message); return }
     setSegRows(prev => ({ ...prev, [activeKey]: { ...(prev[activeKey] || {}), segment_key: activeKey, notes: notesDraft } }))
     setNotesSaved(true); setTimeout(() => setNotesSaved(false), 2000)
+  }
+
+  // Clear the plant add-form whenever the active step changes, so a
+  // half-typed name from one zone can't get submitted against another
+  // (e.g. switching from Front to Left mid-entry).
+  useEffect(() => { setPlantNameDraft(''); setPlantNotesDraft('') }, [activeKey])
+
+  async function addPlant() {
+    const zone = activeStep.plantsZone
+    if (!zone || !plantNameDraft.trim()) return
+    setSavingPlant(true)
+    const { data, error } = await supabase.from('property_plants')
+      .insert({ property_id: propertyId, zone, name: plantNameDraft.trim(), notes: plantNotesDraft.trim() || null })
+      .select().single()
+    setSavingPlant(false)
+    if (error) { alert('Save failed: ' + error.message); return }
+    setPlants(prev => [...prev, data])
+    setPlantNameDraft(''); setPlantNotesDraft('')
+  }
+
+  async function removePlant(id) {
+    const prev = plants
+    setPlants(p => p.filter(pl => pl.id !== id)) // optimistic
+    const { error } = await supabase.from('property_plants').delete().eq('id', id)
+    if (error) { alert('Delete failed: ' + error.message); setPlants(prev) }
   }
 
   function refreshEntries() {
@@ -415,6 +454,56 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
                 )
               })}
             </div>
+
+            {/* Plants — only on segments tied to a vegetation zone (0-5 ft,
+                5-30 ft defensible space, Overall Site). Just the name here;
+                native status and fire risk get filled in by the AI when
+                the report is generated (see report-draft/route.js), so
+                there's nothing to look up in the field. */}
+            {activeStep.plantsZone && (
+              <div style={{ background: c.surface, border: `1px solid ${c.line}`, borderRadius: 8, padding: 14, marginBottom: 24 }}>
+                <span style={{ display: 'block', fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: c.accent, marginBottom: 8 }}>
+                  Plants
+                </span>
+                <p style={{ fontSize: 12, color: c.muted, lineHeight: 1.5, margin: '0 0 10px' }}>
+                  Log anything you can identify — the report will note whether each is native and its fire risk.
+                </p>
+
+                {plants.filter(p => p.zone === activeStep.plantsZone).length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                    {plants.filter(p => p.zone === activeStep.plantsZone).map(p => (
+                      <div key={p.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: c.bg, border: `1px solid ${c.line}`, borderRadius: 6, padding: '8px 10px' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, color: c.text, fontWeight: 600 }}>{p.name}</div>
+                          {p.notes && <div style={{ fontSize: 11.5, color: c.muted, marginTop: 2 }}>{p.notes}</div>}
+                        </div>
+                        <button onClick={() => removePlant(p.id)} aria-label={`Remove ${p.name}`} style={{ background: 'none', border: 'none', color: c.muted, fontSize: 15, cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <input
+                  style={{ ...input, marginBottom: 8 }}
+                  type="text"
+                  placeholder="Plant name (e.g. Italian cypress)"
+                  value={plantNameDraft}
+                  onChange={e => setPlantNameDraft(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && plantNameDraft.trim()) addPlant() }}
+                />
+                <input
+                  style={{ ...input, marginBottom: 8 }}
+                  type="text"
+                  placeholder="Notes (optional) — e.g. cluster of 3 near the west corner"
+                  value={plantNotesDraft}
+                  onChange={e => setPlantNotesDraft(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && plantNameDraft.trim()) addPlant() }}
+                />
+                <button onClick={addPlant} disabled={savingPlant || !plantNameDraft.trim()} style={{ fontSize: 11.5, fontFamily: 'monospace', color: c.accent, background: 'transparent', border: `1px solid ${c.accent}`, borderRadius: 4, padding: '7px 12px', cursor: 'pointer', opacity: (savingPlant || !plantNameDraft.trim()) ? 0.5 : 1 }}>
+                  {savingPlant ? 'Adding…' : '+ Add Plant'}
+                </button>
+              </div>
+            )}
 
             {/* Whole-side photo + AI gap check */}
             {activeSegment.wholeSidePhoto && (

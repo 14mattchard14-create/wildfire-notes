@@ -4,6 +4,8 @@ _Last updated: 2026-08-02_
 
 ## ⚠️ Action required — new migration
 
+- Run `supabase/migrations/019_property_plants.sql` — new `property_plants` table. Required for
+  the new Plants field (see round 56 below) to save anything.
 - Run `supabase/migrations/018_street_view_image.sql` — adds `properties.street_view_image_url`.
   Required for the new Street View companion image (see round 55 below) to save/display at all.
 - Run `supabase/migrations/015_booking_payments.sql` — adds booking fields to `properties`
@@ -58,6 +60,22 @@ Full detail in `BOOKING_PAYMENTS_PLAN.md`.
   troubleshooting).
 - No new npm packages — reuses the existing `entry-photos` Supabase Storage bucket under
   a `satellite/` prefix, no new bucket needed.
+
+## Done this session (2026-08-02, round 56 — Plants field on vegetation zones)
+
+- New `property_plants` table (migration 019, see ⚠️ above — needs to be run): `property_id`,
+  `zone`, `name`, `notes`.
+- Added a "Plants" field to the Guided Entry segments tied to a vegetation zone — Front/Left/
+  Right/Back (all share one list for `0-5 FT. Noncombustible Zone`, since it's the same zone
+  finding regardless of which side you spotted it from), the `5-30 FT Defensible Space —
+  Vegetation` step, and Overall Site. Just a plant name + optional note in the field — no
+  native/risk lookup needed on-site.
+- `/api/report-draft` now feeds the logged plants (grouped by zone) into the report-generation
+  prompt. For any zone with plants logged, the AI names each one, states whether it's native to
+  the region and its general wildfire fuel/fire risk (using its own botanical knowledge — it's
+  told to say so rather than guess if it's not confident on a specific species), and prefaces the
+  list with a note that plant *combination and spacing* — not any one species alone — is what
+  most affects defensible-space risk. Zones with no plants logged get no added commentary.
 
 ## Done this session (2026-08-02, round 55 — Street View companion image on the pre-flight scan)
 

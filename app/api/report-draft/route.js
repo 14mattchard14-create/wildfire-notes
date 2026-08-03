@@ -26,11 +26,12 @@ export async function POST(request) {
   const { propertyId } = await request.json()
   if (!propertyId) return Response.json({ error: 'propertyId is required' }, { status: 400 })
 
-  const [{ data: property }, { data: entries }, { data: segments }, { data: priorities }] = await Promise.all([
+  const [{ data: property }, { data: entries }, { data: segments }, { data: priorities }, { data: plantRows }] = await Promise.all([
     supabaseAdmin.from('properties').select('*').eq('id', propertyId).maybeSingle(),
     supabaseAdmin.from('entries').select('*').eq('property_id', propertyId).order('created_at'),
     supabaseAdmin.from('guided_segments').select('segment_key, notes').eq('property_id', propertyId),
     supabaseAdmin.from('priorities').select('*').eq('property_id', propertyId).order('rank'),
+    supabaseAdmin.from('property_plants').select('zone, name, notes').eq('property_id', propertyId).order('created_at'),
   ])
 
   if (!property) return Response.json({ error: 'Property not found' }, { status: 404 })
@@ -63,6 +64,16 @@ export async function POST(request) {
   } else {
     lines.push('(not run for this property)')
   }
+  lines.push('')
+  lines.push('--- PLANTS LOGGED BY ZONE (name + inspector notes only — native status and fire risk are NOT provided; use your own botanical knowledge to fill those in when writing the finding) ---')
+  const plantsByZone = {}
+  ;(plantRows || []).forEach(p => { (plantsByZone[p.zone] ||= []).push(p) })
+  if (Object.keys(plantsByZone).length) {
+    Object.entries(plantsByZone).forEach(([zone, list]) => {
+      lines.push(`${zone}:`)
+      list.forEach(p => lines.push(`  - ${p.name}${p.notes ? ' — ' + p.notes : ''}`))
+    })
+  } else { lines.push('(no plants logged)') }
   lines.push('')
   lines.push('--- ENTRIES ---')
   if (entries?.length) {
@@ -134,7 +145,8 @@ Rules:
 - If an entry's status is "Pending review" (no status was recorded), use that exact string as the status rather than inventing a compliance determination.
 - "actionPlan" should rank every non-empty recommendation across all zones by urgency — most urgent first.
 - "photoCaptions" is keyed by entry id exactly as written after "id:" in ENTRIES — copy it verbatim, don't invent or reformat it. Only include entries marked [HAS_PHOTO]; skip everything else.
-- Every string field must be present (use "" for an empty recommendation/rationale, never omit the key or use null).`
+- Every string field must be present (use "" for an empty recommendation/rationale, never omit the key or use null).
+- For any zone with entries under PLANTS LOGGED BY ZONE, weave the plant list into that zone's "finding" text (or "rationale" if it reads better there): name each plant, and using your own botanical knowledge state whether it's native to the property's region and its general wildfire fuel/fire risk (e.g. low-resin/high-moisture vs. resinous/oil-rich, how readily it carries fire). If you're not confident about a specific species' native range or risk, say so rather than guessing with false precision. Before listing individual plants, briefly preface that it's the combination and spacing of plants — not any single species alone — that most affects defensible-space risk, so a high-risk plant isolated and well-spaced can matter less than several moderate-risk plants clustered together. Only do this for zones that actually have logged plants; don't add generic vegetation commentary elsewhere.`
 
   let reportData
   let aiResponse
