@@ -48,7 +48,7 @@ export default function PropertiesTablePage() {
   function loadProperties() {
     supabase
       .from('properties')
-      .select('id, address, visit_date, created_at, created_by_name, homeowner_status, report_status, entries(count)')
+      .select('id, address, job_number, visit_date, created_at, created_by_name, homeowner_status, report_status, entries(count)')
       .order('created_at', { ascending: false })
       .then(({ data }) => { setProperties(data ?? []); setFetching(false) })
   }
@@ -229,7 +229,7 @@ export default function PropertiesTablePage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--surface-2)' }}>
-                  {['Address', 'Inspector', 'Visit Date', 'Entries', 'Homeowner', 'Review'].map(h => (
+                  {['Address', 'Job #', 'Inspector', 'Visit Date', 'Entries', 'Homeowner', 'Review'].map(h => (
                     <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', borderBottom: '1px solid var(--line)' }}>{h}</th>
                   ))}
                 </tr>
@@ -257,6 +257,7 @@ export default function PropertiesTablePage() {
                           />
                         </span>
                       </td>
+                      <td style={{ padding: '11px 14px', fontSize: 11.5, fontFamily: 'monospace', color: 'var(--text-muted)' }}>{p.job_number ?? '—'}</td>
                       <td style={{ padding: '11px 14px', fontSize: 12.5, color: 'var(--text-muted)' }}>{p.created_by_name ?? '—'}</td>
                       <td style={{ padding: '11px 14px', fontSize: 12.5, color: 'var(--text-muted)' }}>{p.visit_date ?? '—'}</td>
                       <td style={{ padding: '11px 14px', fontSize: 12.5, color: 'var(--text-muted)' }}>{entriesCount}</td>

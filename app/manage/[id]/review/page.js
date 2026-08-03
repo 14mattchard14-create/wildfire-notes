@@ -9,7 +9,7 @@ import { ZONES } from '@/lib/criteria'
 import {
   ACTION_PRIORITIES, parseReportData, emptyFinding, emptyActionItem,
   reportSectionSlice, diffSectionSlices, sectionLabel, zoneSectionKey,
-  zonePhotoItems, excludedZonePhotos, photoTransformStyle,
+  zonePhotoItems, excludedZonePhotos, photoTransformStyle, wordDiff,
 } from '@/lib/reportSchema'
 import {
   reportColors, StatusPill, RiskBadge, CollapsibleCard, priorityColor,
@@ -539,6 +539,23 @@ function formatDiffValue(v) {
   return String(v)
 }
 
+// Renders a single field's change as one flowing paragraph with only the
+// changed words struck through (removed) or highlighted (added), instead
+// of two full separate before/after blocks — word-level, not paragraph-
+// level, so a one-word edit reads as a one-word edit.
+function WordDiffLine({ before, after }) {
+  const tokens = wordDiff(formatDiffValue(before), formatDiffValue(after))
+  return (
+    <div style={{ fontSize: 12.5, color: c.text, lineHeight: 1.65, wordBreak: 'break-word' }}>
+      {tokens.map((t, i) => {
+        if (t.type === 'removed') return <span key={i} style={{ color: c.warn, textDecoration: 'line-through', opacity: 0.7 }}>{t.text}</span>
+        if (t.type === 'added') return <span key={i} style={{ color: c.ok, background: 'rgba(58,125,68,.14)', borderRadius: 2 }}>{t.text}</span>
+        return <span key={i}>{t.text}</span>
+      })}
+    </div>
+  )
+}
+
 // Version history for one section — every AI draft / edit / final snapshot
 // that touched this section, newest first, diffed field-by-field against
 // whatever came right before it so you can see exactly what changed and
@@ -589,8 +606,7 @@ function SectionHistoryPopup({ sectionKey, versions, onClose }) {
                 row.changes.map((ch, j) => (
                   <div key={j} style={{ marginBottom: 8, fontSize: 12.5 }}>
                     <div style={{ fontWeight: 700, color: c.navy, marginBottom: 2 }}>{ch.field}</div>
-                    <div style={{ color: c.warn, textDecoration: 'line-through', opacity: 0.75, marginBottom: 2, wordBreak: 'break-word' }}>{formatDiffValue(ch.before)}</div>
-                    <div style={{ color: c.ok, wordBreak: 'break-word' }}>{formatDiffValue(ch.after)}</div>
+                    <WordDiffLine before={ch.before} after={ch.after} />
                   </div>
                 ))
               )}

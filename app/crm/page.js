@@ -211,11 +211,16 @@ function PropertyDetailsCard({ property, showAddress, onSave }) {
 
   return (
     <div style={{ border: '1px solid var(--line)', borderRadius: 6, padding: 10, marginBottom: 8, background: 'var(--bg)' }}>
-      {showAddress && (
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>
-          <AddressField property={property} onSave={(id, v) => onSave(id, 'address', v)} textStyle={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }} />
-        </div>
-      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+        {showAddress && (
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>
+            <AddressField property={property} onSave={(id, v) => onSave(id, 'address', v)} textStyle={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }} />
+          </div>
+        )}
+        {property.job_number && (
+          <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-muted)', border: '1px solid var(--line)', borderRadius: 20, padding: '1px 8px' }}>{property.job_number}</span>
+        )}
+      </div>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 8 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Homeowner Status</span>
@@ -903,7 +908,7 @@ export default function CrmPage() {
     setFetching(true)
     setLoadError(null)
     Promise.all([
-      supabase.from('properties').select('id, address, customer_name, customer_email, customer_phone, customer_notified_at, unsubscribed, homeowner_status, report_status, lead_source, lead_notes').order('address'),
+      supabase.from('properties').select('id, address, job_number, customer_name, customer_email, customer_phone, customer_notified_at, unsubscribed, homeowner_status, report_status, lead_source, lead_notes').order('address'),
       authFetch('/api/crm/followups').then(res => res.json()),
       authFetch('/api/crm/templates').then(res => res.json()),
       authFetch('/api/crm/payments').then(res => res.json()),

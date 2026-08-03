@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { authFetch } from '@/lib/authFetch'
-import { diffSectionSlices, sectionLabel } from '@/lib/reportSchema'
+import { diffSectionSlices, sectionLabel, wordDiff } from '@/lib/reportSchema'
 import { ChevronDown, ChevronRight, Sparkles, Pencil, CheckCircle2 } from 'lucide-react'
 
 // The Activity log — every report_versions row across every property,
@@ -44,6 +44,24 @@ function formatVal(v) {
   return String(v)
 }
 
+// Word-level, not paragraph-level: only the changed words are struck
+// through/highlighted inline, rather than showing the whole before/after
+// text as two separate blobs (which is unreadable once a field is more
+// than a sentence long, and makes even a one-word edit look like a
+// wholesale rewrite).
+function WordDiffLine({ before, after }) {
+  const tokens = wordDiff(formatVal(before), formatVal(after))
+  return (
+    <span style={{ wordBreak: 'break-word' }}>
+      {tokens.map((t, i) => {
+        if (t.type === 'removed') return <span key={i} style={{ color: 'var(--warn)', textDecoration: 'line-through', opacity: 0.7 }}>{t.text}</span>
+        if (t.type === 'added') return <span key={i} style={{ color: 'var(--ok)', background: 'rgba(58,125,68,.14)', borderRadius: 2 }}>{t.text}</span>
+        return <span key={i}>{t.text}</span>
+      })}
+    </span>
+  )
+}
+
 function VersionStep({ version, prev }) {
   const meta = SOURCE_META[version.source] || SOURCE_META.edit
   const Icon = meta.icon
@@ -65,9 +83,7 @@ function VersionStep({ version, prev }) {
             {changes.map((ch, i) => (
               <div key={i} style={{ marginBottom: 2 }}>
                 <span style={{ fontWeight: 600 }}>{ch.field}:</span>{' '}
-                <span style={{ color: 'var(--warn)', opacity: 0.8 }}>{formatVal(ch.before).slice(0, 60)}</span>
-                {' → '}
-                <span style={{ color: 'var(--ok)' }}>{formatVal(ch.after).slice(0, 60)}</span>
+                <WordDiffLine before={ch.before} after={ch.after} />
               </div>
             ))}
           </div>

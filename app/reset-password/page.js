@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import PasswordInput from '@/components/PasswordInput'
 
 const c = {
   bg:      'var(--bg)',
@@ -52,11 +53,11 @@ export default function ResetPasswordPage() {
         <div style={{ background: c.surface, border: `1px solid ${c.line}`, borderRadius: 6, padding: 20 }}>
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: 'block', fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted, marginBottom: 6 }}>New Password</label>
-            <input style={input} type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} />
+            <PasswordInput style={input} value={password} onChange={e => setPassword(e.target.value)} />
           </div>
           <div style={{ marginBottom: 20 }}>
             <label style={{ display: 'block', fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: c.muted, marginBottom: 6 }}>Confirm Password</label>
-            <input style={input} type="password" placeholder="••••••••" value={confirm} onChange={e => setConfirm(e.target.value)}
+            <PasswordInput style={input} value={confirm} onChange={e => setConfirm(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleReset()} />
           </div>
 

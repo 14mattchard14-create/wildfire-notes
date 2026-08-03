@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import ThemeToggle from '@/components/ThemeToggle'
+import PasswordInput from '@/components/PasswordInput'
 
 const input = {
   width: '100%', background: 'var(--surface)', border: '1px solid var(--line)',
@@ -110,7 +111,7 @@ export default function LoginPage() {
           {mode === 'password' && mode !== 'reset' && (
             <div style={{ marginBottom: 8 }}>
               <label style={{ display: 'block', fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Password</label>
-              <input style={input} type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)}
+              <PasswordInput style={input} value={password} onChange={e => setPassword(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
               {/* Forgot password link */}
               {!isSignUp && (

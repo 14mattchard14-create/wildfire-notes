@@ -4,6 +4,9 @@ _Last updated: 2026-08-02_
 
 ## ⚠️ Action required — new migration
 
+- Run `supabase/migrations/024_job_numbers.sql` — adds `properties.job_number` (auto-assigned via
+  trigger on every insert) and backfills existing rows in creation order. Required for the new
+  Job # column in CRM/Properties (round 60 below) to show anything.
 - Run `supabase/migrations/023_material_labor_rates.sql` — splits `mitigation_price_rates`'
   single rate into `material_rate_low/high` + `labor_rate_low/high`, with `total_rate_low/high`
   computed automatically (generated columns). Must run after 022. Required for the /estimate
@@ -70,6 +73,31 @@ Full detail in `BOOKING_PAYMENTS_PLAN.md`.
   troubleshooting).
 - No new npm packages — reuses the existing `entry-photos` Supabase Storage bucket under
   a `satellite/` prefix, no new bucket needed.
+
+## Done this session (2026-08-02, round 60 — word-level diffs, job numbers, password visibility, account settings)
+
+Four small fixes:
+
+- **Word-level version history** (`lib/reportSchema.js`): new `wordDiff()` (LCS-based, capped at
+  600 tokens/side to avoid a pathological diff hanging the tab) replaces the old
+  whole-paragraph before/after blocks in both the review page's per-section History popup and
+  the Insights Activity timeline. A one-word edit now reads as a one-word edit — struck-through
+  removed words, highlighted added words, inline in one flowing paragraph.
+- **CRM job numbers** (migration 024, see ⚠️ above): `properties.job_number`, format `JOB-00001`,
+  assigned automatically by a DB trigger on insert (works for every creation path — new property,
+  guided-request intake, homeowner signup — with no app-code changes needed) and backfilled for
+  existing properties in creation order. Read-only by design. Shows in the CRM's expanded
+  per-property card and as a new column in the /manage properties table. Didn't add it to the
+  CRM's collapsed row header — that grid is already tightly packed; ask if you want it squeezed
+  in there too.
+- **Password visibility toggle**: new shared `components/PasswordInput.js` (eye/eye-off icon,
+  toggles `type="password"` vs `text`) — wired into the employee login page, the reset-password
+  page, and the new account settings page below.
+- **Account settings, drafted**: built out the existing `/insights/settings` placeholder (already
+  the sitewide "Settings" nav entry pinned at the bottom of every admin page) into a real page —
+  read-only profile info (name/email/account type) plus a working change-password form (uses the
+  existing session, no re-auth challenge, same approach as the reset-password page). Editing
+  name/email isn't wired up — flagged as a draft, say if you want that too.
 
 ## Done this session (2026-08-02, round 59 — Materials / Labor / Total breakdown on the rate table)
 

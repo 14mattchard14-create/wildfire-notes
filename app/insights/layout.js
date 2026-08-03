@@ -17,6 +17,7 @@ import AdminSidebar from '@/components/AdminSidebar'
 export default function InsightsLayout({ children }) {
   const pathname = usePathname()
   const { user, loading, isHomeowner, profileReady } = useAuth()
+  const headerTitle = pathname === '/insights/settings' ? 'Settings' : 'Insights'
 
   if (loading || (user && !profileReady)) return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -42,7 +43,7 @@ export default function InsightsLayout({ children }) {
         <div style={{ padding: '18px 20px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <div style={{ marginBottom: 4 }}><BrandLogo /></div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: '0.02em', textTransform: 'uppercase', margin: 0, color: 'var(--header-text)' }}>Insights</h1>
+            <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: '0.02em', textTransform: 'uppercase', margin: 0, color: 'var(--header-text)' }}>{headerTitle}</h1>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <ThemeToggle />
