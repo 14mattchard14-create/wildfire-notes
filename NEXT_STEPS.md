@@ -2,16 +2,6 @@
 
 _Last updated: 2026-08-02_
 
-## ⚠️ Action required — set up a "review call" Cal.com event for the customer email
-
-The customer report-ready email now has an optional "Schedule a Review Call" button (a free
-30-minute walkthrough) — it only appears once `CAL_COM_REVIEW_LINK` is set in Vercel, so nothing
-is broken in the meantime. To turn it on: create a new 30-minute event type in your Cal.com
-account (same account used for the existing 15-min intro call and inspection booking), copy its
-booking link (e.g. `https://cal.com/charredguard/30min-review`), and set it as
-`CAL_COM_REVIEW_LINK` in wildfire-notes' Vercel env vars. No code changes needed after that —
-`lib/customerNotify.js` reads it directly.
-
 ## ⚠️ Action required — verify a sending domain in Resend
 
 Customer-facing emails ("Send to Customer" on the review page, follow-up emails from CRM) are
@@ -90,6 +80,24 @@ Full detail in `BOOKING_PAYMENTS_PLAN.md`.
   troubleshooting).
 - No new npm packages — reuses the existing `entry-photos` Supabase Storage bucket under
   a `satellite/` prefix, no new bucket needed.
+
+## Done this session (2026-08-02, round 53 — Cal.com review-call event created + wired live)
+
+Finished what round 52 left as a manual setup step, using the Claude in Chrome browser tools
+(with your go-ahead) instead of leaving it for you:
+
+- Created a new **30-minute "Report Review Call" event type** in your Cal.com account
+  (`https://cal.com/matthew-chard-nks7q3/report-review-call`), with a description explaining
+  what it's for — reviewing the report together, answering questions, and discussing options
+  for next steps if there's follow-up work.
+- Set `CAL_COM_REVIEW_LINK` in wildfire-notes' Vercel env vars (Production and Preview) to that
+  URL — takes effect on the next deployment (i.e. once you push the pending commits).
+- Tightened the email copy for the "Schedule a Review Call" section in
+  `lib/customerNotify.js` to spell out exactly what the call covers, per your request, instead
+  of the shorter placeholder copy from round 52.
+
+Once you push, the "Schedule a Review Call" button will actually appear in both the customer
+email and the "Review before sending" preview modal — no further setup needed.
 
 ## Done this session (2026-08-02, round 52 — polish send-review email + modal, add review-call CTA)
 
