@@ -582,8 +582,22 @@ export default function ReportPage({ params }) {
           .report-carousel-controls { display: none !important; }
           .report-carousel-track { overflow: visible !important; flex-wrap: wrap !important; }
           .report-carousel-tile { flex: 0 0 auto !important; }
-          .report-finding-card, .report-card-header { break-inside: avoid; page-break-inside: avoid; }
+          .report-finding-card,
+          .report-card-header,
+          .report-carousel-tile {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+          /* Keep a section's header on the same page as at least the start
+             of its content, instead of a heading landing alone at the
+             bottom of a page with everything else pushed to the next. */
+          .report-card-header { break-after: avoid; page-break-after: avoid; }
           body { background: #fff !important; }
+          /* Browsers drop element background colors when printing unless
+             the user opts in via "Print backgrounds" — force it so the
+             navy zone/section headers don't silently render as plain text
+             on white in the PDF. */
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
       `}</style>
       <ReportSidebar
