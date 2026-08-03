@@ -105,10 +105,12 @@ export async function POST(request) {
       const svRes = await fetch(svUrl)
       if (svRes.ok) {
         streetViewImageBuffer = Buffer.from(await svRes.arrayBuffer())
-        const path = `street-view/${propertyId}.png`
+        // Unlike Static Maps (PNG), the Street View Static API always
+        // returns JPEG — no format param to change that.
+        const path = `street-view/${propertyId}.jpg`
         const { error: uploadError } = await supabaseAdmin.storage
           .from('entry-photos')
-          .upload(path, streetViewImageBuffer, { contentType: 'image/png', upsert: true })
+          .upload(path, streetViewImageBuffer, { contentType: 'image/jpeg', upsert: true })
         if (uploadError) throw uploadError
         const { data: pub } = supabaseAdmin.storage.from('entry-photos').getPublicUrl(path)
         streetViewImageUrl = pub.publicUrl
@@ -147,7 +149,7 @@ Use empty strings for segments where the imagery genuinely shows nothing notable
         role: 'user',
         content: [
           { type: 'image', source: { type: 'base64', media_type: 'image/png', data: imageBuffer.toString('base64') } },
-          ...(streetViewImageBuffer ? [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: streetViewImageBuffer.toString('base64') } }] : []),
+          ...(streetViewImageBuffer ? [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: streetViewImageBuffer.toString('base64') } }] : []),
           { type: 'text', text: prompt },
         ],
       }],
