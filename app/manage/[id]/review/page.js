@@ -1127,30 +1127,47 @@ export default function PropertyReviewFlow() {
             )}
 
             {sendPreview && (
-              <Modal onClose={() => setSendPreview(null)} maxWidth={560}>
-                <div style={{ padding: '32px 28px 24px' }}>
-                  <h2 style={{ fontSize: 16, fontWeight: 700, color: c.navy, margin: '0 0 4px' }}>Review before sending</h2>
-                  <p style={{ fontSize: 12.5, color: c.muted, margin: '0 0 20px' }}>
-                    This is exactly what the customer will receive. Nothing is sent until you confirm below.
+              <Modal onClose={() => setSendPreview(null)} maxWidth={640} dark>
+                <div style={{ background: c.navy, padding: '26px 32px', borderRadius: '14px 14px 0 0' }}>
+                  <div style={{ color: c.tan, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Send to Customer</div>
+                  <h2 style={{ fontSize: 18, fontWeight: 700, color: '#fff', margin: 0 }}>Review before sending</h2>
+                  <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.65)', margin: '6px 0 0' }}>
+                    This is exactly what the customer will receive — nothing sends until you confirm below.
                   </p>
+                </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 16, fontSize: 12.5 }}>
-                    <div><span style={{ color: c.muted }}>To:</span> <strong style={{ color: c.text }}>{sendPreview.to}</strong></div>
-                    <div><span style={{ color: c.muted }}>Subject:</span> <strong style={{ color: c.text }}>{sendPreview.subject}</strong></div>
-                    <div>
-                      <span style={{ color: c.muted }}>Report link:</span>{' '}
-                      <a href={sendPreview.reportUrl} target="_blank" rel="noopener noreferrer" style={{ color: c.navy, textDecoration: 'underline', wordBreak: 'break-all' }}>
-                        {sendPreview.reportUrl}
-                      </a>
-                    </div>
-                    <div><span style={{ color: c.muted }}>Access code:</span> <strong style={{ color: c.text }}>{sendPreview.accessCode}</strong></div>
+                <div style={{ padding: '24px 32px 28px' }}>
+                  <div style={{ border: `1px solid ${c.border}`, borderRadius: 10, overflow: 'hidden', marginBottom: 22 }}>
+                    {[
+                      { label: 'To', value: sendPreview.to },
+                      { label: 'Subject', value: sendPreview.subject },
+                      { label: 'Report link', value: sendPreview.reportUrl, href: sendPreview.reportUrl },
+                      { label: 'Access code', value: sendPreview.accessCode },
+                    ].map((row, i) => (
+                      <div
+                        key={row.label}
+                        style={{ display: 'flex', gap: 14, padding: '10px 16px', background: i % 2 === 0 ? c.surface : c.surfaceAlt, borderTop: i === 0 ? 'none' : `1px solid ${c.border}` }}
+                      >
+                        <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: c.muted, width: 92, flexShrink: 0, paddingTop: 1 }}>{row.label}</span>
+                        {row.href ? (
+                          <a href={row.href} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: c.navy, textDecoration: 'underline', wordBreak: 'break-all' }}>{row.value}</a>
+                        ) : (
+                          <span style={{ fontSize: 13, fontWeight: 600, color: c.text, wordBreak: 'break-word' }}>{row.value}</span>
+                        )}
+                      </div>
+                    ))}
                   </div>
 
-                  <div style={{ fontSize: 11.5, color: c.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Email preview</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: c.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Email preview</div>
                   <div
-                    style={{ border: `1px solid ${c.border}`, borderRadius: 8, padding: '16px 18px', background: c.surfaceAlt, maxHeight: 280, overflowY: 'auto' }}
+                    style={{ border: `1px solid ${c.border}`, borderRadius: 10, padding: 16, background: c.surfaceAlt, maxHeight: 420, overflowY: 'auto' }}
                     dangerouslySetInnerHTML={{ __html: sendPreview.html }}
                   />
+                  {!sendPreview.reviewCallLink && (
+                    <p style={{ fontSize: 11.5, color: c.muted, margin: '8px 2px 0', fontStyle: 'italic' }}>
+                      No "Schedule a Review Call" button yet — set <code>CAL_COM_REVIEW_LINK</code> in Vercel once that Cal.com event exists to add one.
+                    </p>
+                  )}
 
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
                     <Button variant="outline" onClick={() => setSendPreview(null)} disabled={notifyingCustomer} className="text-[12px] uppercase tracking-wide h-auto py-2.5 px-4">

@@ -122,7 +122,7 @@ export function priorityColor(p) {
 // roomier, enlarged view instead of the compact card. Click-outside and
 // Escape both close it; scroll is locked on the body while open so the
 // report underneath doesn't scroll along with it.
-export function Modal({ onClose, maxWidth = 640, children }) {
+export function Modal({ onClose, maxWidth = 640, dark, children }) {
   useEffect(() => {
     function onKey(e) { if (e.key === 'Escape') onClose(); }
     window.addEventListener('keydown', onKey);
@@ -146,7 +146,12 @@ export function Modal({ onClose, maxWidth = 640, children }) {
         <button
           onClick={onClose}
           aria-label="Close"
-          style={{ position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: '50%', background: 'rgba(23,36,49,0.08)', border: 'none', color: c.navy, fontSize: 17, cursor: 'pointer', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          style={{
+            position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: '50%',
+            background: dark ? 'rgba(255,255,255,0.15)' : 'rgba(23,36,49,0.08)',
+            border: 'none', color: dark ? '#fff' : c.navy, fontSize: 17, cursor: 'pointer', zIndex: 1,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
         >
           ✕
         </button>

@@ -2,6 +2,16 @@
 
 _Last updated: 2026-08-02_
 
+## ⚠️ Action required — set up a "review call" Cal.com event for the customer email
+
+The customer report-ready email now has an optional "Schedule a Review Call" button (a free
+30-minute walkthrough) — it only appears once `CAL_COM_REVIEW_LINK` is set in Vercel, so nothing
+is broken in the meantime. To turn it on: create a new 30-minute event type in your Cal.com
+account (same account used for the existing 15-min intro call and inspection booking), copy its
+booking link (e.g. `https://cal.com/charredguard/30min-review`), and set it as
+`CAL_COM_REVIEW_LINK` in wildfire-notes' Vercel env vars. No code changes needed after that —
+`lib/customerNotify.js` reads it directly.
+
 ## ⚠️ Action required — verify a sending domain in Resend
 
 Customer-facing emails ("Send to Customer" on the review page, follow-up emails from CRM) are
@@ -80,6 +90,26 @@ Full detail in `BOOKING_PAYMENTS_PLAN.md`.
   troubleshooting).
 - No new npm packages — reuses the existing `entry-photos` Supabase Storage bucket under
   a `satellite/` prefix, no new bucket needed.
+
+## Done this session (2026-08-02, round 52 — polish send-review email + modal, add review-call CTA)
+
+- **Redesigned the customer report-ready email** (`lib/customerNotify.js`) — was three plain
+  `<p>` tags; now a proper letterhead-style card: navy header band, centered orange CTA button,
+  a boxed access-code callout, and (new) an optional "Schedule a Review Call" section inviting
+  the customer to book a free 30-minute walkthrough. That section only renders once
+  `CAL_COM_REVIEW_LINK` is set (see ⚠️ above) — omitted entirely otherwise, so nothing links to
+  a nonexistent booking page in the meantime.
+- **Redesigned the "Review before sending" modal** (`app/manage/[id]/review/page.js`) — navy
+  header matching the email's own header, a bordered/striped detail table (To/Subject/Report
+  link/Access code) instead of plain stacked lines, and an inline note if the review-call link
+  isn't configured yet so the inspector knows why that section is missing from the preview.
+- Added an optional `dark` prop to the shared `Modal` component
+  (`components/ReportView.js`) so its close button switches to a light-on-dark style when a
+  caller uses a dark header — needed for the navy modal header above; existing light-background
+  callers (customer report's zoomed finding modal, etc.) are unaffected since the prop defaults
+  to off.
+
+Syntax-checked (babel) all three changed files.
 
 ## Done this session (2026-08-02, round 51 — follow-up fixes after round 50 review)
 
