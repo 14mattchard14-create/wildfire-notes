@@ -16,6 +16,12 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 // house-bounding-box + geometry approach). Neither was reliable enough in
 // practice, so this went back to the simpler original design: one tightly
 // cropped photo + a plain per-segment text list underneath it.
+//
+// Also fetches a Street View Static image of the property when Google has
+// coverage there (checked via the metadata endpoint first). The satellite
+// crop is top-down only, so it can't show roof material, siding, vents, or
+// eaves the way a ground-level shot of the front of the house can — both
+// images go to the AI together when a street view is available.
 
 function safeParseJson(text) {
   const cleaned = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
@@ -82,22 +88,55 @@ export async function POST(request) {
     // the image itself couldn't be stored for display.
   }
 
+  // Street View companion image — the satellite crop is top-down only, so
+  // it can't show roof pitch/material, siding, vents, or eaves the way a
+  // ground-level shot of the front of the house can. Checked via the free
+  // metadata endpoint first so we don't store (or hand the AI) Google's
+  // grey "no imagery here" placeholder for rural/private addresses where
+  // no Street View car has driven by.
+  let streetViewImageBuffer = null
+  let streetViewImageUrl = null
+  try {
+    const svMetaUrl = `https://maps.googleapis.com/maps/api/streetview/metadata?location=${property.lat},${property.lng}&key=${apiKey}`
+    const metaRes = await fetch(svMetaUrl)
+    const meta = await metaRes.json().catch(() => null)
+    if (meta?.status === 'OK') {
+      const svUrl = `https://maps.googleapis.com/maps/api/streetview?size=640x400&location=${property.lat},${property.lng}&fov=80&key=${apiKey}`
+      const svRes = await fetch(svUrl)
+      if (svRes.ok) {
+        streetViewImageBuffer = Buffer.from(await svRes.arrayBuffer())
+        const path = `street-view/${propertyId}.png`
+        const { error: uploadError } = await supabaseAdmin.storage
+          .from('entry-photos')
+          .upload(path, streetViewImageBuffer, { contentType: 'image/png', upsert: true })
+        if (uploadError) throw uploadError
+        const { data: pub } = supabaseAdmin.storage.from('entry-photos').getPublicUrl(path)
+        streetViewImageUrl = pub.publicUrl
+      }
+    }
+  } catch (err) {
+    console.error('satellite-analysis street view fetch/upload error:', err)
+    // Not fatal — no Street View coverage at this address is common
+    // (rural roads, private drives), and the satellite scan still works
+    // fine on its own either way.
+  }
+
   const schemaFields = GUIDED_SEGMENTS.map(s =>
     `  "${s.key}": "short note on what to watch for here, or empty string if nothing stands out"`
   ).join(',\n')
 
-  const prompt = `You are assisting a wildfire home-hardening inspector before they walk ${property.address} in person. This is a satellite/overhead view of the property, cropped in tight and zoomed as far as the imagery allows.
+  const prompt = `You are assisting a wildfire home-hardening inspector before they walk ${property.address} in person. The first image is a satellite/overhead view of the property, cropped in tight and zoomed as far as the imagery allows.${streetViewImageBuffer ? ' The second image is a Google Street View shot of the property from the road — use it for anything the top-down satellite view can\'t show well: roof pitch/material, siding, windows/doors, vents, eaves, and the front of the house generally.' : ''}
 
 For each of the following segments, note anything large and visible worth watching for once the inspector reaches that side in person — detached structures, dense tree canopy or vegetation clusters, roof shape/material hints, decks or patios, driveway/access routes, neighboring vegetation close to the property line. This is a tentative pre-flight scan only, not a finding — the inspector confirms everything on the ground.
 ${GUIDED_SEGMENTS.map(s => `"${s.key}": "${s.label}"`).join('\n')}
 
 Respond with ONLY a valid JSON object, no markdown code fences, no extra commentary. Structure:
 {
-  "overview": "1-3 sentence overall summary of what's visible from above",
+  "overview": "1-3 sentence overall summary of what's visible from above${streetViewImageBuffer ? ' and from the street' : ''}",
 ${schemaFields}
 }
 
-Use empty strings for segments where the satellite view genuinely shows nothing notable — don't invent findings to fill every field.`
+Use empty strings for segments where the imagery genuinely shows nothing notable — don't invent findings to fill every field.`
 
   let suggestions
   try {
@@ -108,6 +147,7 @@ Use empty strings for segments where the satellite view genuinely shows nothing 
         role: 'user',
         content: [
           { type: 'image', source: { type: 'base64', media_type: 'image/png', data: imageBuffer.toString('base64') } },
+          ...(streetViewImageBuffer ? [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: streetViewImageBuffer.toString('base64') } }] : []),
           { type: 'text', text: prompt },
         ],
       }],
@@ -124,11 +164,12 @@ Use empty strings for segments where the satellite view genuinely shows nothing 
     .update({
       satellite_analysis: JSON.stringify(suggestions),
       satellite_image_url: imageUrl,
+      street_view_image_url: streetViewImageUrl,
       satellite_analyzed_at: new Date().toISOString(),
     })
     .eq('id', propertyId)
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
-  return Response.json({ suggestions, imageUrl })
+  return Response.json({ suggestions, imageUrl, streetViewImageUrl })
 }

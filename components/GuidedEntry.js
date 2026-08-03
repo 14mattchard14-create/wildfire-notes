@@ -133,6 +133,7 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
   const [satelliteAt, setSatelliteAt] = useState(property?.satellite_analyzed_at ?? null)
   const [satelliteRunning, setSatelliteRunning] = useState(false)
   const [satelliteImageUrl, setSatelliteImageUrl] = useState(property?.satellite_image_url ?? null)
+  const [streetViewImageUrl, setStreetViewImageUrl] = useState(property?.street_view_image_url ?? null)
   const [notesDraft, setNotesDraft] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
   const [notesSaved, setNotesSaved] = useState(false)
@@ -210,6 +211,7 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
       if (!res.ok) throw new Error(data.error || 'Analysis failed')
       setSatellite(data.suggestions)
       setSatelliteImageUrl(data.imageUrl ?? null)
+      setStreetViewImageUrl(data.streetViewImageUrl ?? null)
       setSatelliteAt(new Date().toISOString())
     } catch (err) {
       alert('Satellite analysis failed: ' + err.message)
@@ -330,10 +332,28 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
 
                   {satellite?.overview && <SuggestionBanner text={satellite.overview} />}
 
-                  {satelliteImageUrl && (
-                    <div style={{ marginTop: 14, borderRadius: 6, overflow: 'hidden', border: `1px solid ${c.line}`, lineHeight: 0 }}>
-                      <img src={satelliteImageUrl} alt="Satellite view of the property, cropped in tight" style={{ display: 'block', width: '100%', height: 'auto' }} />
+                  {(satelliteImageUrl || streetViewImageUrl) && (
+                    <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      {satelliteImageUrl && (
+                        <div style={{ flex: '1 1 200px', minWidth: 160 }}>
+                          <div style={{ fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: c.muted, marginBottom: 4 }}>Satellite</div>
+                          <div style={{ borderRadius: 6, overflow: 'hidden', border: `1px solid ${c.line}`, lineHeight: 0 }}>
+                            <img src={satelliteImageUrl} alt="Satellite view of the property, cropped in tight" style={{ display: 'block', width: '100%', height: 'auto' }} />
+                          </div>
+                        </div>
+                      )}
+                      {streetViewImageUrl && (
+                        <div style={{ flex: '1 1 200px', minWidth: 160 }}>
+                          <div style={{ fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: c.muted, marginBottom: 4 }}>Street View</div>
+                          <div style={{ borderRadius: 6, overflow: 'hidden', border: `1px solid ${c.line}`, lineHeight: 0 }}>
+                            <img src={streetViewImageUrl} alt="Street View of the front of the property" style={{ display: 'block', width: '100%', height: 'auto' }} />
+                          </div>
+                        </div>
+                      )}
                     </div>
+                  )}
+                  {satelliteAt && !streetViewImageUrl && (
+                    <p style={{ marginTop: 10, marginBottom: 0, fontSize: 11, color: c.muted, fontStyle: 'italic' }}>No Street View coverage found for this address.</p>
                   )}
 
                   {satellite && (

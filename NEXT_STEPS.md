@@ -2,15 +2,10 @@
 
 _Last updated: 2026-08-02_
 
-## ⚠️ Action required — this session's commits aren't pushed yet
-
-Two local commits (batch CRM/report/send-flow updates, round 50) are sitting on `main` ahead of
-`origin/main` — I don't have push credentials in this sandbox. Run `git push` from your machine
-to actually deploy them; until then production is still running the old code (no PDF button, no
-send-review modal, old finding-card order, no CRM edit icon).
-
 ## ⚠️ Action required — new migration
 
+- Run `supabase/migrations/018_street_view_image.sql` — adds `properties.street_view_image_url`.
+  Required for the new Street View companion image (see round 55 below) to save/display at all.
 - Run `supabase/migrations/015_booking_payments.sql` — adds booking fields to `properties`
   (`lead_source`, `booking_status`, `booking_event_uid`, `intro_call_at`) and two new tables,
   `crm_payments` and `crm_discounts`. Required for the CRM's Payments section, Discount Codes
@@ -63,6 +58,23 @@ Full detail in `BOOKING_PAYMENTS_PLAN.md`.
   troubleshooting).
 - No new npm packages — reuses the existing `entry-photos` Supabase Storage bucket under
   a `satellite/` prefix, no new bucket needed.
+
+## Done this session (2026-08-02, round 55 — Street View companion image on the pre-flight scan)
+
+- Added `properties.street_view_image_url` (migration 018, see ⚠️ above — needs to be run).
+- `/api/satellite-analysis` now also fetches a Google Street View Static image of the property
+  (checked via the free metadata endpoint first, so addresses with no Street View coverage just
+  skip it — not a failure). Stored in the same `entry-photos` bucket under a `street-view/`
+  prefix.
+- When available, the Street View image is sent to the AI alongside the satellite crop — it can
+  see roof material, siding, vents, and eaves that a top-down view can't show, so the per-segment
+  pre-flight notes should be a bit sharper.
+- Guided Entry's "Analyze Satellite View" step now shows both images side by side (Satellite /
+  Street View), with a small note if no Street View coverage was found for that address.
+- Also fixed two report bugs from testing: the address heading on the customer report was
+  rendering near-invisible (dark text on the dark navy header — a global CSS rule was overriding
+  the inherited white), and the PDF export could cut a photo caption in half across a page break
+  (photo tiles had no page-break protection, unlike finding cards).
 
 ## Done this session (2026-08-02, round 54 — Resend domain verified, real sends unblocked)
 
