@@ -4,9 +4,13 @@ _Last updated: 2026-08-02_
 
 ## ⚠️ Action required — new migration
 
+- Run `supabase/migrations/023_material_labor_rates.sql` — splits `mitigation_price_rates`'
+  single rate into `material_rate_low/high` + `labor_rate_low/high`, with `total_rate_low/high`
+  computed automatically (generated columns). Must run after 022. Required for the /estimate
+  tab's Materials/Labor/Total breakdown (round 59 below) to work.
 - Run `supabase/migrations/022_mitigation_price_rates.sql` — creates `mitigation_price_rates`
   (seeded with draft placeholder rates) and adds `property_measurements.category`. Required for
-  the new /estimate tab (see round 58 below) to work at all.
+  the /estimate tab (see round 58 below) to work at all.
 - Run `supabase/migrations/021_property_measurements.sql` — creates `property_measurements`.
   Required for the new Measurements capture (see round 57 below) to save anything.
 - Run `supabase/migrations/019_property_plants.sql` then `020_plants_photo_only.sql` — creates
@@ -66,6 +70,19 @@ Full detail in `BOOKING_PAYMENTS_PLAN.md`.
   troubleshooting).
 - No new npm packages — reuses the existing `entry-photos` Supabase Storage bucket under
   a `satellite/` prefix, no new bucket needed.
+
+## Done this session (2026-08-02, round 59 — Materials / Labor / Total breakdown on the rate table)
+
+- `mitigation_price_rates` (migration 023, see ⚠️ above): replaced the single `rate_low`/
+  `rate_high` pair with `material_rate_low/high` + `labor_rate_low/high`; `total_rate_low/high`
+  is a generated column (always `material + labor`, never stored out of sync). The 9 draft
+  categories got a specific material/labor split per category (material-heavy for fencing/
+  decking/siding/groundcover, labor-heavy for vegetation clearance/thinning) that still sums to
+  each category's original total — still placeholder numbers, not sourced pricing.
+- /estimate tab: rate table's edit/add forms now take Material Low/High and Labor Low/High, with
+  Total shown read-only (computed) next to them. Property estimates now show a Materials/Labor/
+  Total summary line when expanded, plus a per-line materials/labor split under each measurement,
+  not just one lump total.
 
 ## Done this session (2026-08-02, round 58 — /estimate tab: draft cost rates + computed property estimates)
 
