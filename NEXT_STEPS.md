@@ -2,23 +2,6 @@
 
 _Last updated: 2026-08-02_
 
-## ⚠️ Action required — verify a sending domain in Resend
-
-Customer-facing emails ("Send to Customer" on the review page, follow-up emails from CRM) are
-currently failing with a 403 from Resend: `You can only send testing emails to your own email
-address (contact@charred-guard.com). To send emails to other recipients, please verify a domain
-at resend.com/domains, and change the from address to an email using this domain.` Checked via
-the Resend MCP — zero domains are on the account, so every send still goes out from the
-`onboarding@resend.dev` sandbox address, which Resend restricts to the account owner's own
-inbox only.
-
-To fix: add your sending domain (e.g. `charred-guard.com`) at resend.com/domains, add the
-SPF/DKIM DNS records Resend gives you at your domain registrar, wait for verification (usually
-minutes, sometimes longer depending on DNS propagation), then set `RESEND_FROM_EMAIL` in Vercel
-to an address on that domain (e.g. `reports@charred-guard.com`) — `lib/email.js` already reads
-this var and falls back to the sandbox address if it's unset. Say the word and I can create the
-domain in Resend to hand you the exact DNS records to add.
-
 ## ⚠️ Action required — this session's commits aren't pushed yet
 
 Two local commits (batch CRM/report/send-flow updates, round 50) are sitting on `main` ahead of
@@ -80,6 +63,25 @@ Full detail in `BOOKING_PAYMENTS_PLAN.md`.
   troubleshooting).
 - No new npm packages — reuses the existing `entry-photos` Supabase Storage bucket under
   a `satellite/` prefix, no new bucket needed.
+
+## Done this session (2026-08-02, round 54 — Resend domain verified, real sends unblocked)
+
+Root cause of the 403 "testing emails only" error: zero verified domains on the Resend account,
+so every send was restricted to the sandbox address. Fixed end-to-end:
+
+- Created and verified `charredguard.com` as a sending domain in Resend (DKIM, SPF-MX, and
+  SPF-TXT records, all scoped to a `send.` subdomain so they don't conflict with the existing
+  Google Workspace mail records on the root domain).
+- Added all three DNS records directly in Squarespace's DNS settings for `charredguard.com`
+  (where the domain is actually managed) — required you to complete a Google re-auth step
+  yourself partway through, since that's an identity check tied to your account.
+- Confirmed via Resend: domain status **verified**, sending **enabled**.
+- Set `RESEND_FROM_EMAIL` in wildfire-notes' Vercel env vars (Production and Preview) to
+  `Field Notes <reports@charredguard.com>` — `lib/email.js` already reads this var, so it just
+  needs a new deployment to take effect.
+
+Once you push, real customer sends (report-ready emails, CRM follow-ups) should go out from
+`reports@charredguard.com` instead of hitting the 403.
 
 ## Done this session (2026-08-02, round 53 — Cal.com review-call event created + wired live)
 
