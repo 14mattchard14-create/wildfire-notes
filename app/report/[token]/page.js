@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { parseReportData, getPhotoCaption } from '@/lib/reportSchema';
-import { reportColors, StatusPill, RiskBadge, CollapsibleCard, priorityColor, FindingView, ZonePhotoGrid, ActionPlanTable, VegetationConsiderationsSection } from '@/components/ReportView';
+import { reportColors, StatusPill, RiskBadge, CollapsibleCard, priorityColor, FindingView, ZonePhotoGrid, ActionPlanTable, VegetationConsiderationsSection, MitigationMeasurementsSection } from '@/components/ReportView';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -531,6 +531,11 @@ export default function ReportPage({ params }) {
           title: 'Vegetation Considerations',
           content: [reportData.vegetationIntro, ...reportData.vegetationConsiderations.map(v => [v.zone, v.plantId, v.assessment, v.spacingGuidance].filter(Boolean).join(' '))].filter(Boolean).join(' ').toLowerCase(),
         }] : []),
+        ...(reportData.mitigationMeasurements?.length ? [{
+          id: 'toc-measurements',
+          title: 'Mitigation Measurements',
+          content: reportData.mitigationMeasurements.map(m => [m.zone, m.label, m.estimatedValue != null ? `${m.estimatedValue} ${m.unit}` : '', m.confidence, m.notes].filter(Boolean).join(' ')).join(' ').toLowerCase(),
+        }] : []),
         { id: 'toc-action', title: 'Prioritized Action Plan', content: (reportData.actionPlan || []).map(a => [a.action, a.zone, a.priority].filter(Boolean).join(' ')).join(' ').toLowerCase() },
         { id: 'zone-guide', title: 'Understanding the Zones', content: ZONE_GUIDE.map(z => `${z.title} ${z.body}`).join(' ').toLowerCase() },
       ]
@@ -689,6 +694,12 @@ export default function ReportPage({ params }) {
             {reportData.vegetationConsiderations?.length > 0 && (
               <CollapsibleCard title="Vegetation Considerations" id="toc-vegetation" isH2 forceOpen={printMode}>
                 <VegetationConsiderationsSection intro={reportData.vegetationIntro} items={reportData.vegetationConsiderations} />
+              </CollapsibleCard>
+            )}
+
+            {reportData.mitigationMeasurements?.length > 0 && (
+              <CollapsibleCard title="Mitigation Measurements" id="toc-measurements" isH2 forceOpen={printMode}>
+                <MitigationMeasurementsSection items={reportData.mitigationMeasurements} />
               </CollapsibleCard>
             )}
 

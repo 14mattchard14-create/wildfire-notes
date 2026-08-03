@@ -4,6 +4,8 @@ _Last updated: 2026-08-02_
 
 ## ⚠️ Action required — new migration
 
+- Run `supabase/migrations/021_property_measurements.sql` — creates `property_measurements`.
+  Required for the new Measurements capture (see round 57 below) to save anything.
 - Run `supabase/migrations/019_property_plants.sql` then `020_plants_photo_only.sql` — creates
   `property_plants` and adds its `photo_url` column. Required for the Plants field (see round 56
   below) to save anything. Run both, in order, even if you haven't run 019 yet.
@@ -61,6 +63,34 @@ Full detail in `BOOKING_PAYMENTS_PLAN.md`.
   troubleshooting).
 - No new npm packages — reuses the existing `entry-photos` Supabase Storage bucket under
   a `satellite/` prefix, no new bucket needed.
+
+## Done this session (2026-08-02, round 57 — Mitigation Measurements: dimension capture for cost estimates)
+
+You want to eventually provide cost estimates for all potential mitigations, which means capturing
+dimensions (fence runs, brush clearance area, tank-to-structure distance, etc.). This round adds
+the capture + AI dimension estimate; actual $ cost estimates are a separate follow-up that'll need
+unit-pricing data as input, not built yet.
+
+- `property_measurements` table (migration 021, see ⚠️ above): `property_id`, `zone`, `label`,
+  `unit`, `photo_url`, `reference_type` (only `'letter_paper'` supported today, stored per-row so
+  other reference objects can be added later without a schema change), plus `estimated_value`,
+  `confidence`, `ai_notes` columns (unused by the app today — the computed estimate currently lives
+  in the report draft only, not written back to this table).
+- Guided Entry: a "Measurements" section, styled/interacted with exactly like Plants (collapsed row
+  → expand → list of what's logged, click one to edit/delete, "+ Add another") — but available on
+  *every* segment, not just vegetation zones, since a mitigation needing a size estimate can turn up
+  anywhere. Each entry is a photo (with instructions to lay a standard sheet of paper flat in the
+  same shot as scale reference), a short label ("brush clearance run"), and a unit (ft / sq ft).
+- `/api/report-draft` sends each measurement photo to Claude vision alongside the label/unit/scale
+  description, and asks it to locate the paper (known 8.5×11in size), locate the measured item, and
+  produce a best-effort `estimatedValue` + `confidence` (High/Medium/Low/Unable to estimate) +
+  `notes` explaining its reasoning — explicitly told to return null rather than guess blind if the
+  reference object isn't usable. This is a visual estimate for scoping, not a survey-grade
+  measurement — the report says so.
+- New "Mitigation Measurements" section renders in both the customer report (`/report/[token]`,
+  with its own TOC entry and search indexing) and the review page (read mode via the shared
+  component, edit mode for correcting the AI's label/value/unit/confidence/notes or dropping a bad
+  photo read).
 
 ## Done this session (2026-08-02, round 56 — Plants field: photo capture + Vegetation Considerations report section)
 

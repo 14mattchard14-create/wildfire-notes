@@ -15,6 +15,7 @@ import {
   reportColors, StatusPill, RiskBadge, CollapsibleCard, priorityColor,
   FindingView, ZonePhotoGrid, ActionPlanTable, PhotoCarousel, Modal,
   VegetationConsiderationsSection,
+  MitigationMeasurementsSection,
 } from '@/components/ReportView'
 import ThemeToggle from '@/components/ThemeToggle'
 import BrandLogo from '@/components/BrandLogo'
@@ -883,6 +884,14 @@ export default function PropertyReviewFlow() {
   // there's nothing meaningful to add without a photo. Remove only, for
   // dropping a bad/duplicate AI read on an existing photo.
   function removeVegetationItem(vi) { patch({ vegetationConsiderations: draftData.vegetationConsiderations.filter((_, i) => i !== vi) }) }
+  function updateMeasurementItem(mi, field, value) {
+    const mitigationMeasurements = draftData.mitigationMeasurements.map((m, i) => i === mi ? { ...m, [field]: value } : m)
+    patch({ mitigationMeasurements })
+  }
+  // Same reasoning as removeVegetationItem — a measurement entry is tied to
+  // an actual photographed dimension (see property_measurements / Guided
+  // Entry), so remove only, for dropping a bad AI read on an existing photo.
+  function removeMeasurementItem(mi) { patch({ mitigationMeasurements: draftData.mitigationMeasurements.filter((_, i) => i !== mi) }) }
   function updatePhotoCaption(entryId, value) {
     patch({ photoCaptions: { ...(draftData.photoCaptions || {}), [entryId]: value } })
   }
@@ -1532,6 +1541,73 @@ export default function PropertyReviewFlow() {
                       </div>
                     ) : (
                       <VegetationConsiderationsSection intro={draftData.vegetationIntro} items={draftData.vegetationConsiderations} />
+                    )}
+                  </CollapsibleCard>
+                )}
+
+                {draftData.mitigationMeasurements?.length > 0 && (
+                  <CollapsibleCard
+                    title="Mitigation Measurements"
+                    isH2
+                    defaultOpen
+                    headerContent={<SectionTools sectionKey="measurements" editingSection={editingSection} savingSection={savingSection} onEdit={setEditingSection} onDone={saveSection} onHistory={setHistoryFor} />}
+                  >
+                    {editingSection === 'measurements' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {draftData.mitigationMeasurements.map((m, mi) => (
+                          <div key={mi} style={{ border: `1px solid ${c.border}`, borderRadius: 8, padding: 12, display: 'flex', gap: 12 }}>
+                            {m.photoUrl && <img src={m.photoUrl} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />}
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <div style={{ fontSize: 10.5, color: c.muted }}>{m.zone}</div>
+                              <input
+                                value={m.label}
+                                onChange={e => updateMeasurementItem(mi, 'label', e.target.value)}
+                                placeholder="What's being measured"
+                                className={focusRing}
+                                style={{ ...blend, background: c.surfaceAlt, borderRadius: 4, padding: '6px 8px', fontSize: 14, fontWeight: 700, color: c.navy }}
+                              />
+                              <div style={{ display: 'flex', gap: 8 }}>
+                                <input
+                                  type="number"
+                                  value={m.estimatedValue ?? ''}
+                                  onChange={e => updateMeasurementItem(mi, 'estimatedValue', e.target.value === '' ? null : Number(e.target.value))}
+                                  placeholder="Value"
+                                  className={focusRing}
+                                  style={{ ...blend, background: c.surfaceAlt, borderRadius: 4, padding: '6px 8px', fontSize: 13, color: c.text, width: 90 }}
+                                />
+                                <input
+                                  value={m.unit}
+                                  onChange={e => updateMeasurementItem(mi, 'unit', e.target.value)}
+                                  placeholder="Unit"
+                                  className={focusRing}
+                                  style={{ ...blend, background: c.surfaceAlt, borderRadius: 4, padding: '6px 8px', fontSize: 13, color: c.text, width: 80 }}
+                                />
+                                <select
+                                  value={m.confidence}
+                                  onChange={e => updateMeasurementItem(mi, 'confidence', e.target.value)}
+                                  className={focusRing}
+                                  style={{ ...blend, background: c.surfaceAlt, borderRadius: 4, padding: '6px 8px', fontSize: 13, color: c.text }}
+                                >
+                                  {['High', 'Medium', 'Low', 'Unable to estimate'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                </select>
+                              </div>
+                              <textarea
+                                value={m.notes}
+                                onChange={e => updateMeasurementItem(mi, 'notes', e.target.value)}
+                                placeholder="Notes — reasoning, confidence caveats"
+                                rows={2}
+                                className={focusRing}
+                                style={{ ...blend, background: c.surfaceAlt, borderRadius: 4, padding: '6px 8px', fontSize: 13, color: c.text, resize: 'vertical' }}
+                              />
+                            </div>
+                            <button onClick={() => removeMeasurementItem(mi)} title="Remove" style={{ background: 'none', border: 'none', color: c.warn, cursor: 'pointer', display: 'flex', alignSelf: 'flex-start' }}>
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <MitigationMeasurementsSection items={draftData.mitigationMeasurements} />
                     )}
                   </CollapsibleCard>
                 )}

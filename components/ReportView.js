@@ -444,3 +444,53 @@ export function VegetationConsiderationsSection({ intro, items }) {
     </>
   );
 }
+
+const CONFIDENCE_COLORS = { High: c.ok, Medium: '#B58A20', Low: c.warn, 'Unable to estimate': c.muted };
+
+// Read-only card for one dimension estimate — same shape as VegetationCard
+// (photo + labeled details, no compliance status pill) but centered on a
+// number: the AI's estimated size, with a confidence badge and its
+// reasoning notes so the reader can judge how much to trust it. Shows a
+// plain "couldn't estimate" message instead of a number when the AI
+// couldn't find its scale reference in the photo.
+function MeasurementCard({ item }) {
+  const confColor = CONFIDENCE_COLORS[item.confidence] || c.muted;
+  return (
+    <div className="report-finding-card" style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 14 }}>
+      <img src={item.photoUrl} alt={item.label || 'Measurement photo'} style={{ width: '100%', maxHeight: 260, objectFit: 'cover', display: 'block' }} />
+      <div style={{ padding: '14px 16px' }}>
+        {item.zone && <div style={{ fontSize: 10.5, fontWeight: 700, color: c.slate, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>{item.zone}</div>}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+          {item.label && <div style={{ fontWeight: 700, color: c.navy, fontSize: 15 }}>{item.label}</div>}
+          <span style={{ fontSize: 10, fontWeight: 700, color: confColor, textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{item.confidence}</span>
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 700, color: c.tan, marginBottom: item.notes ? 8 : 0 }}>
+          {item.estimatedValue != null ? `~${item.estimatedValue} ${item.unit}` : 'Unable to estimate'}
+        </div>
+        {item.notes && (
+          <div style={{ background: c.surfaceAlt, borderRadius: 6, padding: '9px 12px', fontSize: 12.5, color: c.text, lineHeight: 1.55 }}>
+            {item.notes}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// "Mitigation Measurements" — dimension estimates for scoping mitigation
+// costs (fence runs, brush clearance area, tank-to-structure distance,
+// etc.), separate from WPH zone findings for the same reason
+// VegetationConsiderationsSection is: these aren't a compliance category.
+// Estimates only, not survey-grade — the confidence badge and notes on
+// each card say why. Renders nothing if there are no measurement photos.
+export function MitigationMeasurementsSection({ items }) {
+  if (!items?.length) return null;
+  return (
+    <>
+      <p style={{ margin: '0 0 16px', color: c.muted, lineHeight: 1.75, fontSize: 13, fontStyle: 'italic' }}>
+        Sizes below are visual estimates from field photos, intended to help scope mitigation work — not survey-grade measurements. Confirm exact dimensions before finalizing costs.
+      </p>
+      {items.map((item, i) => <MeasurementCard key={i} item={item} />)}
+    </>
+  );
+}

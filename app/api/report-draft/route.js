@@ -26,12 +26,13 @@ export async function POST(request) {
   const { propertyId } = await request.json()
   if (!propertyId) return Response.json({ error: 'propertyId is required' }, { status: 400 })
 
-  const [{ data: property }, { data: entries }, { data: segments }, { data: priorities }, { data: plantRows }] = await Promise.all([
+  const [{ data: property }, { data: entries }, { data: segments }, { data: priorities }, { data: plantRows }, { data: measurementRows }] = await Promise.all([
     supabaseAdmin.from('properties').select('*').eq('id', propertyId).maybeSingle(),
     supabaseAdmin.from('entries').select('*').eq('property_id', propertyId).order('created_at'),
     supabaseAdmin.from('guided_segments').select('segment_key, notes').eq('property_id', propertyId),
     supabaseAdmin.from('priorities').select('*').eq('property_id', propertyId).order('rank'),
     supabaseAdmin.from('property_plants').select('zone, photo_url').eq('property_id', propertyId).not('photo_url', 'is', null).order('created_at'),
+    supabaseAdmin.from('property_measurements').select('zone, label, unit, photo_url, reference_type').eq('property_id', propertyId).order('created_at'),
   ])
 
   if (!property) return Response.json({ error: 'Property not found' }, { status: 404 })
@@ -93,11 +94,25 @@ export async function POST(request) {
     plantImageBlocks.push({ type: 'text', text: `↑ Plant photo #${i + 1} — captured in zone "${p.zone}"` })
   })
 
+  // Same pattern as plant photos: handed to the AI as images, not text —
+  // each one has a standard sheet of paper laid flat in-frame as a scale
+  // reference (see MeasurementInlineForm in GuidedEntry.js), and the model
+  // is asked to use it to estimate the real-world dimension of whatever the
+  // inspector labeled. 'letter_paper' is the only reference_type captured
+  // by the app today; described here so the prompt stays correct if a
+  // second type is added later without a code change to this route.
+  const REFERENCE_SIZES = { letter_paper: 'a standard US Letter sheet of paper, 8.5in x 11in (21.6cm x 27.9cm), laid flat' }
+  const measurementImageBlocks = []
+  ;(measurementRows || []).forEach((m, i) => {
+    measurementImageBlocks.push({ type: 'image', source: { type: 'url', url: m.photo_url } })
+    measurementImageBlocks.push({ type: 'text', text: `↑ Measurement photo #${i + 1} — zone "${m.zone}", inspector labeled it "${m.label}", wants the answer in ${m.unit}. Scale reference in this photo: ${REFERENCE_SIZES[m.reference_type] || REFERENCE_SIZES.letter_paper}.` })
+  })
+
   const prompt = `You are an expert wildfire risk assessor writing a formal client-facing report. Use ONLY the field notes provided. Do not invent data.
 
 The SATELLITE PRE-FLIGHT OBSERVATIONS below are tentative and unconfirmed — an AI's guess from an overhead photo, not something the inspector verified on the ground. You may use them as light color in the site overview narrative (e.g. general context about surrounding vegetation or lot layout), but never as a finding, never as a compliance determination, and never stated as fact — only the ENTRIES list reflects confirmed, on-the-ground findings.
 
-${plantImageBlocks.length ? `${plantImageBlocks.length / 2} plant photo(s) are attached above this message, each labeled with the zone it was captured in — see the "vegetationConsiderations" instructions below for what to do with them.\n\n` : ''}Property: ${property.address}
+${plantImageBlocks.length ? `${plantImageBlocks.length / 2} plant photo(s) are attached above this message, each labeled with the zone it was captured in — see the "vegetationConsiderations" instructions below for what to do with them.\n\n` : ''}${measurementImageBlocks.length ? `${measurementImageBlocks.length / 2} measurement photo(s) are attached above this message, each labeled with a zone, a description of what's being measured, and the desired unit — see the "mitigationMeasurements" instructions below for what to do with them.\n\n` : ''}Property: ${property.address}
 Visit Date: ${property.visit_date || 'Not recorded'}
 FHSZ: ${property.fhsz || 'Not determined'}
 
@@ -145,6 +160,17 @@ Respond with ONLY a single valid JSON object — no markdown code fences, no com
       "assessment": "1-3 sentences: is this a fire-safe / defensible-space-appropriate choice and why, covering native-to-region status if you can reasonably judge it and general wildfire fuel characteristics (e.g. low-moisture/resinous/oily plants carry fire more readily than high-moisture, low-resin ones). Say so if you're not confident rather than asserting false precision",
       "spacingGuidance": "1-2 sentences of spacing/placement guidance specific to what's visible in this photo, referencing defensible-space spacing principles where relevant (e.g. shrub clusters capped at 10 ft wide with spacing at least 2x the tallest plant's height up to a 10 ft max, 10 ft horizontal clearance between continuous vegetation and the home, 6 ft vertical clearance under tree canopies)"
     }
+  ],
+  "mitigationMeasurements": [
+    {
+      "zone": "the zone this photo was captured in, exactly as labeled above the image",
+      "label": "what's being measured, exactly as labeled above the image, e.g. 'brush clearance run'",
+      "unit": "the unit requested above the image, copied verbatim, e.g. 'ft' or 'sq ft'",
+      "photoUrl": "leave this as an empty string — the app fills it in afterward by matching each entry back to its photo by position",
+      "estimatedValue": "your best-effort numeric estimate of the dimension in the requested unit, using the scale reference object described above the image as your anchor — or null if the reference object isn't clearly visible/usable (don't guess blind without it)",
+      "confidence": "High" | "Medium" | "Low" | "Unable to estimate",
+      "notes": "1-2 sentences: briefly explain your reasoning (how the reference object relates to the measured item) and call out anything that limits confidence — steep camera angle, reference object not flat/perpendicular to camera, partial obstruction, etc. If estimatedValue is null, explain why here instead."
+    }
   ]
 }
 
@@ -159,9 +185,11 @@ Rules:
 - Every string field must be present (use "" for an empty recommendation/rationale, never omit the key or use null).
 - "vegetationConsiderations" is a SEPARATE section from "zones" — do NOT also fold plant commentary into any zone's finding/rationale text; that would duplicate it.
 - Produce exactly one "vegetationConsiderations" entry per attached plant photo, IN THE SAME ORDER the photos were attached (photo #1 first, etc.) — the app matches them back to each photo by that order, so don't skip, merge, or reorder them. Leave "photoUrl" as "" as instructed above.
-- If no plant photos were attached, "vegetationConsiderations" must be an empty array and "vegetationIntro" must be "".`
+- If no plant photos were attached, "vegetationConsiderations" must be an empty array and "vegetationIntro" must be "".
+- "mitigationMeasurements" is a visual estimate for scoping mitigation cost, NOT a survey-grade measurement — be conservative with "confidence" rather than overstating precision. Produce exactly one entry per attached measurement photo, IN THE SAME ORDER the photos were attached — the app matches them back to each photo by that order, so don't skip, merge, or reorder them. Leave "photoUrl" as "" as instructed above.
+- If no measurement photos were attached, "mitigationMeasurements" must be an empty array.`
 
-  const messageContent = [...plantImageBlocks, { type: 'text', text: prompt }]
+  const messageContent = [...plantImageBlocks, ...measurementImageBlocks, { type: 'text', text: prompt }]
 
   let reportData
   let aiResponse
@@ -202,6 +230,23 @@ Rules:
       ...v,
       photoUrl: plantRows?.[i]?.photo_url || '',
     })).filter(v => v.photoUrl)
+  }
+
+  // Same positional backfill as vegetationConsiderations above, plus
+  // trusting the app's own saved label/unit/zone over whatever the model
+  // echoed back (it was only asked to copy them, no reason to prefer its
+  // copy over the source of truth).
+  if (Array.isArray(reportData?.mitigationMeasurements)) {
+    if (reportData.mitigationMeasurements.length !== (measurementRows || []).length) {
+      console.error(`report-draft: mitigationMeasurements count (${reportData.mitigationMeasurements.length}) doesn't match measurement photo count (${(measurementRows || []).length}) — matching what we can by position.`)
+    }
+    reportData.mitigationMeasurements = reportData.mitigationMeasurements.map((m, i) => ({
+      ...m,
+      zone: measurementRows?.[i]?.zone || m.zone || '',
+      label: measurementRows?.[i]?.label || m.label || '',
+      unit: measurementRows?.[i]?.unit || m.unit || '',
+      photoUrl: measurementRows?.[i]?.photo_url || '',
+    })).filter(m => m.photoUrl)
   }
 
   const { error } = await supabaseAdmin
