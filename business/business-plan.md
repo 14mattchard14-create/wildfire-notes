@@ -176,7 +176,7 @@ Fully bootstrapped (~$2,500–$3,100 from founder savings).
 
 ## Section 8: 12-Month Financial Projections
 
-**See `growth-poam.xlsx` → "Growth Curve" tab for a live, formula-driven version of this table** — it recomputes revenue and estimates delivery hours/week from adjustable assumptions (hours per job type, solo capacity threshold), rather than the static numbers below. **See the "Business Model Paths" tab for the real open question this plan doesn't resolve yet: whether it ends up (A) a business partner joining full-time once volume justifies it, (B) a permanent part-time evenings-only operation, or (C) a part-time, homeowner-inspection-only business that drops the hardening add-on entirely.**
+**See `growth-poam.xlsx` → "Growth Curve" tab for a live, formula-driven version of this table** — it recomputes revenue and estimates delivery hours/week from adjustable assumptions (hours per job type, solo capacity threshold), rather than the static numbers below. **See the "Scenarios" tab for the real open question this plan doesn't resolve yet: whether it ends up a business partner joining full-time once volume justifies it, a permanent part-time evenings-only operation, or a part-time homeowner-inspections-only business that drops the hardening add-on entirely — each with its own marketing spend and net-profit estimate, and built to have more scenarios added alongside them.**
 
 ### Key Assumptions
 - AOV: On-Site Audit $500, Guided Audit $200, Hardening Add-On $450 avg ticket.
