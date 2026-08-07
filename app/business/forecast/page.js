@@ -335,6 +335,55 @@ function runMonteCarlo({ assumptions, monthly, trials, volumeRange, hoursRange, 
   }
 }
 
+// --- Marketing spend optimizer --------------------------------------------
+//
+// business-plan.md §6.5 gives one real anchor point: ~$200–350/mo marketing
+// burn produces ~4–8 audits/mo. That's the only actual data point that
+// exists (the Marketing Channel Menu in growth-poam.xlsx is explicitly a
+// reference, not calibrated per-channel — "too uncertain to model
+// precisely"). Rather than skip modeling it, this treats that uncertainty
+// as the thing Monte Carlo is for: audits(spend) is a single diminishing-
+// returns curve (audits = organic baseline + k·spend^elasticity, k solved
+// from the anchor), and "how good is marketing really" becomes one more
+// triangular-distribution range fed into the same runMonteCarlo() engine
+// used everywhere else — so optimizing spend isn't a separate model, it's
+// the existing risk engine evaluated at each candidate spend level.
+function computeMarketingResponse(spend, { anchorSpend, anchorAudits, elasticity, organicBaseline }) {
+  const aSpend = Math.max(1, num(anchorSpend))
+  const aAudits = Math.max(0, num(anchorAudits))
+  const e = num(elasticity) || 0.5
+  const base = num(organicBaseline)
+  const k = aSpend > 0 ? Math.max(0, aAudits - base) / Math.pow(aSpend, e) : 0
+  return base + k * Math.pow(Math.max(0, num(spend)), e)
+}
+
+function computeMarketingSweep({
+  assumptions, selfRatio, hardeningConversion, p1Hours, p2Hours, ph1Hours, ph2Hours,
+  anchorSpend, anchorAudits, elasticity, organicBaseline,
+  spendMin, spendMax, spendStep, responseRange, hoursRange, marginRange, capacityRange, trialsPerPoint,
+}) {
+  const step = Math.max(10, num(spendStep) || 50)
+  const min = Math.max(0, num(spendMin))
+  const max = Math.max(min, num(spendMax))
+  const points = []
+  for (let spend = min; spend <= max + 1e-6; spend += step) {
+    const audits = computeMarketingResponse(spend, { anchorSpend, anchorAudits, elasticity, organicBaseline })
+    const self = audits * num(selfRatio)
+    const hardening = audits * num(hardeningConversion)
+    const monthly = Array.from({ length: 12 }, () => ({
+      audits, self, hardening, p1Hours: num(p1Hours), p2Hours: num(p2Hours), ph1Hours: num(ph1Hours), ph2Hours: num(ph2Hours),
+    }))
+    const a = { ...assumptions, marketingSpend: spend }
+    const mc = runMonteCarlo({
+      assumptions: a, monthly, trials: trialsPerPoint,
+      volumeRange: responseRange, hoursRange, marginRange, capacityRange, targetNetProfit: null,
+    })
+    points.push({ spend, audits, p10: mc.p10, p50: mc.p50, p90: mc.p90, probOverCapacity: mc.probOverCapacity })
+  }
+  const best = points.reduce((b, p) => (!b || p.p50 > b.p50 ? p : b), null)
+  return { points, best }
+}
+
 function money(n) { return `$${Math.round(n).toLocaleString('en-US')}` }
 
 const label = { display: 'block', fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }
@@ -880,6 +929,259 @@ function GoalSeekPanel({ scenarios, onSave }) {
   )
 }
 
+function MarketingSweepChart({ points, best }) {
+  const W = 720, H = 220, padL = 54, padR = 16, padT = 14, padB = 26
+  if (!points.length) return null
+  const spends = points.map(p => p.spend)
+  const minSpend = Math.min(...spends), maxSpend = Math.max(...spends)
+  const allVals = points.flatMap(p => [p.p10, p.p90])
+  const minVal = Math.min(0, ...allVals), maxVal = Math.max(...allVals)
+  const vSpan = (maxVal - minVal) || 1
+  const sSpan = (maxSpend - minSpend) || 1
+  const x = (s) => padL + ((s - minSpend) / sSpan) * (W - padL - padR)
+  const y = (v) => padT + (1 - (v - minVal) / vSpan) * (H - padT - padB)
+
+  const bandTop = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(p.spend)} ${y(p.p90)}`).join(' ')
+  const bandBottom = [...points].reverse().map(p => `L ${x(p.spend)} ${y(p.p10)}`).join(' ')
+  const bandPath = `${bandTop} ${bandBottom} Z`
+  const p50Path = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(p.spend)} ${y(p.p50)}`).join(' ')
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', overflow: 'visible' }}>
+      {minVal < 0 && (
+        <line x1={padL} y1={y(0)} x2={W - padR} y2={y(0)} stroke="var(--line)" strokeDasharray="3,3" />
+      )}
+      <path d={bandPath} fill="var(--accent)" opacity="0.15" />
+      <path d={p50Path} fill="none" stroke="var(--accent)" strokeWidth="2" />
+      {best && (
+        <>
+          <line x1={x(best.spend)} y1={padT} x2={x(best.spend)} y2={H - padB} stroke="var(--ok)" strokeWidth="1.5" strokeDasharray="4,2" />
+          <circle cx={x(best.spend)} cy={y(best.p50)} r="3.5" fill="var(--ok)" />
+        </>
+      )}
+      <text x={padL} y={H - 8} fontSize="9.5" fill="var(--text-muted)">{money(minSpend)}/mo</text>
+      <text x={W - padR} y={H - 8} fontSize="9.5" fill="var(--text-muted)" textAnchor="end">{money(maxSpend)}/mo</text>
+      <text x={padL - 6} y={padT + 9} fontSize="9.5" fill="var(--text-muted)" textAnchor="end">{money(maxVal)}</text>
+      <text x={padL - 6} y={H - padB} fontSize="9.5" fill="var(--text-muted)" textAnchor="end">{money(minVal)}</text>
+    </svg>
+  )
+}
+
+function MarketingOptimizerPanel({ scenarios, onSave }) {
+  const [open, setOpen] = useState(false)
+  const [baseId, setBaseId] = useState('default')
+  const [selfRatio, setSelfRatio] = useState(0.5)
+  const [hardeningConversion, setHardeningConversion] = useState(0.40)
+  const [anchorSpend, setAnchorSpend] = useState(275)
+  const [anchorAudits, setAnchorAudits] = useState(6)
+  const [elasticity, setElasticity] = useState(0.5)
+  const [organicBaseline, setOrganicBaseline] = useState(0.5)
+  const [spendMin, setSpendMin] = useState(0)
+  const [spendMax, setSpendMax] = useState(600)
+  const [spendStep, setSpendStep] = useState(50)
+  const [responseRange, setResponseRange] = useState({ low: 60, likely: 100, high: 140 })
+  const [hoursRange, setHoursRange] = useState({ low: 85, likely: 100, high: 125 })
+  const [marginRange, setMarginRange] = useState({ low: 85, likely: 100, high: 105 })
+  const [capacityRange, setCapacityRange] = useState({ low: 80, likely: 100, high: 110 })
+  const [p1Hours, setP1Hours] = useState(12)
+  const [ph1Hours, setPh1Hours] = useState(6)
+  const [p2Hours, setP2Hours] = useState(0)
+  const [ph2Hours, setPh2Hours] = useState(0)
+  const [trialsPerPoint, setTrialsPerPoint] = useState(3000)
+  const [result, setResult] = useState(null)
+  const [running, setRunning] = useState(false)
+  const [selectedSpend, setSelectedSpend] = useState(null)
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const baseAssumptions = baseId === 'default' ? DEFAULT_ASSUMPTIONS : (scenarios.find(s => s.id === baseId)?.assumptions || DEFAULT_ASSUMPTIONS)
+
+  function run() {
+    setRunning(true)
+    setTimeout(() => {
+      const r = computeMarketingSweep({
+        assumptions: baseAssumptions, selfRatio, hardeningConversion, p1Hours, p2Hours, ph1Hours, ph2Hours,
+        anchorSpend, anchorAudits, elasticity, organicBaseline,
+        spendMin, spendMax, spendStep,
+        responseRange: [responseRange.low, responseRange.likely, responseRange.high],
+        hoursRange: [hoursRange.low, hoursRange.likely, hoursRange.high],
+        marginRange: [marginRange.low, marginRange.likely, marginRange.high],
+        capacityRange: [capacityRange.low, capacityRange.likely, capacityRange.high],
+        trialsPerPoint,
+      })
+      setResult(r)
+      setSelectedSpend(r.best ? r.best.spend : null)
+      setRunning(false)
+    }, 30)
+  }
+
+  async function handleSave() {
+    if (!result) return
+    const point = result.points.find(p => p.spend === selectedSpend) || result.best
+    if (!point) return
+    setSaving(true)
+    const audits = point.audits
+    const self = audits * num(selfRatio)
+    const hardening = audits * num(hardeningConversion)
+    const monthly = Array.from({ length: 12 }, () => ({
+      audits, self, hardening, p1Hours: num(p1Hours), p2Hours: num(p2Hours), ph1Hours: num(ph1Hours), ph2Hours: num(ph2Hours),
+    }))
+    const assumptions = { ...baseAssumptions, marketingSpend: point.spend }
+    await onSave(
+      name.trim() || `Marketing: ${money(point.spend)}/mo`, assumptions, monthly,
+      'Generated by the Marketing Optimizer — steady-state monthly plan at this spend level. Edit freely like any other scenario.'
+    )
+    setSaving(false)
+    setName('')
+  }
+
+  return (
+    <div style={{ ...card, marginBottom: 18 }}>
+      <button onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', gap: 10 }}>
+        <h2 style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: 'var(--text)' }}>Marketing spend optimizer</h2>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{open ? 'Hide' : 'Find the risk-adjusted sweet spot for marketing spend →'}</span>
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 14, display: 'grid', gap: 16 }}>
+          <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+            For each candidate monthly marketing spend, derives the audit volume it should produce (a diminishing-returns
+            curve calibrated to business-plan.md §6.5's anchor: ~$200–350/mo → 4–8 audits/mo), then runs the same Monte
+            Carlo engine as above at that spend level — so "how effective is this spend, really" is treated as one more
+            uncertain input instead of a fixed assumption. The chart shows the P10–P90 range at each spend level, not just
+            one number, since a higher expected profit at higher spend can come with more risk.
+          </p>
+
+          <div>
+            <span style={label}>Base pricing / margins / overhead on</span>
+            <select value={baseId} onChange={e => setBaseId(e.target.value)} style={input}>
+              <option value="default">Defaults ($500 / $200 / $450, 90% / 65% margins)</option>
+              {scenarios.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+            <Field text="Self-Inspections per Audit" value={selfRatio} onChange={setSelfRatio} />
+            <Field text="Hardening Conversion (0-1)" value={hardeningConversion} onChange={setHardeningConversion} />
+          </div>
+
+          <div>
+            <h4 style={{ fontSize: 11.5, fontWeight: 700, margin: '0 0 8px', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Response curve calibration</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+              <Field text="Anchor Spend ($/mo)" prefix="$" value={anchorSpend} onChange={setAnchorSpend} />
+              <Field text="Anchor Audits (at that spend)" value={anchorAudits} onChange={setAnchorAudits} />
+              <Field text="Elasticity (0-1, lower = faster diminishing)" value={elasticity} onChange={setElasticity} />
+              <Field text="Organic Baseline (audits/mo at $0)" value={organicBaseline} onChange={setOrganicBaseline} />
+            </div>
+          </div>
+
+          <div>
+            <h4 style={{ fontSize: 11.5, fontWeight: 700, margin: '0 0 8px', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Spend range to sweep</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+              <Field text="Min ($/mo)" prefix="$" value={spendMin} onChange={setSpendMin} />
+              <Field text="Max ($/mo)" prefix="$" value={spendMax} onChange={setSpendMax} />
+              <Field text="Step ($)" prefix="$" value={spendStep} onChange={setSpendStep} />
+              <div>
+                <span style={label}>Trials per spend level</span>
+                <select value={trialsPerPoint} onChange={e => setTrialsPerPoint(Number(e.target.value))} style={input}>
+                  <option value={1000}>1,000 (fast)</option>
+                  <option value={3000}>3,000 (recommended)</option>
+                  <option value={10000}>10,000 (slower, more precise)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4 style={{ fontSize: 11.5, fontWeight: 700, margin: '0 0 8px', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Uncertainty ranges (% of plan, same as Monte Carlo above)</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
+              <RangeField text="Marketing response effectiveness" {...responseRange} onChange={setResponseRange} />
+              <RangeField text="Hours per job" {...hoursRange} onChange={setHoursRange} />
+              <RangeField text="Margins" {...marginRange} onChange={setMarginRange} />
+              <RangeField text="Available capacity" {...capacityRange} onChange={setCapacityRange} />
+            </div>
+          </div>
+
+          <div>
+            <h4 style={{ fontSize: 11.5, fontWeight: 700, margin: '0 0 8px', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Available capacity (steady, all 12 months)</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+              <Field text="P1 Hrs/Wk (inspection)" value={p1Hours} onChange={setP1Hours} />
+              <Field text="PH1 Hrs/Wk (hardening)" value={ph1Hours} onChange={setPh1Hours} />
+              <Field text="P2 Hrs/Wk (inspection)" value={p2Hours} onChange={setP2Hours} />
+              <Field text="PH2 Hrs/Wk (hardening)" value={ph2Hours} onChange={setPh2Hours} />
+            </div>
+          </div>
+
+          <button onClick={run} disabled={running} style={{ justifySelf: 'start', fontSize: 11.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 4, padding: '9px 16px', cursor: 'pointer', opacity: running ? 0.6 : 1 }}>
+            {running ? 'Running sweep…' : 'Run sweep'}
+          </button>
+
+          {result && (
+            <div style={{ display: 'grid', gap: 14, borderTop: '1px solid var(--line)', paddingTop: 14 }}>
+              {result.best && (
+                <p style={{ fontSize: 12, color: 'var(--text)', margin: 0 }}>
+                  Highest median (P50) outcome: <strong>{money(result.best.spend)}/mo</strong> → ~{result.best.audits.toFixed(1)} audits/mo,
+                  P50 net profit <strong style={{ color: 'var(--accent)' }}>{money(result.best.p50)}</strong> (range {money(result.best.p10)} to {money(result.best.p90)}).
+                  That's a peak in the median line, not necessarily the right call — check the band width and capacity risk before committing.
+                </p>
+              )}
+
+              <MarketingSweepChart points={result.points} best={result.best} />
+
+              <div style={{ overflowX: 'auto', border: '1px solid var(--line)', borderRadius: 8 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--surface-2)', textAlign: 'left' }}>
+                      {['Spend/mo', 'Audits/mo', 'P10', 'P50', 'P90', 'Prob. Over Capacity'].map(h => (
+                        <th key={h} style={{ padding: '7px 8px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.points.map(p => {
+                      const isBest = result.best && p.spend === result.best.spend
+                      return (
+                        <tr
+                          key={p.spend}
+                          onClick={() => setSelectedSpend(p.spend)}
+                          style={{ borderTop: '1px solid var(--line)', cursor: 'pointer', background: p.spend === selectedSpend ? 'var(--surface-2)' : 'transparent' }}
+                        >
+                          <td style={{ padding: '6px 8px', fontSize: 12, fontWeight: isBest ? 700 : 500, color: 'var(--text)' }}>{money(p.spend)}{isBest ? ' ★' : ''}</td>
+                          <td style={{ padding: '6px 8px', fontSize: 12, color: 'var(--text)' }}>{p.audits.toFixed(1)}</td>
+                          <td style={{ padding: '6px 8px', fontSize: 12, color: 'var(--text)' }}>{money(p.p10)}</td>
+                          <td style={{ padding: '6px 8px', fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{money(p.p50)}</td>
+                          <td style={{ padding: '6px 8px', fontSize: 12, color: 'var(--text)' }}>{money(p.p90)}</td>
+                          <td style={{ padding: '6px 8px', fontSize: 12, color: p.probOverCapacity > 0.2 ? 'var(--warn)' : 'var(--ok)', fontWeight: 600 }}>{Math.round(p.probOverCapacity * 100)}%</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Save the selected row ({selectedSpend != null ? money(selectedSpend) : '—'}/mo) as a scenario:</span>
+                <input
+                  style={{ ...input, flex: '1 1 200px' }}
+                  placeholder={selectedSpend != null ? `Marketing: ${money(selectedSpend)}/mo` : ''}
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                />
+                <button onClick={handleSave} disabled={saving || selectedSpend == null} style={{ fontSize: 11.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 4, padding: '9px 14px', cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+                  {saving ? 'Saving…' : 'Save as new scenario'}
+                </button>
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
+                Click any row to select it, then save — compare different spend levels side by side the same way as any other scenario.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ForecastPage() {
   const [scenarios, setScenarios] = useState([])
   const [fetching, setFetching] = useState(true)
@@ -956,13 +1258,16 @@ export default function ForecastPage() {
     await load()
   }
 
-  async function saveGoalScenario(name, assumptions, monthly) {
+  async function saveGeneratedScenario(name, assumptions, monthly, notes) {
     const { data, error } = await supabase.from('financial_scenarios').insert({
-      name, notes: 'Generated by Goal Seek from a target net profit — edit freely like any other scenario.', assumptions, monthly,
+      name, notes: notes || 'Generated scenario — edit freely like any other.', assumptions, monthly,
     }).select().single()
     if (error) { alert('Could not save scenario: ' + error.message); return }
     await load(data.id)
   }
+
+  const saveGoalScenario = (name, assumptions, monthly) =>
+    saveGeneratedScenario(name, assumptions, monthly, 'Generated by Goal Seek from a target net profit — edit freely like any other scenario.')
 
   const saved = scenarios.find(s => s.id === selectedId)
   const dirty = !!draft && !!saved && JSON.stringify({ name: draft.name, notes: draft.notes, assumptions: draft.assumptions, monthly: draft.monthly })
@@ -976,6 +1281,8 @@ export default function ForecastPage() {
       </p>
 
       <GoalSeekPanel scenarios={scenarios} onSave={saveGoalScenario} />
+
+      <MarketingOptimizerPanel scenarios={scenarios} onSave={saveGeneratedScenario} />
 
       {fetching ? (
         <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</p>
