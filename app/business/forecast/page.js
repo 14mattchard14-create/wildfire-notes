@@ -180,6 +180,133 @@ function computeGoalSeek({ assumptions, targetNetProfit, selfRatio, hardeningCon
   return { auditsAnnual, selfAnnual, hardeningAnnual, monthly, forecast: computeForecast(a, monthly) }
 }
 
+// --- Monte Carlo risk analysis -------------------------------------------
+//
+// Draws low/likely/high from a triangular distribution — the standard
+// choice for business risk models (same shape PERT estimating uses)
+// because it only needs three numbers a non-statistician can reason about
+// directly, while still capturing skew that a plain min/max range can't.
+function sampleTriangular(low, likely, high) {
+  const lo = num(low), mid = num(likely), hi = num(high)
+  if (hi <= lo) return mid
+  const u = Math.random()
+  const c = (mid - lo) / (hi - lo)
+  if (u < c) return lo + Math.sqrt(u * (hi - lo) * (mid - lo))
+  return hi - Math.sqrt((1 - u) * (hi - lo) * (hi - mid))
+}
+
+function percentile(sortedArr, p) {
+  if (!sortedArr.length) return 0
+  const idx = (sortedArr.length - 1) * p
+  const lo = Math.floor(idx), hi = Math.ceil(idx)
+  if (lo === hi) return sortedArr[lo]
+  return sortedArr[lo] + (sortedArr[hi] - sortedArr[lo]) * (idx - lo)
+}
+
+// Pearson correlation — used only to rank which uncertain input the
+// simulated net profit swings with the most (a "tornado" sensitivity
+// ranking), not for anything requiring causal inference.
+function pearson(xs, ys) {
+  const n = xs.length
+  if (n < 2) return 0
+  const mx = xs.reduce((s, v) => s + v, 0) / n
+  const my = ys.reduce((s, v) => s + v, 0) / n
+  let cov = 0, dx2 = 0, dy2 = 0
+  for (let i = 0; i < n; i++) {
+    const dx = xs[i] - mx, dy = ys[i] - my
+    cov += dx * dy; dx2 += dx * dx; dy2 += dy * dy
+  }
+  const denom = Math.sqrt(dx2 * dy2)
+  return denom ? cov / denom : 0
+}
+
+function buildHistogram(sortedValues, bins = 22) {
+  if (!sortedValues.length) return []
+  const min = sortedValues[0], max = sortedValues[sortedValues.length - 1]
+  if (max === min) return [{ x0: min, x1: max, count: sortedValues.length }]
+  const width = (max - min) / bins
+  const counts = Array.from({ length: bins }, () => 0)
+  sortedValues.forEach(v => {
+    let idx = Math.floor((v - min) / width)
+    if (idx >= bins) idx = bins - 1
+    if (idx < 0) idx = 0
+    counts[idx]++
+  })
+  return counts.map((count, i) => ({ x0: min + i * width, x1: min + (i + 1) * width, count }))
+}
+
+// Each trial draws ONE multiplier per uncertain driver and applies it
+// across the whole year, rather than randomizing every month independently.
+// Independent per-month noise would mostly cancel out over 12 months (the
+// law of large numbers doing its thing) and make the year look far more
+// certain than it really is — the classic mistake in ad hoc business Monte
+// Carlo models. Demand risk doesn't actually work that way: if the year
+// runs slow, it tends to run slow throughout, so the model draws a single
+// "how did this year go" multiplier per driver per trial and holds it for
+// all 12 months, which is what actually produces a realistic spread.
+function runMonteCarlo({ assumptions, monthly, trials, volumeRange, hoursRange, marginRange, capacityRange, targetNetProfit }) {
+  const n = Math.max(100, Math.min(50000, Math.round(num(trials)) || 10000))
+  const netProfits = new Array(n)
+  const peakHoursArr = new Array(n)
+  let overCount = 0
+  const draws = { volume: new Array(n), hours: new Array(n), margin: new Array(n), capacity: new Array(n) }
+
+  for (let t = 0; t < n; t++) {
+    const volMult = sampleTriangular(...volumeRange) / 100
+    const hrsMult = sampleTriangular(...hoursRange) / 100
+    const marginMult = sampleTriangular(...marginRange) / 100
+    const capMult = sampleTriangular(...capacityRange) / 100
+
+    const a = {
+      ...assumptions,
+      hoursPerAudit: num(assumptions.hoursPerAudit) * hrsMult,
+      hoursPerSelf: num(assumptions.hoursPerSelf) * hrsMult,
+      hoursPerHardening: num(assumptions.hoursPerHardening) * hrsMult,
+      auditMargin: Math.min(1, num(assumptions.auditMargin) * marginMult),
+      hardeningMargin: Math.min(1, num(assumptions.hardeningMargin) * marginMult),
+    }
+    const m = (monthly || []).map(row => ({
+      audits: num(row.audits) * volMult,
+      self: num(row.self) * volMult,
+      hardening: num(row.hardening) * volMult,
+      person1Hours: num(row.person1Hours) * capMult,
+      person2Hours: num(row.person2Hours) * capMult,
+    }))
+    const f = computeForecast(a, m)
+    netProfits[t] = f.netProfit
+    peakHoursArr[t] = f.peakHoursPerWeek
+    if (f.anyOver) overCount++
+    draws.volume[t] = volMult; draws.hours[t] = hrsMult; draws.margin[t] = marginMult; draws.capacity[t] = capMult
+  }
+
+  const sorted = [...netProfits].sort((x, y) => x - y)
+  const mean = netProfits.reduce((s, v) => s + v, 0) / n
+  const variance = netProfits.reduce((s, v) => s + (v - mean) ** 2, 0) / n
+  const target = num(targetNetProfit)
+
+  return {
+    trials: n,
+    p10: percentile(sorted, 0.10),
+    p50: percentile(sorted, 0.50),
+    p90: percentile(sorted, 0.90),
+    mean,
+    stdDev: Math.sqrt(variance),
+    min: sorted[0] ?? 0,
+    max: sorted[sorted.length - 1] ?? 0,
+    probBreakeven: netProfits.filter(v => v >= 0).length / n,
+    probTarget: target ? netProfits.filter(v => v >= target).length / n : null,
+    probOverCapacity: overCount / n,
+    peakHoursP90: percentile([...peakHoursArr].sort((x, y) => x - y), 0.90),
+    sensitivity: [
+      { label: 'Demand / job volume', corr: pearson(draws.volume, netProfits) },
+      { label: 'Hours per job', corr: pearson(draws.hours, netProfits) },
+      { label: 'Margins', corr: pearson(draws.margin, netProfits) },
+      { label: 'Available capacity', corr: pearson(draws.capacity, netProfits) },
+    ].sort((x, y) => Math.abs(y.corr) - Math.abs(x.corr)),
+    histogram: buildHistogram(sorted),
+  }
+}
+
 function money(n) { return `$${Math.round(n).toLocaleString('en-US')}` }
 
 const label = { display: 'block', fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }
@@ -328,6 +455,178 @@ function StatCard({ text, value, accent, warn }) {
   )
 }
 
+function RangeField({ text, low, likely, high, onChange }) {
+  const set = (which) => (val) => onChange({ low, likely, high, [which]: val })
+  return (
+    <div>
+      <span style={label}>{text} (% of plan)</span>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+        <input type="number" style={{ ...input, fontSize: 12 }} value={low} onChange={e => set('low')(e.target.value)} title="Low (pessimistic)" />
+        <input type="number" style={{ ...input, fontSize: 12 }} value={likely} onChange={e => set('likely')(e.target.value)} title="Most likely" />
+        <input type="number" style={{ ...input, fontSize: 12 }} value={high} onChange={e => set('high')(e.target.value)} title="High (optimistic)" />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginTop: 2 }}>
+        <span style={{ fontSize: 9.5, color: 'var(--text-muted)' }}>Low</span>
+        <span style={{ fontSize: 9.5, color: 'var(--text-muted)' }}>Likely</span>
+        <span style={{ fontSize: 9.5, color: 'var(--text-muted)' }}>High</span>
+      </div>
+    </div>
+  )
+}
+
+function Histogram({ bins, p10, p50, p90 }) {
+  const max = bins.reduce((m, b) => Math.max(m, b.count), 0) || 1
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 1, height: 90 }}>
+        {bins.map((b, i) => {
+          const inBand = b.x1 >= p10 && b.x0 <= p90
+          return (
+            <div
+              key={i}
+              title={`${money(b.x0)} to ${money(b.x1)}: ${b.count} trials`}
+              style={{ flex: 1, height: `${Math.max(2, (b.count / max) * 100)}%`, background: inBand ? 'var(--accent)' : 'var(--text-muted)', opacity: inBand ? 0.85 : 0.35, borderRadius: '2px 2px 0 0' }}
+            />
+          )
+        })}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{money(bins[0]?.x0 ?? 0)}</span>
+        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{money(bins[bins.length - 1]?.x1 ?? 0)}</span>
+      </div>
+      <p style={{ fontSize: 10.5, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+        Highlighted bars are the middle 80% of outcomes (P10–P90); faded bars are the tails.
+      </p>
+    </div>
+  )
+}
+
+function SensitivityTornado({ sensitivity }) {
+  const maxAbs = sensitivity.reduce((m, s) => Math.max(m, Math.abs(s.corr)), 0) || 1
+  return (
+    <div style={{ display: 'grid', gap: 6 }}>
+      {sensitivity.map(s => (
+        <div key={s.label} style={{ display: 'grid', gridTemplateColumns: '150px 1fr 48px', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11.5, color: 'var(--text)' }}>{s.label}</span>
+          <div style={{ background: 'var(--surface-2)', borderRadius: 4, height: 12, position: 'relative', overflow: 'hidden' }}>
+            <div style={{
+              position: 'absolute', top: 0, bottom: 0, left: s.corr >= 0 ? '50%' : `${50 - (Math.abs(s.corr) / maxAbs) * 50}%`,
+              width: `${(Math.abs(s.corr) / maxAbs) * 50}%`, background: s.corr >= 0 ? 'var(--ok)' : 'var(--warn)', borderRadius: 4,
+            }} />
+            <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'var(--line)' }} />
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }}>{s.corr.toFixed(2)}</span>
+        </div>
+      ))}
+      <p style={{ fontSize: 10.5, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+        How strongly each driver's random draw correlated with the simulated net profit across all trials (-1 to 1) — longer bars moved the outcome more. This ranks sensitivity, it doesn't prove causation.
+      </p>
+    </div>
+  )
+}
+
+function MonteCarloPanel({ assumptions, monthly }) {
+  const [open, setOpen] = useState(false)
+  const [trials, setTrials] = useState(10000)
+  const [targetNetProfit, setTargetNetProfit] = useState('')
+  const [volumeRange, setVolumeRange] = useState({ low: 60, likely: 100, high: 140 })
+  const [hoursRange, setHoursRange] = useState({ low: 85, likely: 100, high: 125 })
+  const [marginRange, setMarginRange] = useState({ low: 85, likely: 100, high: 105 })
+  const [capacityRange, setCapacityRange] = useState({ low: 80, likely: 100, high: 110 })
+  const [result, setResult] = useState(null)
+  const [running, setRunning] = useState(false)
+
+  function run() {
+    setRunning(true)
+    // Deferred so the "Running…" state actually paints before the (brief
+    // but synchronous) simulation loop blocks the main thread.
+    setTimeout(() => {
+      const r = runMonteCarlo({
+        assumptions, monthly, trials,
+        volumeRange: [volumeRange.low, volumeRange.likely, volumeRange.high],
+        hoursRange: [hoursRange.low, hoursRange.likely, hoursRange.high],
+        marginRange: [marginRange.low, marginRange.likely, marginRange.high],
+        capacityRange: [capacityRange.low, capacityRange.likely, capacityRange.high],
+        targetNetProfit,
+      })
+      setResult(r)
+      setRunning(false)
+    }, 30)
+  }
+
+  return (
+    <div style={card}>
+      <button onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', gap: 10 }}>
+        <h3 style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: 'var(--text)' }}>Monte Carlo risk analysis</h3>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{open ? 'Hide' : 'How risky is this plan, really? →'}</span>
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 14, display: 'grid', gap: 16 }}>
+          <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+            Runs this scenario's monthly plan thousands of times with randomized demand, job duration, margins, and available
+            capacity, to see the range of outcomes rather than just the one point estimate above. Each trial draws a single
+            multiplier per driver and applies it to the whole year (not per month independently) — real demand risk moves
+            together across a year, and randomizing month-by-month would understate how much the actual outcome can vary.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
+            <RangeField text="Demand / job volume" {...volumeRange} onChange={setVolumeRange} />
+            <RangeField text="Hours per job" {...hoursRange} onChange={setHoursRange} />
+            <RangeField text="Margins" {...marginRange} onChange={setMarginRange} />
+            <RangeField text="Available capacity" {...capacityRange} onChange={setCapacityRange} />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+            <div>
+              <span style={label}>Trials</span>
+              <select value={trials} onChange={e => setTrials(Number(e.target.value))} style={input}>
+                <option value={1000}>1,000 (fast)</option>
+                <option value={10000}>10,000 (recommended)</option>
+                <option value={50000}>50,000 (max precision)</option>
+              </select>
+            </div>
+            <Field text="Target Net Profit ($, optional)" prefix="$" value={targetNetProfit} onChange={setTargetNetProfit} />
+          </div>
+
+          <button onClick={run} disabled={running} style={{ justifySelf: 'start', fontSize: 11.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 4, padding: '9px 16px', cursor: 'pointer', opacity: running ? 0.6 : 1 }}>
+            {running ? 'Running…' : 'Run simulation'}
+          </button>
+
+          {result && (
+            <div style={{ display: 'grid', gap: 16, borderTop: '1px solid var(--line)', paddingTop: 14 }}>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <StatCard text="P10 (pessimistic)" value={money(result.p10)} />
+                <StatCard text="P50 (median)" value={money(result.p50)} accent />
+                <StatCard text="P90 (optimistic)" value={money(result.p90)} />
+                <StatCard text="Prob. Net Profit ≥ $0" value={`${Math.round(result.probBreakeven * 100)}%`} warn={result.probBreakeven < 0.8} />
+                {result.probTarget != null && (
+                  <StatCard text="Prob. Hits Target" value={`${Math.round(result.probTarget * 100)}%`} warn={result.probTarget < 0.5} />
+                )}
+                <StatCard text="Prob. Over Capacity Some Month" value={`${Math.round(result.probOverCapacity * 100)}%`} warn={result.probOverCapacity > 0.2} />
+              </div>
+
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
+                {result.trials.toLocaleString()} trials. Mean {money(result.mean)}, std. dev. {money(result.stdDev)}, range {money(result.min)} to {money(result.max)}. 90th-percentile peak hours needed: {result.peakHoursP90.toFixed(1)} hrs/wk.
+              </p>
+
+              <div>
+                <h4 style={{ fontSize: 11.5, fontWeight: 700, margin: '0 0 8px', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Net profit distribution</h4>
+                <Histogram bins={result.histogram} p10={result.p10} p90={result.p90} />
+              </div>
+
+              <div>
+                <h4 style={{ fontSize: 11.5, fontWeight: 700, margin: '0 0 8px', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>What drives the risk</h4>
+                <SensitivityTornado sensitivity={result.sensitivity} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ScenarioEditor({ scenario, onChange, onSave, onDuplicate, onDelete, saving, dirty }) {
   const forecast = useMemo(() => computeForecast(scenario.assumptions, scenario.monthly), [scenario.assumptions, scenario.monthly])
 
@@ -374,6 +673,8 @@ function ScenarioEditor({ scenario, onChange, onSave, onDuplicate, onDelete, sav
         <h3 style={{ fontSize: 12.5, fontWeight: 700, margin: '0 0 8px', color: 'var(--text)' }}>Monthly volumes</h3>
         <MonthlyGrid monthly={scenario.monthly} forecast={forecast} onChange={m => onChange({ ...scenario, monthly: m })} />
       </div>
+
+      <MonteCarloPanel assumptions={scenario.assumptions} monthly={scenario.monthly} />
     </div>
   )
 }
