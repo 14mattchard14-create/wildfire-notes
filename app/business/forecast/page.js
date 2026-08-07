@@ -12,10 +12,13 @@ import { Plus, Trash2, Copy, Save } from 'lucide-react'
 // counts). computeForecast() below is the entire model — pure arithmetic,
 // no spreadsheet, no recalculation step, updates as you type.
 //
-// The stepped-capacity idea from the original spreadsheet (solo hours/week
-// before a certain month, a higher two-person figure after) is kept
-// generic rather than scenario-specific: partnerJoinMonth defaults high
-// (999) so the step never triggers unless a scenario actually wants it.
+// The stepped-capacity idea from the original spreadsheet (solo before a
+// certain month, a partner joining after) is modeled per-person rather
+// than as raw totals: soloHoursPerPersonPerWeek/partnerHoursPerPersonPerWeek
+// are each "how many hours can one person put in," and the group's actual
+// weekly-hours threshold is that number times how many people are working
+// that month (1 before partnerJoinMonth, 2 on/after it). partnerJoinMonth
+// defaults high (999) so the step never triggers unless a scenario wants it.
 
 const DEFAULT_ASSUMPTIONS = {
   auditPrice: 500,
@@ -24,8 +27,8 @@ const DEFAULT_ASSUMPTIONS = {
   hoursPerAudit: 4,
   hoursPerSelf: 1,
   hoursPerHardening: 4,
-  soloHoursPerWeek: 12,
-  twoPersonHoursPerWeek: 45,
+  soloHoursPerPersonPerWeek: 12,
+  partnerHoursPerPersonPerWeek: 22,
   partnerJoinMonth: 999,
   auditMargin: 0.90,
   hardeningMargin: 0.65,
@@ -90,8 +93,15 @@ function computeForecast(assumptions, monthly) {
     const revenue = audits * num(a.auditPrice) + self * num(a.selfPrice) + hardening * num(a.hardeningPrice)
     const hours = audits * num(a.hoursPerAudit) + self * num(a.hoursPerSelf) + hardening * num(a.hoursPerHardening)
     const hoursPerWeek = weeksPerMonth ? hours / weeksPerMonth : 0
-    const threshold = month >= (num(a.partnerJoinMonth) || 999) ? num(a.twoPersonHoursPerWeek) : num(a.soloHoursPerWeek)
-    return { month, audits, self, hardening, revenue, hours, hoursPerWeek, threshold, status: hoursPerWeek > threshold ? 'Over' : 'OK' }
+    const partnerJoined = month >= (num(a.partnerJoinMonth) || 999)
+    const people = partnerJoined ? 2 : 1
+    // Fall back to the pre-per-person field names for scenarios saved
+    // before this model changed, so old saved data doesn't silently
+    // read as zero capacity.
+    const soloPerPerson = a.soloHoursPerPersonPerWeek != null ? num(a.soloHoursPerPersonPerWeek) : num(a.soloHoursPerWeek)
+    const partnerPerPerson = a.partnerHoursPerPersonPerWeek != null ? num(a.partnerHoursPerPersonPerWeek) : (num(a.twoPersonHoursPerWeek) / 2 || 0)
+    const threshold = people * (partnerJoined ? partnerPerPerson : soloPerPerson)
+    return { month, audits, self, hardening, revenue, hours, hoursPerWeek, threshold, people, status: hoursPerWeek > threshold ? 'Over' : 'OK' }
   })
   const totals = rows.reduce((acc, r) => ({
     audits: acc.audits + r.audits, self: acc.self + r.self, hardening: acc.hardening + r.hardening, revenue: acc.revenue + r.revenue,
@@ -157,19 +167,36 @@ function AssumptionsPanel({ assumptions, onChange }) {
       <div style={card}>
         <h3 style={{ fontSize: 12.5, fontWeight: 700, margin: '0 0 10px', color: 'var(--text)' }}>Capacity</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-          <Field text="Solo Hrs / Week" value={assumptions.soloHoursPerWeek} onChange={set('soloHoursPerWeek')} />
-          <Field text="Two-Person Hrs / Week" value={assumptions.twoPersonHoursPerWeek} onChange={set('twoPersonHoursPerWeek')} />
+          <Field text="Hrs/Wk per Person (Solo)" value={assumptions.soloHoursPerPersonPerWeek} onChange={set('soloHoursPerPersonPerWeek')} />
+          <Field text="Hrs/Wk per Person (with Partner)" value={assumptions.partnerHoursPerPersonPerWeek} onChange={set('partnerHoursPerPersonPerWeek')} />
           <Field text="Partner Join Month (999 = never)" value={assumptions.partnerJoinMonth} onChange={set('partnerJoinMonth')} />
         </div>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0', lineHeight: 1.5 }}>
+          Weekly capacity = hrs/person × people working that month (1 before the Partner Join Month, 2 on/after it).
+        </p>
       </div>
 
       <div style={card}>
-        <h3 style={{ fontSize: 12.5, fontWeight: 700, margin: '0 0 10px', color: 'var(--text)' }}>Margins &amp; marketing</h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+          <h3 style={{ fontSize: 12.5, fontWeight: 700, margin: 0, color: 'var(--text)' }}>Margins &amp; marketing</h3>
+          <span
+            title={'Audit/Self Margin ~90%: business-plan.md §4.2/§7 — ~$35 variable COGS per $500 audit.\nHardening Margin ~65%: business-plan.md §7 — hardening materials/labor run ~35% of hardening revenue.'}
+            style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: '50%',
+              border: '1px solid var(--text-muted)', color: 'var(--text-muted)', fontSize: 9.5, fontWeight: 700, cursor: 'help', lineHeight: 1,
+            }}
+          >
+            i
+          </span>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
           <Field text="Audit/Self Margin (0-1)" value={assumptions.auditMargin} onChange={set('auditMargin')} />
           <Field text="Hardening Margin (0-1)" value={assumptions.hardeningMargin} onChange={set('hardeningMargin')} />
           <Field text="Monthly Marketing Spend ($)" prefix="$" value={assumptions.marketingSpend} onChange={set('marketingSpend')} />
         </div>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0', lineHeight: 1.5 }}>
+          Defaults pulled from <code style={{ fontSize: 10.5 }}>business/business-plan.md</code> §4.2 &amp; §7 (Key Assumptions) — edit freely per scenario, these are starting points, not fixed.
+        </p>
       </div>
 
       <div style={card}>
@@ -268,7 +295,7 @@ function ScenarioEditor({ scenario, onChange, onSave, onDuplicate, onDelete, sav
       </div>
 
       <div>
-        <span style={label}>Notes</span>
+        <span style={label}>Description</span>
         <textarea
           style={{ ...input, minHeight: 44, resize: 'vertical', fontSize: 12.5, lineHeight: 1.5 }}
           value={scenario.notes || ''}
@@ -290,6 +317,39 @@ function ScenarioEditor({ scenario, onChange, onSave, onDuplicate, onDelete, sav
         <h3 style={{ fontSize: 12.5, fontWeight: 700, margin: '0 0 8px', color: 'var(--text)' }}>Monthly volumes</h3>
         <MonthlyGrid monthly={scenario.monthly} forecast={forecast} onChange={m => onChange({ ...scenario, monthly: m })} />
       </div>
+    </div>
+  )
+}
+
+function ScenarioTabs({ scenarios, selectedId, onSelect, onNew }) {
+  return (
+    <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', borderBottom: '1px solid var(--line)', overflowX: 'auto' }}>
+      {scenarios.map(s => {
+        const active = s.id === selectedId
+        return (
+          <button
+            key={s.id}
+            onClick={() => onSelect(s.id)}
+            style={{
+              padding: '9px 14px', fontSize: 12.5, fontWeight: active ? 700 : 500, fontFamily: 'inherit', whiteSpace: 'nowrap',
+              background: 'none', border: 'none', borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
+              color: active ? 'var(--accent)' : 'var(--text)', cursor: 'pointer', marginBottom: -1,
+            }}
+          >
+            {s.name}
+          </button>
+        )
+      })}
+      <button
+        onClick={onNew}
+        title="New Scenario"
+        style={{
+          display: 'flex', alignItems: 'center', gap: 4, padding: '9px 12px', fontSize: 12, color: 'var(--accent)',
+          background: 'none', border: 'none', cursor: 'pointer', marginBottom: -1, flexShrink: 0,
+        }}
+      >
+        <Plus className="size-3.5" /> New
+      </button>
     </div>
   )
 }
@@ -440,27 +500,9 @@ export default function ForecastPage() {
         </div>
       ) : (
         <>
-          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-            <div style={{ width: 200, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {scenarios.map(s => (
-                <button
-                  key={s.id}
-                  onClick={() => selectScenario(s.id)}
-                  style={{
-                    textAlign: 'left', padding: '9px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
-                    background: s.id === selectedId ? 'var(--surface-2)' : 'transparent',
-                    color: s.id === selectedId ? 'var(--accent)' : 'var(--text)', fontSize: 12.5,
-                    fontWeight: s.id === selectedId ? 700 : 500,
-                  }}
-                >
-                  {s.name}
-                </button>
-              ))}
-              <button onClick={createBlank} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--accent)', background: 'none', border: '1px solid var(--accent)', borderRadius: 4, padding: '7px 10px', cursor: 'pointer', marginTop: 6 }}>
-                <Plus className="size-3.5" /> New Scenario
-              </button>
-            </div>
+          <ScenarioTabs scenarios={scenarios} selectedId={selectedId} onSelect={selectScenario} onNew={createBlank} />
 
+          <div style={{ marginTop: 16 }}>
             {draft && (
               <ScenarioEditor
                 scenario={draft}
