@@ -526,14 +526,21 @@ function MonthlyGrid({ monthly, forecast, onChange }) {
   )
 }
 
-function StatCard({ text, value, accent, warn }) {
+function StatCard({ text, value, accent, warn, sub }) {
   return (
     <div style={{ ...card, flex: 1, minWidth: 140 }}>
       <span style={label}>{text}</span>
       <div style={{ fontSize: 19, fontWeight: 700, color: warn ? 'var(--warn)' : accent ? 'var(--accent)' : 'var(--text)' }}>{value}</div>
+      {sub && <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 3 }}>{sub}</div>}
     </div>
   )
 }
+
+// Default triangular ranges shared by the always-on quick risk read and the
+// full Monte Carlo panel's initial state, so the "live" number at the top
+// of a scenario and the first thing you'd see if you opened the detailed
+// panel start out saying the same thing.
+const QUICK_MC_RANGES = { volume: [60, 100, 140], hours: [85, 100, 125], margin: [85, 100, 105], capacity: [80, 100, 110] }
 
 function RangeField({ text, low, likely, high, onChange }) {
   const set = (which) => (val) => onChange({ low, likely, high, [which]: val })
@@ -609,10 +616,10 @@ function MonteCarloPanel({ assumptions, monthly }) {
   const [open, setOpen] = useState(false)
   const [trials, setTrials] = useState(10000)
   const [targetNetProfit, setTargetNetProfit] = useState('')
-  const [volumeRange, setVolumeRange] = useState({ low: 60, likely: 100, high: 140 })
-  const [hoursRange, setHoursRange] = useState({ low: 85, likely: 100, high: 125 })
-  const [marginRange, setMarginRange] = useState({ low: 85, likely: 100, high: 105 })
-  const [capacityRange, setCapacityRange] = useState({ low: 80, likely: 100, high: 110 })
+  const [volumeRange, setVolumeRange] = useState({ low: QUICK_MC_RANGES.volume[0], likely: QUICK_MC_RANGES.volume[1], high: QUICK_MC_RANGES.volume[2] })
+  const [hoursRange, setHoursRange] = useState({ low: QUICK_MC_RANGES.hours[0], likely: QUICK_MC_RANGES.hours[1], high: QUICK_MC_RANGES.hours[2] })
+  const [marginRange, setMarginRange] = useState({ low: QUICK_MC_RANGES.margin[0], likely: QUICK_MC_RANGES.margin[1], high: QUICK_MC_RANGES.margin[2] })
+  const [capacityRange, setCapacityRange] = useState({ low: QUICK_MC_RANGES.capacity[0], likely: QUICK_MC_RANGES.capacity[1], high: QUICK_MC_RANGES.capacity[2] })
   const [result, setResult] = useState(null)
   const [running, setRunning] = useState(false)
 
@@ -644,10 +651,11 @@ function MonteCarloPanel({ assumptions, monthly }) {
       {open && (
         <div style={{ marginTop: 14, display: 'grid', gap: 16 }}>
           <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-            Runs this scenario's monthly plan thousands of times with randomized demand, job duration, margins, and available
-            capacity, to see the range of outcomes rather than just the one point estimate above. Each trial draws a single
-            multiplier per driver and applies it to the whole year (not per month independently) — real demand risk moves
-            together across a year, and randomizing month-by-month would understate how much the actual outcome can vary.
+            The "Risk range" and "risk of overrun" figures above the stat cards already come from this same engine, running
+            automatically on every edit at 1,500 trials with the default ranges below. Open this panel to customize those
+            ranges, use more trials, or see the full histogram and sensitivity breakdown. Each trial draws a single multiplier
+            per driver and applies it to the whole year (not per month independently) — real demand risk moves together across
+            a year, and randomizing month-by-month would understate how much the actual outcome can vary.
           </p>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
@@ -709,6 +717,19 @@ function MonteCarloPanel({ assumptions, monthly }) {
 
 function ScenarioEditor({ scenario, onChange, onSave, onDuplicate, onDelete, saving, dirty }) {
   const forecast = useMemo(() => computeForecast(scenario.assumptions, scenario.monthly), [scenario.assumptions, scenario.monthly])
+  // A lightweight Monte Carlo (1,500 trials, default uncertainty ranges)
+  // recomputed automatically on every edit — no separate "run" step needed
+  // to see a risk-adjusted range alongside the point estimate. The full
+  // Monte Carlo panel below is for customizing the ranges, larger trial
+  // counts, the histogram, and the sensitivity breakdown; this is just the
+  // always-on quick read so the risk view isn't something you have to go
+  // open separately.
+  const quickMC = useMemo(() => runMonteCarlo({
+    assumptions: scenario.assumptions, monthly: scenario.monthly, trials: 1500,
+    volumeRange: QUICK_MC_RANGES.volume, hoursRange: QUICK_MC_RANGES.hours,
+    marginRange: QUICK_MC_RANGES.margin, capacityRange: QUICK_MC_RANGES.capacity,
+    targetNetProfit: null,
+  }), [scenario.assumptions, scenario.monthly])
 
   return (
     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -742,10 +763,19 @@ function ScenarioEditor({ scenario, onChange, onSave, onDuplicate, onDelete, sav
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <StatCard text="Year-1 Revenue" value={money(forecast.totals.revenue)} />
-        <StatCard text="Est. Net Profit" value={money(forecast.netProfit)} accent />
+        <StatCard
+          text="Est. Net Profit" value={money(forecast.netProfit)} accent
+          sub={`Risk range: ${money(quickMC.p10)} – ${money(quickMC.p90)}`}
+        />
         <StatCard text="Peak Hrs/Week" value={forecast.peakHoursPerWeek.toFixed(1)} warn={forecast.anyOver} />
-        <StatCard text="Capacity" value={forecast.anyOver ? 'Over in some months' : 'OK all year'} warn={forecast.anyOver} />
+        <StatCard
+          text="Capacity" value={forecast.anyOver ? 'Over in some months' : 'OK all year'} warn={forecast.anyOver}
+          sub={`${Math.round(quickMC.probOverCapacity * 100)}% risk of overrun`}
+        />
       </div>
+      <p style={{ fontSize: 10.5, color: 'var(--text-muted)', margin: '-8px 0 0' }}>
+        Risk figures update live from a quick simulation using default uncertainty ranges — expand Monte Carlo below to customize them or dig into a full breakdown.
+      </p>
 
       <AssumptionsPanel assumptions={scenario.assumptions} onChange={a => onChange({ ...scenario, assumptions: a })} />
 
