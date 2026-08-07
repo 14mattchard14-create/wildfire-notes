@@ -137,6 +137,49 @@ function computeForecast(assumptions, monthly) {
   return { rows, totals, netProfit, peakHoursPerWeek, overheadTotal, anyOver: rows.some(r => r.status === 'Over') }
 }
 
+// Goal Seek — the reverse of computeForecast(): given a target annual net
+// profit, solve for the Year-1 volume needed to hit it, distribute that
+// volume across 12 months on a linear ramp, then hand the resulting
+// monthly array to computeForecast() (with the capacity you say you have)
+// so the normal Peak Hrs/Wk + Capacity readout tells you whether it's
+// actually workable — same engine, run backward first.
+//
+// selfRatio and hardeningConversion turn a single "audits" lever into a
+// full monthly mix: selfRatio is self-inspections per audit, hardeningConversion
+// is the fraction of audits that also become a hardening job — defaulted from
+// business-plan.md §7 Key Assumptions ("~40% of on-site audit clients convert
+// to hardening add-ons"). This only checks whether the hours fit your stated
+// capacity — it says nothing about whether that many jobs are actually gettable
+// in your market. Competitor volume/pricing benchmarks would be the next input
+// to layer in here once you've got that research.
+function computeGoalSeek({ assumptions, targetNetProfit, selfRatio, hardeningConversion, marketingSpend, rampMonth, person1Hours, person2Hours }) {
+  const a = assumptions || {}
+  const overheadTotal = (a.overheadItems || []).reduce((s, i) => s + num(i.value), 0)
+  const annualFixed = 12 * overheadTotal + 12 * num(marketingSpend)
+  const auditM = num(a.auditMargin), hardM = num(a.hardeningMargin)
+  const sRatio = num(selfRatio), hConv = num(hardeningConversion)
+  // Profit contributed per audit "bundle" (1 audit + sRatio self-inspections
+  // + hConv of a hardening job, all at the given margins).
+  const perAuditProfit = num(a.auditPrice) * auditM + sRatio * num(a.selfPrice) * auditM + hConv * num(a.hardeningPrice) * hardM
+  const auditsAnnual = perAuditProfit > 0 ? Math.max(0, (num(targetNetProfit) + annualFixed) / perAuditProfit) : 0
+  const selfAnnual = auditsAnnual * sRatio
+  const hardeningAnnual = auditsAnnual * hConv
+
+  const ramp = Math.max(1, num(rampMonth) || 1)
+  const weights = Array.from({ length: 12 }, (_, i) => Math.min(1, (i + 1) / ramp))
+  const weightSum = weights.reduce((s, w) => s + w, 0) || 1
+
+  const monthly = weights.map(w => ({
+    audits: Math.round((auditsAnnual * w) / weightSum),
+    self: Math.round((selfAnnual * w) / weightSum),
+    hardening: Math.round((hardeningAnnual * w) / weightSum),
+    person1Hours: num(person1Hours),
+    person2Hours: num(person2Hours),
+  }))
+
+  return { auditsAnnual, selfAnnual, hardeningAnnual, monthly, forecast: computeForecast(a, monthly) }
+}
+
 function money(n) { return `$${Math.round(n).toLocaleString('en-US')}` }
 
 const label = { display: 'block', fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }
@@ -408,6 +451,99 @@ function ComparisonTable({ scenarios, selectedId, onSelect }) {
   )
 }
 
+function GoalSeekPanel({ scenarios, onSave }) {
+  const [open, setOpen] = useState(false)
+  const [targetNetProfit, setTargetNetProfit] = useState(60000)
+  const [selfRatio, setSelfRatio] = useState(0.5)
+  const [hardeningConversion, setHardeningConversion] = useState(0.40)
+  const [marketingSpend, setMarketingSpend] = useState(200)
+  const [rampMonth, setRampMonth] = useState(6)
+  const [person1Hours, setPerson1Hours] = useState(12)
+  const [person2Hours, setPerson2Hours] = useState(0)
+  const [baseId, setBaseId] = useState('default')
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const baseAssumptions = baseId === 'default' ? DEFAULT_ASSUMPTIONS : (scenarios.find(s => s.id === baseId)?.assumptions || DEFAULT_ASSUMPTIONS)
+
+  const result = useMemo(() => computeGoalSeek({
+    assumptions: baseAssumptions, targetNetProfit, selfRatio, hardeningConversion, marketingSpend, rampMonth, person1Hours, person2Hours,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [baseAssumptions, targetNetProfit, selfRatio, hardeningConversion, marketingSpend, rampMonth, person1Hours, person2Hours])
+
+  async function handleSave() {
+    setSaving(true)
+    await onSave(name.trim() || `Goal: ${money(num(targetNetProfit))} net profit`, baseAssumptions, result.monthly)
+    setSaving(false)
+    setName('')
+  }
+
+  return (
+    <div style={{ ...card, marginBottom: 18 }}>
+      <button onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', gap: 10 }}>
+        <h2 style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: 'var(--text)' }}>Work backward from a target</h2>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{open ? 'Hide' : 'Set a target net profit and see what it takes →'}</span>
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 14, display: 'grid', gap: 14 }}>
+          <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+            Solves for the audit/self-inspection/hardening volume needed to hit the target, ramps it across 12 months, then
+            runs it through the same engine as any scenario to check whether the resulting weekly hours fit the capacity you
+            enter below. This only checks whether the hours fit your stated capacity — it says nothing about whether that many
+            jobs are actually gettable in your market. Competitor pricing/volume benchmarks would be the next input to layer in
+            here once that research exists.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+            <Field text="Target Year-1 Net Profit ($)" prefix="$" value={targetNetProfit} onChange={setTargetNetProfit} />
+            <Field text="Self-Inspections per Audit" value={selfRatio} onChange={setSelfRatio} />
+            <Field text="Hardening Conversion (0-1)" value={hardeningConversion} onChange={setHardeningConversion} />
+            <Field text="Ramp-Up Month" value={rampMonth} onChange={setRampMonth} />
+            <Field text="Monthly Marketing Spend ($)" prefix="$" value={marketingSpend} onChange={setMarketingSpend} />
+          </div>
+
+          <div>
+            <span style={label}>Base pricing / margins / overhead on</span>
+            <select value={baseId} onChange={e => setBaseId(e.target.value)} style={input}>
+              <option value="default">Defaults ($500 / $200 / $450, 90% / 65% margins)</option>
+              {scenarios.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+            <Field text="Available Person 1 Hrs/Wk" value={person1Hours} onChange={setPerson1Hours} />
+            <Field text="Available Person 2 Hrs/Wk" value={person2Hours} onChange={setPerson2Hours} />
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <StatCard text="Audits Needed (Yr 1)" value={Math.round(result.auditsAnnual)} />
+            <StatCard text="Self-Inspections Needed" value={Math.round(result.selfAnnual)} />
+            <StatCard text="Hardening Jobs Needed" value={Math.round(result.hardeningAnnual)} />
+            <StatCard text="Peak Hrs/Week Needed" value={result.forecast.peakHoursPerWeek.toFixed(1)} warn={result.forecast.anyOver} />
+            <StatCard text="Feasibility (capacity only)" value={result.forecast.anyOver ? 'Over capacity' : 'Fits capacity'} warn={result.forecast.anyOver} />
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              style={{ ...input, flex: '1 1 240px' }}
+              placeholder={`Goal: ${money(num(targetNetProfit))} net profit`}
+              value={name}
+              onChange={e => setName(e.target.value)}
+            />
+            <button onClick={handleSave} disabled={saving} style={{ fontSize: 11.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 4, padding: '9px 14px', cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+              {saving ? 'Saving…' : 'Save as new scenario'}
+            </button>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
+            Run this as many times as you want with different targets — each save creates its own scenario tab, so you can compare them side by side below.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ForecastPage() {
   const [scenarios, setScenarios] = useState([])
   const [fetching, setFetching] = useState(true)
@@ -484,6 +620,14 @@ export default function ForecastPage() {
     await load()
   }
 
+  async function saveGoalScenario(name, assumptions, monthly) {
+    const { data, error } = await supabase.from('financial_scenarios').insert({
+      name, notes: 'Generated by Goal Seek from a target net profit — edit freely like any other scenario.', assumptions, monthly,
+    }).select().single()
+    if (error) { alert('Could not save scenario: ' + error.message); return }
+    await load(data.id)
+  }
+
   const saved = scenarios.find(s => s.id === selectedId)
   const dirty = !!draft && !!saved && JSON.stringify({ name: draft.name, notes: draft.notes, assumptions: draft.assumptions, monthly: draft.monthly })
     !== JSON.stringify({ name: saved.name, notes: saved.notes, assumptions: saved.assumptions, monthly: saved.monthly })
@@ -494,6 +638,8 @@ export default function ForecastPage() {
         Named, editable "what-if" scenarios for pricing, capacity, marketing spend, and volume — everything recalculates
         as you type, no spreadsheet, no recalculation step. Duplicate a scenario to branch off it, or start blank.
       </p>
+
+      <GoalSeekPanel scenarios={scenarios} onSave={saveGoalScenario} />
 
       {fetching ? (
         <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</p>
