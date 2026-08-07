@@ -12,13 +12,12 @@ import { Plus, Trash2, Copy, Save } from 'lucide-react'
 // counts). computeForecast() below is the entire model — pure arithmetic,
 // no spreadsheet, no recalculation step, updates as you type.
 //
-// The stepped-capacity idea from the original spreadsheet (solo before a
-// certain month, a partner joining after) is modeled per-person rather
-// than as raw totals: soloHoursPerPersonPerWeek/partnerHoursPerPersonPerWeek
-// are each "how many hours can one person put in," and the group's actual
-// weekly-hours threshold is that number times how many people are working
-// that month (1 before partnerJoinMonth, 2 on/after it). partnerJoinMonth
-// defaults high (999) so the step never triggers unless a scenario wants it.
+// Capacity is tracked per person, per month, right in the monthly grid —
+// each month has an editable Person 1 Hrs/Wk and Person 2 Hrs/Wk (both can
+// start part-time and either one can ramp to full-time whenever a scenario
+// wants, at whatever volume — there's no fixed "join month" or "solo vs
+// partner" assumption baked into the model, just two numbers you can type
+// differently into any month).
 
 const DEFAULT_ASSUMPTIONS = {
   auditPrice: 500,
@@ -27,9 +26,6 @@ const DEFAULT_ASSUMPTIONS = {
   hoursPerAudit: 4,
   hoursPerSelf: 1,
   hoursPerHardening: 4,
-  soloHoursPerPersonPerWeek: 12,
-  partnerHoursPerPersonPerWeek: 22,
-  partnerJoinMonth: 999,
   auditMargin: 0.90,
   hardeningMargin: 0.65,
   weeksPerMonth: 4.33,
@@ -42,41 +38,65 @@ const DEFAULT_ASSUMPTIONS = {
 }
 
 function emptyMonthly() {
-  return Array.from({ length: 12 }, () => ({ audits: 0, self: 0, hardening: 0 }))
+  return Array.from({ length: 12 }, () => ({ audits: 0, self: 0, hardening: 0, person1Hours: 12, person2Hours: 0 }))
 }
 
 const STARTER_SCENARIOS = [
   {
     name: 'Partner Goes Full-Time',
-    notes: "Solo evenings until a business partner quits their job and joins full-time at the Partner Join Month — capacity roughly doubles from there.",
-    assumptions: { ...DEFAULT_ASSUMPTIONS, partnerJoinMonth: 6, marketingSpend: 200 },
+    notes: "Both people part-time (evenings/weekends) through month 5. At month 6, once volume justifies it, Person 2 quits their job and goes full-time while Person 1 stays part-time.",
+    assumptions: { ...DEFAULT_ASSUMPTIONS, marketingSpend: 200 },
     monthly: [
-      { audits: 1, self: 1, hardening: 0 }, { audits: 2, self: 1, hardening: 0 }, { audits: 2, self: 2, hardening: 1 },
-      { audits: 3, self: 2, hardening: 1 }, { audits: 3, self: 2, hardening: 1 }, { audits: 6, self: 3, hardening: 2 },
-      { audits: 8, self: 4, hardening: 3 }, { audits: 9, self: 4, hardening: 4 }, { audits: 10, self: 5, hardening: 4 },
-      { audits: 11, self: 5, hardening: 5 }, { audits: 12, self: 6, hardening: 5 }, { audits: 13, self: 6, hardening: 6 },
+      { audits: 1, self: 1, hardening: 0, person1Hours: 12, person2Hours: 12 },
+      { audits: 2, self: 1, hardening: 0, person1Hours: 12, person2Hours: 12 },
+      { audits: 2, self: 2, hardening: 1, person1Hours: 12, person2Hours: 12 },
+      { audits: 3, self: 2, hardening: 1, person1Hours: 12, person2Hours: 12 },
+      { audits: 3, self: 2, hardening: 1, person1Hours: 12, person2Hours: 12 },
+      { audits: 6, self: 3, hardening: 2, person1Hours: 12, person2Hours: 40 },
+      { audits: 8, self: 4, hardening: 3, person1Hours: 12, person2Hours: 40 },
+      { audits: 9, self: 4, hardening: 4, person1Hours: 12, person2Hours: 40 },
+      { audits: 10, self: 5, hardening: 4, person1Hours: 12, person2Hours: 40 },
+      { audits: 11, self: 5, hardening: 5, person1Hours: 12, person2Hours: 40 },
+      { audits: 12, self: 6, hardening: 5, person1Hours: 12, person2Hours: 40 },
+      { audits: 13, self: 6, hardening: 6, person1Hours: 12, person2Hours: 40 },
     ],
   },
   {
     name: 'Part-Time Evenings',
-    notes: 'Permanent, solo, flat capacity all year — evenings/weekends only, no assumption it ever grows into something bigger.',
+    notes: 'Permanent, Person 1 only, flat capacity all year — evenings/weekends only, no assumption it ever grows into something bigger.',
     assumptions: { ...DEFAULT_ASSUMPTIONS, marketingSpend: 50 },
     monthly: [
-      { audits: 1, self: 1, hardening: 0 }, { audits: 1, self: 1, hardening: 0 }, { audits: 2, self: 1, hardening: 1 },
-      { audits: 2, self: 1, hardening: 1 }, { audits: 2, self: 2, hardening: 1 }, { audits: 2, self: 2, hardening: 1 },
-      { audits: 3, self: 2, hardening: 1 }, { audits: 3, self: 2, hardening: 1 }, { audits: 4, self: 2, hardening: 1 },
-      { audits: 4, self: 2, hardening: 1 }, { audits: 4, self: 2, hardening: 1 }, { audits: 4, self: 3, hardening: 1 },
+      { audits: 1, self: 1, hardening: 0, person1Hours: 12, person2Hours: 0 },
+      { audits: 1, self: 1, hardening: 0, person1Hours: 12, person2Hours: 0 },
+      { audits: 2, self: 1, hardening: 1, person1Hours: 12, person2Hours: 0 },
+      { audits: 2, self: 1, hardening: 1, person1Hours: 12, person2Hours: 0 },
+      { audits: 2, self: 2, hardening: 1, person1Hours: 12, person2Hours: 0 },
+      { audits: 2, self: 2, hardening: 1, person1Hours: 12, person2Hours: 0 },
+      { audits: 3, self: 2, hardening: 1, person1Hours: 12, person2Hours: 0 },
+      { audits: 3, self: 2, hardening: 1, person1Hours: 12, person2Hours: 0 },
+      { audits: 4, self: 2, hardening: 1, person1Hours: 12, person2Hours: 0 },
+      { audits: 4, self: 2, hardening: 1, person1Hours: 12, person2Hours: 0 },
+      { audits: 4, self: 2, hardening: 1, person1Hours: 12, person2Hours: 0 },
+      { audits: 4, self: 3, hardening: 1, person1Hours: 12, person2Hours: 0 },
     ],
   },
   {
     name: 'Homeowner Inspections Only',
-    notes: 'Same part-time solo constraint, but drops the hardening add-on entirely — audits and guided self-inspections only. Also sidesteps nearly every open item in legal-risk-notes.md since there is no contractor-licensing exemption being relied on.',
+    notes: 'Same part-time, Person 1 only constraint, but drops the hardening add-on entirely — audits and guided self-inspections only. Also sidesteps nearly every open item in legal-risk-notes.md since there is no contractor-licensing exemption being relied on.',
     assumptions: { ...DEFAULT_ASSUMPTIONS, marketingSpend: 100 },
     monthly: [
-      { audits: 1, self: 1, hardening: 0 }, { audits: 2, self: 1, hardening: 0 }, { audits: 2, self: 2, hardening: 0 },
-      { audits: 3, self: 2, hardening: 0 }, { audits: 3, self: 2, hardening: 0 }, { audits: 3, self: 3, hardening: 0 },
-      { audits: 4, self: 3, hardening: 0 }, { audits: 4, self: 3, hardening: 0 }, { audits: 4, self: 3, hardening: 0 },
-      { audits: 5, self: 3, hardening: 0 }, { audits: 5, self: 3, hardening: 0 }, { audits: 5, self: 4, hardening: 0 },
+      { audits: 1, self: 1, hardening: 0, person1Hours: 12, person2Hours: 0 },
+      { audits: 2, self: 1, hardening: 0, person1Hours: 12, person2Hours: 0 },
+      { audits: 2, self: 2, hardening: 0, person1Hours: 12, person2Hours: 0 },
+      { audits: 3, self: 2, hardening: 0, person1Hours: 12, person2Hours: 0 },
+      { audits: 3, self: 2, hardening: 0, person1Hours: 12, person2Hours: 0 },
+      { audits: 3, self: 3, hardening: 0, person1Hours: 12, person2Hours: 0 },
+      { audits: 4, self: 3, hardening: 0, person1Hours: 12, person2Hours: 0 },
+      { audits: 4, self: 3, hardening: 0, person1Hours: 12, person2Hours: 0 },
+      { audits: 4, self: 3, hardening: 0, person1Hours: 12, person2Hours: 0 },
+      { audits: 5, self: 3, hardening: 0, person1Hours: 12, person2Hours: 0 },
+      { audits: 5, self: 3, hardening: 0, person1Hours: 12, person2Hours: 0 },
+      { audits: 5, self: 4, hardening: 0, person1Hours: 12, person2Hours: 0 },
     ],
   },
 ]
@@ -93,15 +113,19 @@ function computeForecast(assumptions, monthly) {
     const revenue = audits * num(a.auditPrice) + self * num(a.selfPrice) + hardening * num(a.hardeningPrice)
     const hours = audits * num(a.hoursPerAudit) + self * num(a.hoursPerSelf) + hardening * num(a.hoursPerHardening)
     const hoursPerWeek = weeksPerMonth ? hours / weeksPerMonth : 0
-    const partnerJoined = month >= (num(a.partnerJoinMonth) || 999)
-    const people = partnerJoined ? 2 : 1
-    // Fall back to the pre-per-person field names for scenarios saved
-    // before this model changed, so old saved data doesn't silently
-    // read as zero capacity.
-    const soloPerPerson = a.soloHoursPerPersonPerWeek != null ? num(a.soloHoursPerPersonPerWeek) : num(a.soloHoursPerWeek)
-    const partnerPerPerson = a.partnerHoursPerPersonPerWeek != null ? num(a.partnerHoursPerPersonPerWeek) : (num(a.twoPersonHoursPerWeek) / 2 || 0)
-    const threshold = people * (partnerJoined ? partnerPerPerson : soloPerPerson)
-    return { month, audits, self, hardening, revenue, hours, hoursPerWeek, threshold, people, status: hoursPerWeek > threshold ? 'Over' : 'OK' }
+    let person1Hours, person2Hours
+    if (m.person1Hours != null || m.person2Hours != null) {
+      person1Hours = num(m.person1Hours)
+      person2Hours = num(m.person2Hours)
+    } else {
+      // Fall back for scenarios saved before capacity moved into the
+      // monthly grid, so old saved data doesn't silently read as zero.
+      const partnerJoined = month >= (num(a.partnerJoinMonth) || 999)
+      person1Hours = a.soloHoursPerPersonPerWeek != null ? num(a.soloHoursPerPersonPerWeek) : num(a.soloHoursPerWeek)
+      person2Hours = partnerJoined ? (a.partnerHoursPerPersonPerWeek != null ? num(a.partnerHoursPerPersonPerWeek) : (num(a.twoPersonHoursPerWeek) / 2 || 0)) : 0
+    }
+    const threshold = person1Hours + person2Hours
+    return { month, audits, self, hardening, revenue, hours, hoursPerWeek, threshold, person1Hours, person2Hours, status: hoursPerWeek > threshold ? 'Over' : 'OK' }
   })
   const totals = rows.reduce((acc, r) => ({
     audits: acc.audits + r.audits, self: acc.self + r.self, hardening: acc.hardening + r.hardening, revenue: acc.revenue + r.revenue,
@@ -165,18 +189,6 @@ function AssumptionsPanel({ assumptions, onChange }) {
       </div>
 
       <div style={card}>
-        <h3 style={{ fontSize: 12.5, fontWeight: 700, margin: '0 0 10px', color: 'var(--text)' }}>Capacity</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-          <Field text="Hrs/Wk per Person (Solo)" value={assumptions.soloHoursPerPersonPerWeek} onChange={set('soloHoursPerPersonPerWeek')} />
-          <Field text="Hrs/Wk per Person (with Partner)" value={assumptions.partnerHoursPerPersonPerWeek} onChange={set('partnerHoursPerPersonPerWeek')} />
-          <Field text="Partner Join Month (999 = never)" value={assumptions.partnerJoinMonth} onChange={set('partnerJoinMonth')} />
-        </div>
-        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0', lineHeight: 1.5 }}>
-          Weekly capacity = hrs/person × people working that month (1 before the Partner Join Month, 2 on/after it).
-        </p>
-      </div>
-
-      <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
           <h3 style={{ fontSize: 12.5, fontWeight: 700, margin: 0, color: 'var(--text)' }}>Margins &amp; marketing</h3>
           <span
@@ -236,10 +248,10 @@ function MonthlyGrid({ monthly, forecast, onChange }) {
 
   return (
     <div style={{ overflowX: 'auto', border: '1px solid var(--line)', borderRadius: 8 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 980 }}>
         <thead>
           <tr style={{ background: 'var(--surface-2)', textAlign: 'left' }}>
-            {['Month', 'Audits', 'Self', 'Hardening', 'Revenue', 'Hrs/Wk', 'Capacity'].map(h => (
+            {['Month', 'Audits', 'Self', 'Hardening', 'Person 1 Hrs/Wk', 'Person 2 Hrs/Wk', 'Revenue', 'Hrs Needed/Wk', 'Capacity'].map(h => (
               <th key={h} style={{ padding: '7px 7px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>{h}</th>
             ))}
           </tr>
@@ -251,6 +263,8 @@ function MonthlyGrid({ monthly, forecast, onChange }) {
               <td style={cellStyle}><input type="number" style={numInput} value={monthly[idx].audits} onChange={e => setCell(idx, 'audits')(e.target.value)} /></td>
               <td style={cellStyle}><input type="number" style={numInput} value={monthly[idx].self} onChange={e => setCell(idx, 'self')(e.target.value)} /></td>
               <td style={cellStyle}><input type="number" style={numInput} value={monthly[idx].hardening} onChange={e => setCell(idx, 'hardening')(e.target.value)} /></td>
+              <td style={cellStyle}><input type="number" style={numInput} value={monthly[idx].person1Hours ?? ''} onChange={e => setCell(idx, 'person1Hours')(e.target.value)} /></td>
+              <td style={cellStyle}><input type="number" style={numInput} value={monthly[idx].person2Hours ?? ''} onChange={e => setCell(idx, 'person2Hours')(e.target.value)} /></td>
               <td style={cellStyle}>{money(r.revenue)}</td>
               <td style={cellStyle}>{r.hoursPerWeek.toFixed(1)}</td>
               <td style={{ ...cellStyle, color: r.status === 'Over' ? 'var(--warn)' : 'var(--ok)', fontWeight: 600 }}>{r.status}</td>
