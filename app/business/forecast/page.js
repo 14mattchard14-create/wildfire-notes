@@ -449,7 +449,7 @@ function MonthlyGrid({ monthly, forecast, onChange }) {
       <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1220 }}>
         <thead>
           <tr style={{ background: 'var(--surface-2)', textAlign: 'left' }}>
-            {['Month', 'Audits', 'Self', 'Hardening', 'P1 Hrs/Wk', 'P2 Hrs/Wk', 'PH1 Hrs/Wk', 'PH2 Hrs/Wk', 'Revenue', 'Insp. Hrs/Wk', 'Hard. Hrs/Wk', 'Capacity'].map(h => (
+            {['Month', 'Audits', 'Self', 'Hardening', 'P1 Hrs/Wk', 'PH1 Hrs/Wk', 'P2 Hrs/Wk', 'PH2 Hrs/Wk', 'Revenue', 'Insp. Hrs/Wk', 'Hard. Hrs/Wk', 'Capacity'].map(h => (
               <th key={h} style={{ padding: '7px 7px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>{h}</th>
             ))}
           </tr>
@@ -462,8 +462,8 @@ function MonthlyGrid({ monthly, forecast, onChange }) {
               <td style={cellStyle}><input type="number" style={numInput} value={monthly[idx].self} onChange={e => setCell(idx, 'self')(e.target.value)} /></td>
               <td style={cellStyle}><input type="number" style={numInput} value={monthly[idx].hardening} onChange={e => setCell(idx, 'hardening')(e.target.value)} /></td>
               <td style={cellStyle}><input type="number" style={numInput} value={monthly[idx].p1Hours ?? ''} onChange={e => setCell(idx, 'p1Hours')(e.target.value)} /></td>
-              <td style={cellStyle}><input type="number" style={numInput} value={monthly[idx].p2Hours ?? ''} onChange={e => setCell(idx, 'p2Hours')(e.target.value)} /></td>
               <td style={cellStyle}><input type="number" style={numInput} value={monthly[idx].ph1Hours ?? ''} onChange={e => setCell(idx, 'ph1Hours')(e.target.value)} /></td>
+              <td style={cellStyle}><input type="number" style={numInput} value={monthly[idx].p2Hours ?? ''} onChange={e => setCell(idx, 'p2Hours')(e.target.value)} /></td>
               <td style={cellStyle}><input type="number" style={numInput} value={monthly[idx].ph2Hours ?? ''} onChange={e => setCell(idx, 'ph2Hours')(e.target.value)} /></td>
               <td style={cellStyle}>{money(r.revenue)}</td>
               <td style={cellStyle}>{r.inspectionHoursPerWeek.toFixed(1)}</td>
@@ -847,8 +847,8 @@ function GoalSeekPanel({ scenarios, onSave }) {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
             <Field text="Available P1 Hrs/Wk (inspection)" value={p1Hours} onChange={setP1Hours} />
-            <Field text="Available P2 Hrs/Wk (inspection)" value={p2Hours} onChange={setP2Hours} />
             <Field text="Available PH1 Hrs/Wk (hardening)" value={ph1Hours} onChange={setPh1Hours} />
+            <Field text="Available P2 Hrs/Wk (inspection)" value={p2Hours} onChange={setP2Hours} />
             <Field text="Available PH2 Hrs/Wk (hardening)" value={ph2Hours} onChange={setPh2Hours} />
           </div>
 
