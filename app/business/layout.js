@@ -10,12 +10,12 @@ import AdminSidebar from '@/components/AdminSidebar'
 
 // Shared shell for /business — same pattern as app/insights/layout.js and
 // app/estimate/layout.js, plus its own horizontal sub-tab row for the
-// sections inside "Business" (Forecast is built; Plan/Roadmap/Legal &
+// sections inside "Business" (Forecast and Plan are built; Roadmap/Legal &
 // Research are stubbed as "coming soon" so the intended shape is visible
 // without shipping half-built pages).
 const SUB_TABS = [
   { href: '/business/forecast', label: 'Forecast', ready: true },
-  { href: '/business/plan', label: 'Plan', ready: false },
+  { href: '/business/plan', label: 'Plan', ready: true },
   { href: '/business/roadmap', label: 'Roadmap', ready: false },
   { href: '/business/legal', label: 'Legal & Research', ready: false },
 ]
