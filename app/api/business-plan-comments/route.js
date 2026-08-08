@@ -1,9 +1,13 @@
 import { getAuthedUser, supabaseAdmin } from '@/lib/auth-server'
 
-// Per-section comment threads on the business plan (migration 027) —
-// anchored to a section heading rather than an arbitrary text range,
-// which keeps this simple (no rich-text comment-anchor data model needed)
-// while still giving each of the 9 sections its own discussion.
+// Comments on the business plan (migration 027 for the table, migration
+// 028 for the `quote` column). Every comment belongs to a section
+// (heading string); most also carry `quote` — the exact plain text the
+// user had selected when they left it, captured client-side from
+// window.getSelection(). The Plan page re-finds that text inside the
+// section's current rendered HTML to draw a clickable highlight, Word/
+// Google-Docs style. `quote` is nullable so old section-level comments
+// (predating that feature) still work, just without a highlight.
 
 export async function GET(request) {
   const { user, profile } = await getAuthedUser(request)
@@ -21,12 +25,14 @@ export async function POST(request) {
   if (!user) return Response.json({ error: 'Not signed in' }, { status: 401 })
   if (profile.role !== 'employee') return Response.json({ error: 'Inspector account required' }, { status: 403 })
 
-  const { section, body: commentBody } = await request.json()
+  const { section, body: commentBody, quote } = await request.json()
   if (!section) return Response.json({ error: 'section is required' }, { status: 400 })
   if (!commentBody || !commentBody.trim()) return Response.json({ error: 'body is required' }, { status: 400 })
 
   const { data, error } = await supabaseAdmin
-    .from('business_plan_comments').insert({ section, body: commentBody.trim(), created_by: user.id }).select().single()
+    .from('business_plan_comments')
+    .insert({ section, body: commentBody.trim(), quote: quote?.trim() || null, created_by: user.id })
+    .select().single()
   if (error) return Response.json({ error: error.message }, { status: 500 })
   return Response.json({ comment: data })
 }

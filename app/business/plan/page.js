@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { marked } from 'marked'
 import { authFetch } from '@/lib/authFetch'
 import { wordDiff } from '@/lib/reportSchema'
@@ -40,17 +40,47 @@ function inlineHtml(text) {
 
 const HEADING_TAGS = { heading3: 'h3', heading4: 'h4', heading5: 'h5', heading6: 'h6' }
 
+// Splices <mark> tags around any comment's quoted text found verbatim in a
+// block's already-rendered HTML — Word/Google-Docs-style comment
+// highlights. Deliberately string-based rather than DOM/Range-based: a
+// quote only gets highlighted when it appears as a literal, uninterrupted
+// substring of the output HTML, which is exactly the case where a plain
+// string splice can't corrupt the markup (a quote whose selection crossed
+// a <strong>/<em> boundary just won't be found, and silently isn't
+// highlighted — the comment itself is never lost, it's still listed in
+// that section's Comments panel). indexOf() naturally handles that
+// "safe to highlight or not" check for us, no HTML parsing needed.
+function applyCommentHighlights(html, quotes) {
+  const withQuotes = (quotes || []).filter(q => q.quote)
+  if (!withQuotes.length) return html
+  let result = html
+  const sorted = [...withQuotes].sort((a, b) => b.quote.length - a.quote.length)
+  for (const q of sorted) {
+    const idx = result.indexOf(q.quote)
+    if (idx === -1) continue
+    result = `${result.slice(0, idx)}<mark class="pc-comment" data-comment-id="${q.id}">${q.quote}</mark>${result.slice(idx + q.quote.length)}`
+  }
+  return result
+}
+
 // One markdown "line" (a paragraph, a list item, a subheading, a table
 // block, a rule) rendered in its normal formatted style. Click it to edit —
 // swaps to a small auto-growing textarea pre-filled with that line's raw
 // markdown; Enter (without Shift) or blur commits, Escape reverts. Tables
 // and rules aren't click-to-edit yet (tables are multi-line and structural
 // enough that per-line editing doesn't make sense; rules are just visual
-// separators) — everything else is.
-function EditableLine({ block, onCommit, saving }) {
+// separators) — everything else is. Clicking highlighted (commented) text
+// opens that comment instead of starting an edit.
+function EditableLine({ block, onCommit, saving, comments, onCommentClick }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(block.raw)
   useEffect(() => { setDraft(block.raw) }, [block.raw])
+
+  function handleClick(e) {
+    const markEl = e.target.closest && e.target.closest('mark.pc-comment')
+    if (markEl) { e.stopPropagation(); onCommentClick(markEl.dataset.commentId); return }
+    setEditing(true)
+  }
 
   if (block.type === 'rule') return <hr />
   if (block.type === 'table') {
@@ -62,7 +92,7 @@ function EditableLine({ block, onCommit, saving }) {
         style={{ width: '100%', minHeight: 120, fontSize: 12, fontFamily: 'monospace', lineHeight: 1.6, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box', resize: 'vertical' }}
       />
     ) : (
-      <div onClick={() => setEditing(true)} style={{ cursor: 'text', opacity: saving ? 0.5 : 1 }} dangerouslySetInnerHTML={{ __html: addHeadingIds(marked.parse(block.raw)) }} />
+      <div onClick={handleClick} style={{ cursor: 'text', opacity: saving ? 0.5 : 1 }} dangerouslySetInnerHTML={{ __html: applyCommentHighlights(addHeadingIds(marked.parse(block.raw)), comments) }} />
     )
   }
 
@@ -92,11 +122,11 @@ function EditableLine({ block, onCommit, saving }) {
   // an inline `margin` shorthand here would win over that stylesheet rule
   // and collapse everything to zero gap.
   const commonProps = {
-    onClick: () => setEditing(true),
+    onClick: handleClick,
     style: { cursor: 'text', padding: '2px 6px', marginLeft: -6, marginRight: -6, borderRadius: 4, opacity: saving ? 0.5 : 1, transition: 'background 0.1s' },
     onMouseEnter: e => { e.currentTarget.style.background = 'var(--surface-2)' },
     onMouseLeave: e => { e.currentTarget.style.background = 'transparent' },
-    dangerouslySetInnerHTML: { __html: inlineHtml(block.raw) },
+    dangerouslySetInnerHTML: { __html: applyCommentHighlights(inlineHtml(block.raw), comments) },
   }
 
   if (block.type === 'listitem') return <li {...commonProps} />
@@ -108,7 +138,7 @@ function EditableLine({ block, onCommit, saving }) {
 // Groups the flat block list into render order — consecutive listitem
 // blocks get wrapped in one shared <ul>/<ol> (for correct bullet/number
 // styling) while each <li> inside stays independently click-to-edit.
-function SectionBody({ blocks, onBlockChange, savingIndex }) {
+function SectionBody({ blocks, onBlockChange, savingIndex, comments, onCommentClick }) {
   const groups = []
   let i = 0
   while (i < blocks.length) {
@@ -130,12 +160,12 @@ function SectionBody({ blocks, onBlockChange, savingIndex }) {
           return (
             <ListTag key={gi}>
               {g.items.map(idx => (
-                <EditableLine key={idx} block={blocks[idx]} saving={savingIndex === idx} onCommit={raw => onBlockChange(idx, raw)} />
+                <EditableLine key={idx} block={blocks[idx]} saving={savingIndex === idx} onCommit={raw => onBlockChange(idx, raw)} comments={comments} onCommentClick={onCommentClick} />
               ))}
             </ListTag>
           )
         }
-        return <EditableLine key={gi} block={blocks[g.index]} saving={savingIndex === g.index} onCommit={raw => onBlockChange(g.index, raw)} />
+        return <EditableLine key={gi} block={blocks[g.index]} saving={savingIndex === g.index} onCommit={raw => onBlockChange(g.index, raw)} comments={comments} onCommentClick={onCommentClick} />
       })}
     </>
   )
@@ -189,48 +219,119 @@ function HistoryPopup({ heading, versions, onClose }) {
   )
 }
 
-function CommentThread({ section, comments, onAdd, onToggleResolved, onDelete }) {
-  const [open, setOpen] = useState(false)
+// Read/manage view for one section's comments — reachable either from the
+// 💬 badge in the section header or by clicking a highlighted quote in the
+// text (in which case focusId scrolls/outlines that specific one). There's
+// no "add a comment" box in here on purpose: comments are only created by
+// selecting text (see PendingCommentBubble below), matching the "just like
+// Word" request — a comment always has a quote to anchor it, rather than a
+// vaguer, unanchored per-section note.
+function SectionCommentsModal({ heading, comments, focusId, onClose, onToggleResolved, onDelete }) {
+  const list = comments.filter(c => c.section === heading)
+
+  useEffect(() => {
+    if (!focusId) return
+    document.getElementById(`pc-comment-${focusId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [focusId])
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={onClose}>
+      <div style={{ ...card, maxWidth: 560, width: '100%', maxHeight: '80vh', overflowY: 'auto', background: 'var(--bg)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <h3 style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: 'var(--text)' }}>Comments — {heading}</h3>
+          <button onClick={onClose} style={btn}>Close</button>
+        </div>
+        {list.length === 0 ? (
+          <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+            No comments yet — select any text in this section and click the 💬 bubble that appears to leave one.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {list.map(c => (
+              <div
+                key={c.id} id={`pc-comment-${c.id}`}
+                style={{
+                  fontSize: 12, padding: '8px 10px', borderRadius: 6,
+                  background: c.resolved ? 'transparent' : 'var(--surface-2)', opacity: c.resolved ? 0.6 : 1,
+                  outline: focusId === c.id ? '2px solid var(--accent)' : 'none',
+                }}
+              >
+                {c.quote && (
+                  <p style={{ margin: '0 0 6px', padding: '2px 8px', borderLeft: '2px solid var(--accent)', color: 'var(--text-muted)', fontStyle: 'italic', fontSize: 11.5, lineHeight: 1.5 }}>
+                    “{c.quote}”
+                  </p>
+                )}
+                <p style={{ margin: '0 0 4px', color: 'var(--text)', whiteSpace: 'pre-wrap' }}>{c.body}</p>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{fmtDate(c.created_at)}</span>
+                  <button onClick={() => onToggleResolved(c)} style={{ fontSize: 10, background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0 }}>
+                    {c.resolved ? 'Reopen' : 'Resolve'}
+                  </button>
+                  <button onClick={() => onDelete(c)} style={{ fontSize: 10, background: 'none', border: 'none', color: 'var(--warn)', cursor: 'pointer', padding: 0 }}>
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Appears near a text selection, Word/Google-Docs style. Two-step (a small
+// pill first, then the compose box) so merely selecting text to copy it
+// doesn't get interrupted by a comment box popping open. Dismissed by
+// clicking outside it, Escape, or a successful post.
+function PendingCommentBubble({ pending, onCancel, onSubmit }) {
+  const [expanded, setExpanded] = useState(false)
   const [draft, setDraft] = useState('')
   const [posting, setPosting] = useState(false)
-  const list = comments.filter(c => c.section === section)
-  const openCount = list.filter(c => !c.resolved).length
+  const ref = useRef(null)
+
+  useEffect(() => {
+    function handleOutside(e) { if (ref.current && !ref.current.contains(e.target)) onCancel() }
+    function handleKey(e) { if (e.key === 'Escape') onCancel() }
+    document.addEventListener('mousedown', handleOutside)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handleOutside)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [onCancel])
 
   async function submit() {
     if (!draft.trim()) return
     setPosting(true)
-    await onAdd(section, draft.trim())
-    setDraft('')
+    await onSubmit(draft.trim())
     setPosting(false)
   }
 
+  const preview = pending.quote.length > 90 ? pending.quote.slice(0, 90) + '…' : pending.quote
+
   return (
-    <div style={{ marginTop: 10 }}>
-      <button onClick={() => setOpen(o => !o)} style={{ ...btn, fontSize: 11 }}>
-        💬 {list.length ? `${list.length} comment${list.length === 1 ? '' : 's'}${openCount ? ` (${openCount} open)` : ''}` : 'Comment'}
-      </button>
-      {open && (
-        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8, paddingLeft: 4, borderLeft: '2px solid var(--line)' }}>
-          {list.map(c => (
-            <div key={c.id} style={{ fontSize: 12, padding: '6px 10px', borderRadius: 6, background: c.resolved ? 'transparent' : 'var(--surface-2)', opacity: c.resolved ? 0.6 : 1 }}>
-              <p style={{ margin: '0 0 4px', color: 'var(--text)', whiteSpace: 'pre-wrap' }}>{c.body}</p>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{fmtDate(c.created_at)}</span>
-                <button onClick={() => onToggleResolved(c)} style={{ fontSize: 10, background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0 }}>
-                  {c.resolved ? 'Reopen' : 'Resolve'}
-                </button>
-                <button onClick={() => onDelete(c)} style={{ fontSize: 10, background: 'none', border: 'none', color: 'var(--warn)', cursor: 'pointer', padding: 0 }}>
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
-          <div style={{ display: 'flex', gap: 6 }}>
-            <textarea
-              value={draft} onChange={e => setDraft(e.target.value)} placeholder="Add a comment on this section…"
-              style={{ flex: 1, fontSize: 12, padding: '6px 8px', border: '1px solid var(--line)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit', minHeight: 36, resize: 'vertical' }}
-            />
-            <button onClick={submit} disabled={posting || !draft.trim()} style={{ ...btnAccent, alignSelf: 'flex-start', opacity: posting ? 0.6 : 1 }}>
+    <div ref={ref} style={{ position: 'fixed', left: pending.x, top: pending.y, zIndex: 60, transform: 'translate(-50%, 8px)' }}>
+      {!expanded ? (
+        <button
+          onClick={() => setExpanded(true)}
+          style={{ ...btnAccent, borderRadius: 999, padding: '6px 12px', fontSize: 12, boxShadow: '0 2px 10px rgba(0,0,0,0.3)' }}
+        >
+          💬 Comment
+        </button>
+      ) : (
+        <div style={{ ...card, width: 260, background: 'var(--bg)', boxShadow: '0 4px 20px rgba(0,0,0,0.35)' }}>
+          <p style={{ margin: '0 0 6px', padding: '2px 8px', borderLeft: '2px solid var(--accent)', fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', lineHeight: 1.4 }}>
+            “{preview}”
+          </p>
+          <textarea
+            autoFocus value={draft} onChange={e => setDraft(e.target.value)} placeholder="Leave a comment…"
+            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit() }}
+            style={{ width: '100%', fontSize: 12, padding: '6px 8px', border: '1px solid var(--line)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit', minHeight: 52, resize: 'vertical', boxSizing: 'border-box' }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 6 }}>
+            <button onClick={onCancel} style={btn}>Cancel</button>
+            <button onClick={submit} disabled={posting || !draft.trim()} style={{ ...btnAccent, opacity: posting ? 0.6 : 1 }}>
               {posting ? '…' : 'Post'}
             </button>
           </div>
@@ -240,7 +341,7 @@ function CommentThread({ section, comments, onAdd, onToggleResolved, onDelete })
   )
 }
 
-function SectionBlock({ section, onSave, savingIndex, onShowHistory, comments, onAddComment, onToggleResolved, onDeleteComment }) {
+function SectionBlock({ section, onSave, savingIndex, onShowHistory, comments, onOpenComments }) {
   // section.body's first line is the "## Heading" line itself (see
   // parseSections) — kept out of the block breakdown below and stitched
   // back on unchanged when a block edit is saved, since renaming the
@@ -249,6 +350,8 @@ function SectionBlock({ section, onSave, savingIndex, onShowHistory, comments, o
   const headingLine = useMemo(() => section.body.split('\n')[0], [section.body])
   const restBody = useMemo(() => section.body.split('\n').slice(1).join('\n'), [section.body])
   const blocks = useMemo(() => parseBlocks(restBody), [restBody])
+  const sectionComments = useMemo(() => comments.filter(c => c.section === section.heading), [comments, section.heading])
+  const openCount = sectionComments.filter(c => !c.resolved).length
 
   function handleBlockChange(index, newRaw) {
     const updated = blocks.map((b, i) => (i === index ? { ...b, raw: newRaw } : b))
@@ -257,21 +360,25 @@ function SectionBlock({ section, onSave, savingIndex, onShowHistory, comments, o
 
   return (
     <section id={section.slug} style={{ scrollMarginTop: 90, marginBottom: 8 }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 4 }}>
+        <button onClick={() => onOpenComments(section.heading)} style={btn}>
+          💬 {sectionComments.length ? `${sectionComments.length}${openCount ? ` (${openCount} open)` : ''}` : 'Comments'}
+        </button>
         <button onClick={onShowHistory} style={btn}>History</button>
       </div>
 
-      <div className="plan-content">
+      {/* data-section anchors the mouseup selection-listener (see PlanPage)
+          to this section, so a comment made from a selection anywhere in
+          here knows which section it belongs to. */}
+      <div className="plan-content" data-section={section.heading}>
         {/* Static, not click-to-edit — see comment above on why the heading
             line is kept out of the editable block list. */}
         <h2>{section.heading}</h2>
-        <SectionBody blocks={blocks} onBlockChange={handleBlockChange} savingIndex={savingIndex} />
+        <SectionBody
+          blocks={blocks} onBlockChange={handleBlockChange} savingIndex={savingIndex}
+          comments={sectionComments} onCommentClick={id => onOpenComments(section.heading, id)}
+        />
       </div>
-
-      <CommentThread
-        section={section.heading} comments={comments}
-        onAdd={onAddComment} onToggleResolved={onToggleResolved} onDelete={onDeleteComment}
-      />
     </section>
   )
 }
@@ -285,6 +392,8 @@ export default function PlanPage() {
   const [savingBlock, setSavingBlock] = useState(null) // { slug, index } | null
   const [historySlug, setHistorySlug] = useState(null)
   const [activeSlug, setActiveSlug] = useState(null)
+  const [commentsModal, setCommentsModal] = useState(null) // { heading, focusId? } | null
+  const [pendingComment, setPendingComment] = useState(null) // { section, quote, x, y } | null
 
   const load = useCallback(async () => {
     const [planRes, commentsRes] = await Promise.all([
@@ -346,13 +455,38 @@ export default function PlanPage() {
     await load()
   }
 
-  async function handleAddComment(section, body) {
+  async function handleAddComment(section, body, quote) {
     const res = await authFetch('/api/business-plan-comments', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ section, body }),
+      body: JSON.stringify({ section, body, quote }),
     }).then(r => r.json())
     if (res.error) { alert('Could not post comment: ' + res.error); return }
     setComments(prev => [...prev, res.comment])
+  }
+
+  // Selecting text anywhere inside a section's rendered content (the
+  // data-section="..." divs rendered by SectionBlock) captures the plain
+  // selected text and shows the floating comment bubble right where the
+  // selection was made. Native <textarea> selections (mid-line-edit) don't
+  // trigger this — form controls have their own selection model, outside
+  // window.getSelection() — so this can't collide with editing a line.
+  function handleContentMouseUp() {
+    const sel = window.getSelection()
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return
+    const text = sel.toString().trim()
+    if (text.length < 3) return
+    let node = sel.getRangeAt(0).commonAncestorContainer
+    if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
+    const sectionEl = node?.closest?.('[data-section]')
+    if (!sectionEl) return
+    const rect = sel.getRangeAt(0).getBoundingClientRect()
+    setPendingComment({ section: sectionEl.dataset.section, quote: text, x: rect.left + rect.width / 2, y: rect.bottom })
+  }
+
+  async function handlePostSelectionComment(body) {
+    await handleAddComment(pendingComment.section, body, pendingComment.quote)
+    setPendingComment(null)
+    window.getSelection()?.removeAllRanges()
   }
 
   async function handleToggleResolved(comment) {
@@ -418,7 +552,11 @@ export default function PlanPage() {
         </p>
       </nav>
 
-      <div style={{ flex: 1, minWidth: 0, paddingBottom: 60 }}>
+      {/* onMouseUp here (not on individual sections) means one listener
+          covers every section; handleContentMouseUp figures out which
+          section a selection belongs to via the closest data-section
+          ancestor SectionBlock renders. */}
+      <div style={{ flex: 1, minWidth: 0, paddingBottom: 60 }} onMouseUp={handleContentMouseUp}>
         <div className="plan-content" dangerouslySetInnerHTML={{ __html: preambleHtml }} />
 
         {sections.map((s, i) => (
@@ -429,9 +567,7 @@ export default function PlanPage() {
               onSave={(newBody, index) => handleSave(s, newBody, index)}
               onShowHistory={() => setHistorySlug(s.heading)}
               comments={comments}
-              onAddComment={handleAddComment}
-              onToggleResolved={handleToggleResolved}
-              onDeleteComment={handleDeleteComment}
+              onOpenComments={(heading, focusId) => setCommentsModal({ heading, focusId })}
             />
           </div>
         ))}
@@ -439,6 +575,23 @@ export default function PlanPage() {
 
       {historySlug && (
         <HistoryPopup heading={historySlug} versions={versions} onClose={() => setHistorySlug(null)} />
+      )}
+
+      {commentsModal && (
+        <SectionCommentsModal
+          heading={commentsModal.heading} comments={comments} focusId={commentsModal.focusId}
+          onClose={() => setCommentsModal(null)}
+          onToggleResolved={handleToggleResolved}
+          onDelete={handleDeleteComment}
+        />
+      )}
+
+      {pendingComment && (
+        <PendingCommentBubble
+          pending={pendingComment}
+          onCancel={() => setPendingComment(null)}
+          onSubmit={handlePostSelectionComment}
+        />
       )}
 
       <style jsx global>{`
@@ -458,6 +611,8 @@ export default function PlanPage() {
         .plan-content th, .plan-content td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; }
         .plan-content th { background: var(--surface-2); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-muted); }
         .plan-content blockquote { margin: 0 0 12px; padding: 8px 14px; border-left: 3px solid var(--accent); background: var(--surface-2); color: var(--text-muted); }
+        .plan-content mark.pc-comment { background: rgba(255, 196, 0, 0.35); color: inherit; padding: 0 1px; border-radius: 2px; cursor: pointer; }
+        .plan-content mark.pc-comment:hover { background: rgba(255, 196, 0, 0.6); }
       `}</style>
     </div>
   )
