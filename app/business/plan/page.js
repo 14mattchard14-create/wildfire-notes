@@ -74,11 +74,20 @@ function applyCommentHighlights(html, quotes) {
 function EditableLine({ block, onCommit, saving, comments, onCommentClick }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(block.raw)
+  // Captured from the rendered element the instant before it's replaced by
+  // the textarea, and applied as the textarea's minHeight — without this,
+  // the textarea's initial size came from its `rows` count, which is based
+  // on literal "\n" characters in the raw markdown (usually 0 or 1 for a
+  // single paragraph), not the wrapped visual height the paragraph actually
+  // occupies on screen (often 2-4 lines). That mismatch is what made
+  // clicking a paragraph visibly shrink/jump before this.
+  const [editHeight, setEditHeight] = useState(null)
   useEffect(() => { setDraft(block.raw) }, [block.raw])
 
   function handleClick(e) {
     const markEl = e.target.closest && e.target.closest('mark.pc-comment')
     if (markEl) { e.stopPropagation(); onCommentClick(markEl.dataset.commentId); return }
+    setEditHeight(e.currentTarget.getBoundingClientRect().height)
     setEditing(true)
   }
 
@@ -89,7 +98,7 @@ function EditableLine({ block, onCommit, saving, comments, onCommentClick }) {
         autoFocus value={draft} onChange={e => setDraft(e.target.value)}
         onBlur={() => { setEditing(false); if (draft !== block.raw) onCommit(draft) }}
         onKeyDown={e => { if (e.key === 'Escape') { setDraft(block.raw); setEditing(false) } }}
-        style={{ width: '100%', minHeight: 120, fontSize: 12, fontFamily: 'monospace', lineHeight: 1.6, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box', resize: 'vertical' }}
+        style={{ width: '100%', minHeight: editHeight ? `${editHeight}px` : 120, fontSize: 12, fontFamily: 'monospace', lineHeight: 1.6, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box', resize: 'vertical' }}
       />
     ) : (
       <div onClick={handleClick} style={{ cursor: 'text', opacity: saving ? 0.5 : 1 }} dangerouslySetInnerHTML={{ __html: applyCommentHighlights(addHeadingIds(marked.parse(block.raw)), comments) }} />
@@ -107,9 +116,9 @@ function EditableLine({ block, onCommit, saving, comments, onCommentClick }) {
           if (e.key === 'Escape') { setDraft(block.raw); setEditing(false) }
           else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.blur() }
         }}
-        rows={Math.max(1, draft.split('\n').length)}
         style={{
           width: '100%', fontSize: 13.5, fontFamily: 'inherit', lineHeight: 1.65, padding: '2px 6px', marginLeft: -6, marginRight: -6,
+          minHeight: editHeight ? `${editHeight}px` : undefined,
           border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box', resize: 'vertical',
         }}
       />
@@ -328,8 +337,12 @@ function CommentMargin({ comments, containerRef, activeId, onToggleResolved, onD
 
   const bottomMost = Object.values(finalTop).length ? Math.max(...Object.values(finalTop)) + 80 : 0
 
+  // No outer wrapper here on purpose — the caller (PlanPage) provides one
+  // shared position:relative column that this and PendingCommentTrigger
+  // both render into, so a pending trigger's `top` and an existing card's
+  // `top` are measured against the exact same origin.
   return (
-    <div style={{ position: 'relative', width: 250, flexShrink: 0 }}>
+    <>
       {anchored.map(c => (
         <CommentCard
           key={c.id} comment={c} active={activeId === c.id}
@@ -348,16 +361,18 @@ function CommentMargin({ comments, containerRef, activeId, onToggleResolved, onD
           ))}
         </div>
       )}
-    </div>
+    </>
   )
 }
 
-// Appears near a text selection, Word/Google-Docs style. Two-step (a small
-// pill first, then the compose box) so merely selecting text to copy it
-// doesn't get interrupted by a comment box popping open. Dismissed by
-// clicking outside it, Escape, or a successful post.
-function PendingCommentBubble({ pending, onCancel, onSubmit }) {
-  const [expanded, setExpanded] = useState(false)
+// The "add a comment" entry point once text is selected — a small circular
+// button positioned in the margin, right next to the selection (not
+// floating over the text itself, so it never obscures what's selected).
+// Starts collapsed to just the button; clicking it (or arriving here via
+// the right-click menu, which skips straight to composing=true) expands
+// it into the compose box in place. Dismissed by clicking outside it,
+// Escape, or a successful post.
+function PendingCommentTrigger({ pending, composing, onExpand, onCancel, onSubmit }) {
   const [draft, setDraft] = useState('')
   const [posting, setPosting] = useState(false)
   const ref = useRef(null)
@@ -380,22 +395,17 @@ function PendingCommentBubble({ pending, onCancel, onSubmit }) {
     setPosting(false)
   }
 
-  const preview = pending.quote.length > 90 ? pending.quote.slice(0, 90) + '…' : pending.quote
-
   return (
-    <div ref={ref} style={{ position: 'fixed', left: pending.x, top: pending.y, zIndex: 60, transform: 'translate(-50%, 8px)' }}>
-      {!expanded ? (
+    <div ref={ref} style={{ position: 'absolute', top: pending.top, left: 0, right: 0, zIndex: 40 }}>
+      {!composing ? (
         <button
-          onClick={() => setExpanded(true)}
-          style={{ ...btnAccent, borderRadius: 999, padding: '6px 12px', fontSize: 12, boxShadow: '0 2px 10px rgba(0,0,0,0.3)' }}
+          onClick={onExpand} title="Add comment"
+          style={{ ...btnAccent, borderRadius: 999, width: 30, height: 30, padding: 0, fontSize: 14, lineHeight: 1, boxShadow: '0 2px 8px rgba(0,0,0,0.25)' }}
         >
-          💬 Comment
+          💬
         </button>
       ) : (
-        <div style={{ ...card, width: 260, background: 'var(--bg)', boxShadow: '0 4px 20px rgba(0,0,0,0.35)' }}>
-          <p style={{ margin: '0 0 6px', padding: '2px 8px', borderLeft: '2px solid var(--accent)', fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', lineHeight: 1.4 }}>
-            “{preview}”
-          </p>
+        <div style={{ ...card, width: 250, boxSizing: 'border-box', background: 'var(--bg)', boxShadow: '0 4px 20px rgba(0,0,0,0.35)' }}>
           <textarea
             autoFocus value={draft} onChange={e => setDraft(e.target.value)} placeholder="Leave a comment…"
             onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit() }}
@@ -409,6 +419,42 @@ function PendingCommentBubble({ pending, onCancel, onSubmit }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// Custom context menu shown instead of the browser's native one when the
+// user right-clicks with a selection active inside the plan — the other
+// entry point to leaving a comment, alongside the margin trigger button.
+function SelectionContextMenu({ x, y, onAddComment, onClose }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    function handleOutside(e) { if (ref.current && !ref.current.contains(e.target)) onClose() }
+    function handleKey(e) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('mousedown', handleOutside)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handleOutside)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [onClose])
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: 'fixed', left: x, top: y, zIndex: 70, minWidth: 160, padding: 4,
+        background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 6, boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+      }}
+    >
+      <button
+        onClick={onAddComment}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', fontSize: 12.5, padding: '7px 10px', background: 'none', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text)' }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-2)' }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+      >
+        💬 Add Comment
+      </button>
     </div>
   )
 }
@@ -460,7 +506,9 @@ export default function PlanPage() {
   const [savingBlock, setSavingBlock] = useState(null) // { slug, index } | null
   const [historySlug, setHistorySlug] = useState(null)
   const [activeSlug, setActiveSlug] = useState(null)
-  const [pendingComment, setPendingComment] = useState(null) // { section, quote, x, y } | null
+  const [pendingComment, setPendingComment] = useState(null) // { section, quote, top } | null — top is relative to contentRef
+  const [composing, setComposing] = useState(false) // pendingComment shows just the 💬 button until this flips true
+  const [contextMenu, setContextMenu] = useState(null) // { x, y, section, quote, top } | null
   const [activeCommentId, setActiveCommentId] = useState(null) // flashes/scrolls the margin card when a highlight is clicked
   const contentRef = useRef(null) // the scrollable content column — CommentMargin measures mark positions against this
 
@@ -533,28 +581,58 @@ export default function PlanPage() {
     setComments(prev => [...prev, res.comment])
   }
 
-  // Selecting text anywhere inside a section's rendered content (the
-  // data-section="..." divs rendered by SectionBlock) captures the plain
-  // selected text and shows the floating comment bubble right where the
-  // selection was made. Native <textarea> selections (mid-line-edit) don't
-  // trigger this — form controls have their own selection model, outside
-  // window.getSelection() — so this can't collide with editing a line.
-  function handleContentMouseUp() {
+  // Resolves the current window selection down to (section, quote, top) —
+  // top measured relative to contentRef so it can be used directly as a
+  // margin element's `top`, same coordinate space CommentMargin's cards
+  // use. Returns null if there's no usable selection (collapsed, too
+  // short, or outside any section) — shared by both entry points to
+  // adding a comment (the mouseup trigger and the right-click menu).
+  function resolveSelection() {
     const sel = window.getSelection()
-    if (!sel || sel.isCollapsed || !sel.rangeCount) return
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return null
     const text = sel.toString().trim()
-    if (text.length < 3) return
+    if (text.length < 3) return null
     let node = sel.getRangeAt(0).commonAncestorContainer
     if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
     const sectionEl = node?.closest?.('[data-section]')
-    if (!sectionEl) return
-    const rect = sel.getRangeAt(0).getBoundingClientRect()
-    setPendingComment({ section: sectionEl.dataset.section, quote: text, x: rect.left + rect.width / 2, y: rect.bottom })
+    if (!sectionEl || !contentRef.current) return null
+    const containerRect = contentRef.current.getBoundingClientRect()
+    const rangeRect = sel.getRangeAt(0).getBoundingClientRect()
+    return { section: sectionEl.dataset.section, quote: text, top: rangeRect.top - containerRect.top }
+  }
+
+  // Selecting text anywhere inside a section's rendered content shows the
+  // small 💬 trigger button in the margin, next to the selection. Native
+  // <textarea> selections (mid-line-edit) don't reach here — form controls
+  // have their own selection model, outside window.getSelection() — so
+  // this can't collide with editing a line.
+  function handleContentMouseUp() {
+    const resolved = resolveSelection()
+    if (!resolved) return
+    setPendingComment(resolved)
+    setComposing(false)
+  }
+
+  // Right-click with an active selection swaps in a small "Add Comment"
+  // menu instead of the browser's native context menu — the second entry
+  // point to commenting, alongside the margin trigger button.
+  function handleContentContextMenu(e) {
+    const resolved = resolveSelection()
+    if (!resolved) return // no selection under the cursor — let the native menu show
+    e.preventDefault()
+    setContextMenu({ x: e.clientX, y: e.clientY, ...resolved })
+  }
+
+  function handleContextMenuAddComment() {
+    setPendingComment({ section: contextMenu.section, quote: contextMenu.quote, top: contextMenu.top })
+    setComposing(true) // right-click already expresses clear intent — skip straight to the compose box
+    setContextMenu(null)
   }
 
   async function handlePostSelectionComment(body) {
     await handleAddComment(pendingComment.section, body, pendingComment.quote)
     setPendingComment(null)
+    setComposing(false)
     window.getSelection()?.removeAllRanges()
   }
 
@@ -629,14 +707,18 @@ export default function PlanPage() {
         </p>
       </nav>
 
-      {/* onMouseUp here (not on individual sections) means one listener
-          covers every section; handleContentMouseUp figures out which
-          section a selection belongs to via the closest data-section
-          ancestor SectionBlock renders. contentRef is what CommentMargin
-          measures mark positions against — it and the margin column below
-          are both flex-start siblings in this row, so they share a top
-          edge and a card's `top: X` lines up with its mark's real position. */}
-      <div ref={contentRef} style={{ flex: 1, minWidth: 0, paddingBottom: 60 }} onMouseUp={handleContentMouseUp}>
+      {/* onMouseUp/onContextMenu here (not on individual sections) means
+          one pair of listeners covers every section; resolveSelection()
+          figures out which section a selection belongs to via the closest
+          data-section ancestor SectionBlock renders. contentRef is what
+          CommentMargin and the margin column below measure mark/selection
+          positions against — content and margin are both flex-start
+          siblings in this row, so they share a top edge and a `top: X`
+          lines up correctly between them. */}
+      <div
+        ref={contentRef} style={{ flex: 1, minWidth: 0, paddingBottom: 60 }}
+        onMouseUp={handleContentMouseUp} onContextMenu={handleContentContextMenu}
+      >
         <div className="plan-content" dangerouslySetInnerHTML={{ __html: preambleHtml }} />
 
         {sections.map((s, i) => (
@@ -653,20 +735,33 @@ export default function PlanPage() {
         ))}
       </div>
 
-      <CommentMargin
-        comments={comments} containerRef={contentRef} activeId={activeCommentId}
-        onToggleResolved={handleToggleResolved} onDelete={handleDeleteComment}
-      />
+      {/* One shared position:relative column for both the persisted
+          comment cards and the pending "add a comment" trigger, so their
+          `top` values are measured against the same origin. */}
+      <div style={{ position: 'relative', width: 250, flexShrink: 0 }}>
+        <CommentMargin
+          comments={comments} containerRef={contentRef} activeId={activeCommentId}
+          onToggleResolved={handleToggleResolved} onDelete={handleDeleteComment}
+        />
+        {pendingComment && (
+          <PendingCommentTrigger
+            pending={pendingComment} composing={composing}
+            onExpand={() => setComposing(true)}
+            onCancel={() => { setPendingComment(null); setComposing(false) }}
+            onSubmit={handlePostSelectionComment}
+          />
+        )}
+      </div>
 
       {historySlug && (
         <HistoryPopup heading={historySlug} versions={versions} onClose={() => setHistorySlug(null)} />
       )}
 
-      {pendingComment && (
-        <PendingCommentBubble
-          pending={pendingComment}
-          onCancel={() => setPendingComment(null)}
-          onSubmit={handlePostSelectionComment}
+      {contextMenu && (
+        <SelectionContextMenu
+          x={contextMenu.x} y={contextMenu.y}
+          onAddComment={handleContextMenuAddComment}
+          onClose={() => setContextMenu(null)}
         />
       )}
 
