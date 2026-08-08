@@ -4,17 +4,21 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { marked } from 'marked'
 import { authFetch } from '@/lib/authFetch'
 import { wordDiff } from '@/lib/reportSchema'
-import { parseSections, slugify } from '@/lib/planSchema'
+import { parseSections, parseBlocks, blocksToMarkdown, slugify } from '@/lib/planSchema'
 
 // Editable, version-tracked, commentable view of the business plan
 // (migration 027 — business_plan / business_plan_versions /
-// business_plan_comments). Edits happen one "## Section" at a time: click
-// Edit on a section, the rendered HTML swaps for a textarea with that
-// section's raw markdown, Save posts to /api/business-plan-db which
-// splices it back into the full document and records a version snapshot.
-// Section-scoped rather than whole-document because wordDiff() (used in
-// the History popup) caps out at 600 words — a ~2,000-word whole-document
-// diff would just show everything removed/everything added.
+// business_plan_comments). Edits happen one "## Section" at a time, but the
+// section itself is never swapped for a raw-markdown textarea — instead
+// each section is split into small blocks (subheadings, list items, table
+// blocks, paragraphs) via parseBlocks(), and the page always shows the
+// fully rendered/formatted view. Clicking any one line turns just that
+// line into a small editable text field, styled inline; blurring it saves
+// — reassembling the section's full body from all its blocks via
+// blocksToMarkdown() and posting to /api/business-plan-db, same as before.
+// This keeps editing feeling like editing the document itself rather than
+// its markdown source, while the backend/versioning/diffing underneath is
+// unchanged (still one edit = one section-scoped version row).
 //
 // business/business-plan.md itself is untouched by any of this — the file
 // stays in git as the originally captured version; the "Import" action
@@ -23,6 +27,118 @@ import { parseSections, slugify } from '@/lib/planSchema'
 
 function addHeadingIds(html) {
   return html.replace(/<(h[1-4])>(.*?)<\/\1>/g, (m, tag, inner) => `<${tag} id="${slugify(inner)}">${inner}</${tag}>`)
+}
+
+// marked.parseInline() renders just the inline formatting (bold, italic,
+// links, code) without wrapping the result in a <p>, so a block's preview
+// HTML can be dropped straight into whatever tag actually matches its
+// markdown semantics (a <li>, an <h3>, a plain paragraph <div>) instead of
+// nesting a <p> inside it.
+function inlineHtml(text) {
+  return marked.parseInline((text || '').replace(/^([-*]|\d+\.)\s+/, '').replace(/^#{3,6}\s+/, ''))
+}
+
+const HEADING_TAGS = { heading3: 'h3', heading4: 'h4', heading5: 'h5', heading6: 'h6' }
+
+// One markdown "line" (a paragraph, a list item, a subheading, a table
+// block, a rule) rendered in its normal formatted style. Click it to edit —
+// swaps to a small auto-growing textarea pre-filled with that line's raw
+// markdown; Enter (without Shift) or blur commits, Escape reverts. Tables
+// and rules aren't click-to-edit yet (tables are multi-line and structural
+// enough that per-line editing doesn't make sense; rules are just visual
+// separators) — everything else is.
+function EditableLine({ block, onCommit, saving }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(block.raw)
+  useEffect(() => { setDraft(block.raw) }, [block.raw])
+
+  if (block.type === 'rule') return <hr />
+  if (block.type === 'table') {
+    return editing ? (
+      <textarea
+        autoFocus value={draft} onChange={e => setDraft(e.target.value)}
+        onBlur={() => { setEditing(false); if (draft !== block.raw) onCommit(draft) }}
+        onKeyDown={e => { if (e.key === 'Escape') { setDraft(block.raw); setEditing(false) } }}
+        style={{ width: '100%', minHeight: 120, fontSize: 12, fontFamily: 'monospace', lineHeight: 1.6, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box', resize: 'vertical' }}
+      />
+    ) : (
+      <div onClick={() => setEditing(true)} style={{ cursor: 'text', opacity: saving ? 0.5 : 1 }} dangerouslySetInnerHTML={{ __html: addHeadingIds(marked.parse(block.raw)) }} />
+    )
+  }
+
+  if (editing) {
+    const commit = () => { setEditing(false); if (draft !== block.raw) onCommit(draft) }
+    return (
+      <textarea
+        autoFocus value={draft} onChange={e => setDraft(e.target.value)}
+        onFocus={e => e.target.setSelectionRange(e.target.value.length, e.target.value.length)}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Escape') { setDraft(block.raw); setEditing(false) }
+          else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.blur() }
+        }}
+        rows={Math.max(1, draft.split('\n').length)}
+        style={{
+          width: '100%', fontSize: 13.5, fontFamily: 'inherit', lineHeight: 1.65, padding: '2px 6px', marginLeft: -6, marginRight: -6,
+          border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box', resize: 'vertical',
+        }}
+      />
+    )
+  }
+
+  // Horizontal-only negative margin so the click-hover highlight bleeds a
+  // little past the text without disturbing the vertical spacing the
+  // .plan-content CSS below sets between paragraphs/list items/headings —
+  // an inline `margin` shorthand here would win over that stylesheet rule
+  // and collapse everything to zero gap.
+  const commonProps = {
+    onClick: () => setEditing(true),
+    style: { cursor: 'text', padding: '2px 6px', marginLeft: -6, marginRight: -6, borderRadius: 4, opacity: saving ? 0.5 : 1, transition: 'background 0.1s' },
+    onMouseEnter: e => { e.currentTarget.style.background = 'var(--surface-2)' },
+    onMouseLeave: e => { e.currentTarget.style.background = 'transparent' },
+    dangerouslySetInnerHTML: { __html: inlineHtml(block.raw) },
+  }
+
+  if (block.type === 'listitem') return <li {...commonProps} />
+  const HeadingTag = HEADING_TAGS[block.type]
+  if (HeadingTag) return <HeadingTag {...commonProps} />
+  return <p {...commonProps} />
+}
+
+// Groups the flat block list into render order — consecutive listitem
+// blocks get wrapped in one shared <ul>/<ol> (for correct bullet/number
+// styling) while each <li> inside stays independently click-to-edit.
+function SectionBody({ blocks, onBlockChange, savingIndex }) {
+  const groups = []
+  let i = 0
+  while (i < blocks.length) {
+    if (blocks[i].type === 'listitem') {
+      const start = i
+      const items = []
+      while (i < blocks.length && blocks[i].type === 'listitem') { items.push(i); i++ }
+      groups.push({ kind: 'list', ordered: blocks[start].ordered, items })
+    } else {
+      groups.push({ kind: 'single', index: i })
+      i++
+    }
+  }
+  return (
+    <>
+      {groups.map((g, gi) => {
+        if (g.kind === 'list') {
+          const ListTag = g.ordered ? 'ol' : 'ul'
+          return (
+            <ListTag key={gi}>
+              {g.items.map(idx => (
+                <EditableLine key={idx} block={blocks[idx]} saving={savingIndex === idx} onCommit={raw => onBlockChange(idx, raw)} />
+              ))}
+            </ListTag>
+          )
+        }
+        return <EditableLine key={gi} block={blocks[g.index]} saving={savingIndex === g.index} onCommit={raw => onBlockChange(g.index, raw)} />
+      })}
+    </>
+  )
 }
 
 const label = { display: 'block', fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }
@@ -124,37 +240,33 @@ function CommentThread({ section, comments, onAdd, onToggleResolved, onDelete })
   )
 }
 
-function SectionBlock({ section, editing, onStartEdit, onCancelEdit, onSave, saving, onShowHistory, comments, onAddComment, onToggleResolved, onDeleteComment }) {
-  const [draft, setDraft] = useState(section.body)
-  useEffect(() => { if (editing) setDraft(section.body) }, [editing, section.body])
-  const html = useMemo(() => addHeadingIds(marked.parse(section.body)), [section.body])
+function SectionBlock({ section, onSave, savingIndex, onShowHistory, comments, onAddComment, onToggleResolved, onDeleteComment }) {
+  // section.body's first line is the "## Heading" line itself (see
+  // parseSections) — kept out of the block breakdown below and stitched
+  // back on unchanged when a block edit is saved, since renaming the
+  // heading here would break the heading-string lookup replaceSection()
+  // uses server-side (and the slug this section is anchored/linked at).
+  const headingLine = useMemo(() => section.body.split('\n')[0], [section.body])
+  const restBody = useMemo(() => section.body.split('\n').slice(1).join('\n'), [section.body])
+  const blocks = useMemo(() => parseBlocks(restBody), [restBody])
+
+  function handleBlockChange(index, newRaw) {
+    const updated = blocks.map((b, i) => (i === index ? { ...b, raw: newRaw } : b))
+    onSave(`${headingLine}\n\n${blocksToMarkdown(updated)}`, index)
+  }
 
   return (
     <section id={section.slug} style={{ scrollMarginTop: 90, marginBottom: 8 }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: editing ? 8 : 0 }}>
-        {!editing ? (
-          <>
-            <button onClick={onShowHistory} style={btn}>History</button>
-            <button onClick={onStartEdit} style={btn}>Edit</button>
-          </>
-        ) : (
-          <>
-            <button onClick={onCancelEdit} style={btn} disabled={saving}>Cancel</button>
-            <button onClick={() => onSave(draft)} style={{ ...btnAccent, opacity: saving ? 0.6 : 1 }} disabled={saving}>
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-          </>
-        )}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+        <button onClick={onShowHistory} style={btn}>History</button>
       </div>
 
-      {editing ? (
-        <textarea
-          value={draft} onChange={e => setDraft(e.target.value)} autoFocus
-          style={{ width: '100%', minHeight: 260, fontSize: 12.5, fontFamily: 'monospace', lineHeight: 1.6, padding: 12, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box', resize: 'vertical' }}
-        />
-      ) : (
-        <div className="plan-content" dangerouslySetInnerHTML={{ __html: html }} />
-      )}
+      <div className="plan-content">
+        {/* Static, not click-to-edit — see comment above on why the heading
+            line is kept out of the editable block list. */}
+        <h2>{section.heading}</h2>
+        <SectionBody blocks={blocks} onBlockChange={handleBlockChange} savingIndex={savingIndex} />
+      </div>
 
       <CommentThread
         section={section.heading} comments={comments}
@@ -170,8 +282,7 @@ export default function PlanPage() {
   const [comments, setComments] = useState([])
   const [error, setError] = useState(null)
   const [importing, setImporting] = useState(false)
-  const [editingSlug, setEditingSlug] = useState(null)
-  const [savingSlug, setSavingSlug] = useState(null)
+  const [savingBlock, setSavingBlock] = useState(null) // { slug, index } | null
   const [historySlug, setHistorySlug] = useState(null)
   const [activeSlug, setActiveSlug] = useState(null)
 
@@ -219,15 +330,19 @@ export default function PlanPage() {
     await load()
   }
 
-  async function handleSave(section, newBody) {
-    setSavingSlug(section.slug)
+  // Fires on blur/Enter for a single edited line — reassembled to the full
+  // section body by SectionBlock before it gets here. index is just which
+  // block within the section is mid-save, for the dimmed-while-saving look
+  // on that one line; nothing else in the section is blocked from editing
+  // while this is in flight.
+  async function handleSave(section, newBody, index) {
+    setSavingBlock({ slug: section.slug, index })
     const res = await authFetch('/api/business-plan-db', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'edit', heading: section.heading, newBody }),
     }).then(r => r.json())
-    setSavingSlug(null)
+    setSavingBlock(null)
     if (res.error) { alert('Save failed: ' + res.error); return }
-    setEditingSlug(null)
     await load()
   }
 
@@ -310,11 +425,8 @@ export default function PlanPage() {
           <div key={s.slug} style={{ borderTop: i === 0 ? 'none' : '1px solid var(--line)', paddingTop: i === 0 ? 0 : 16, marginTop: i === 0 ? 0 : 24 }}>
             <SectionBlock
               section={s}
-              editing={editingSlug === s.slug}
-              saving={savingSlug === s.slug}
-              onStartEdit={() => setEditingSlug(s.slug)}
-              onCancelEdit={() => setEditingSlug(null)}
-              onSave={(newBody) => handleSave(s, newBody)}
+              savingIndex={savingBlock?.slug === s.slug ? savingBlock.index : null}
+              onSave={(newBody, index) => handleSave(s, newBody, index)}
               onShowHistory={() => setHistorySlug(s.heading)}
               comments={comments}
               onAddComment={handleAddComment}
