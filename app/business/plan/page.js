@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react'
 import { marked } from 'marked'
 import { authFetch } from '@/lib/authFetch'
 import { wordDiff } from '@/lib/reportSchema'
@@ -219,63 +219,135 @@ function HistoryPopup({ heading, versions, onClose }) {
   )
 }
 
-// Read/manage view for one section's comments — reachable either from the
-// 💬 badge in the section header or by clicking a highlighted quote in the
-// text (in which case focusId scrolls/outlines that specific one). There's
-// no "add a comment" box in here on purpose: comments are only created by
-// selecting text (see PendingCommentBubble below), matching the "just like
-// Word" request — a comment always has a quote to anchor it, rather than a
-// vaguer, unanchored per-section note.
-function SectionCommentsModal({ heading, comments, focusId, onClose, onToggleResolved, onDelete }) {
-  const list = comments.filter(c => c.section === heading)
+// One comment, rendered as a margin card — no quote text repeated inside
+// it (unlike the old modal version): its position next to the highlighted
+// phrase in the text IS the connection, same as Word/Google Docs.
+function CommentCard({ comment, active, cardRef, style, onToggleResolved, onDelete }) {
+  return (
+    <div
+      ref={cardRef} id={`pc-comment-${comment.id}`}
+      style={{
+        fontSize: 11.5, padding: '8px 10px', borderRadius: 6, boxSizing: 'border-box',
+        borderLeft: `3px solid ${comment.resolved ? 'var(--line)' : 'var(--accent)'}`,
+        background: comment.resolved ? 'transparent' : 'var(--surface-2)', opacity: comment.resolved ? 0.55 : 1,
+        boxShadow: active ? '0 0 0 2px var(--accent)' : 'none', transition: 'box-shadow 0.15s, top 0.15s',
+        ...style,
+      }}
+    >
+      <p style={{ margin: '0 0 6px', color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{comment.body}</p>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <span style={{ fontSize: 9.5, color: 'var(--text-muted)' }}>{fmtDate(comment.created_at)}</span>
+        <button onClick={() => onToggleResolved(comment)} style={{ fontSize: 9.5, background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0 }}>
+          {comment.resolved ? 'Reopen' : 'Resolve'}
+        </button>
+        <button onClick={() => onDelete(comment)} style={{ fontSize: 9.5, background: 'none', border: 'none', color: 'var(--warn)', cursor: 'pointer', padding: 0 }}>
+          Delete
+        </button>
+      </div>
+    </div>
+  )
+}
 
-  useEffect(() => {
-    if (!focusId) return
-    document.getElementById(`pc-comment-${focusId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }, [focusId])
+// Right-margin comment column, positioned to sit next to the plan text —
+// exactly like Word's/Google Docs' comment margin. Every comment card is
+// vertically aligned with its highlighted <mark> in the text via a
+// two-pass layout: first find where each mark actually sits (relative to
+// containerRef, which shares a top edge with this column since both are
+// flex-start siblings in the same row), then — since two comments can sit
+// close enough in the text that their cards would overlap — push any card
+// down past the bottom of the one above it, using each card's *measured*
+// real height (cards vary in height with comment length, so this can't be
+// precomputed, only measured after render).
+//
+// A MutationObserver on the content container re-triggers the first pass
+// whenever the rendered text changes for any reason (a line save, a block
+// toggling into/out of edit mode, a new highlight appearing) — the content
+// area has no lifted-up "layout changed" signal of its own, and watching
+// its actual DOM is the simplest thing that stays correct regardless of
+// what caused the reflow.
+function CommentMargin({ comments, containerRef, activeId, onToggleResolved, onDelete }) {
+  const [desiredTop, setDesiredTop] = useState({})
+  const [cardHeights, setCardHeights] = useState({})
+  const cardRefs = useRef({})
+
+  const recomputeDesired = useCallback(() => {
+    const container = containerRef.current
+    if (!container) return
+    const containerRect = container.getBoundingClientRect()
+    const seen = new Set()
+    const next = {}
+    container.querySelectorAll('mark.pc-comment[data-comment-id]').forEach(markEl => {
+      const id = markEl.dataset.commentId
+      if (seen.has(id)) return // a repeated quote elsewhere in the section — anchor to the first hit only
+      seen.add(id)
+      next[id] = markEl.getBoundingClientRect().top - containerRect.top
+    })
+    setDesiredTop(next)
+  }, [containerRef])
+
+  useLayoutEffect(() => {
+    recomputeDesired()
+    const container = containerRef.current
+    if (!container) return
+    const mo = new MutationObserver(() => recomputeDesired())
+    mo.observe(container, { childList: true, subtree: true, characterData: true, attributes: true })
+    window.addEventListener('resize', recomputeDesired)
+    return () => { mo.disconnect(); window.removeEventListener('resize', recomputeDesired) }
+  }, [recomputeDesired, comments.length])
+
+  const anchored = useMemo(() => comments.filter(c => desiredTop[c.id] !== undefined), [comments, desiredTop])
+  const unanchored = useMemo(() => comments.filter(c => desiredTop[c.id] === undefined), [comments, desiredTop])
+  const orderedIds = useMemo(
+    () => [...anchored].sort((a, b) => desiredTop[a.id] - desiredTop[b.id]).map(c => c.id),
+    [anchored, desiredTop]
+  )
+
+  // Second pass: measure actual rendered card heights, run after every
+  // render (no deps array) since content/height can change without the
+  // id list itself changing (e.g. resolving a comment shrinks its card).
+  useLayoutEffect(() => {
+    const heights = {}
+    orderedIds.forEach(id => { const el = cardRefs.current[id]; if (el) heights[id] = el.offsetHeight })
+    setCardHeights(prev => {
+      const changed = orderedIds.some(id => prev[id] !== heights[id])
+      return changed ? { ...prev, ...heights } : prev
+    })
+  })
+
+  const finalTop = useMemo(() => {
+    const CARD_GAP = 8
+    let cursor = 0
+    const result = {}
+    orderedIds.forEach(id => {
+      const top = Math.max(desiredTop[id] ?? 0, cursor)
+      result[id] = top
+      cursor = top + (cardHeights[id] || 56) + CARD_GAP
+    })
+    return result
+  }, [orderedIds, desiredTop, cardHeights])
+
+  const bottomMost = Object.values(finalTop).length ? Math.max(...Object.values(finalTop)) + 80 : 0
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={onClose}>
-      <div style={{ ...card, maxWidth: 560, width: '100%', maxHeight: '80vh', overflowY: 'auto', background: 'var(--bg)' }} onClick={e => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <h3 style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: 'var(--text)' }}>Comments — {heading}</h3>
-          <button onClick={onClose} style={btn}>Close</button>
-        </div>
-        {list.length === 0 ? (
-          <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-            No comments yet — select any text in this section and click the 💬 bubble that appears to leave one.
+    <div style={{ position: 'relative', width: 250, flexShrink: 0 }}>
+      {anchored.map(c => (
+        <CommentCard
+          key={c.id} comment={c} active={activeId === c.id}
+          cardRef={el => { if (el) cardRefs.current[c.id] = el }}
+          style={{ position: 'absolute', top: finalTop[c.id] ?? desiredTop[c.id], left: 0, right: 0 }}
+          onToggleResolved={onToggleResolved} onDelete={onDelete}
+        />
+      ))}
+      {unanchored.length > 0 && (
+        <div style={{ position: 'absolute', top: bottomMost, left: 0, right: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <p style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 2px' }}>
+            Other comments (text since edited)
           </p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {list.map(c => (
-              <div
-                key={c.id} id={`pc-comment-${c.id}`}
-                style={{
-                  fontSize: 12, padding: '8px 10px', borderRadius: 6,
-                  background: c.resolved ? 'transparent' : 'var(--surface-2)', opacity: c.resolved ? 0.6 : 1,
-                  outline: focusId === c.id ? '2px solid var(--accent)' : 'none',
-                }}
-              >
-                {c.quote && (
-                  <p style={{ margin: '0 0 6px', padding: '2px 8px', borderLeft: '2px solid var(--accent)', color: 'var(--text-muted)', fontStyle: 'italic', fontSize: 11.5, lineHeight: 1.5 }}>
-                    “{c.quote}”
-                  </p>
-                )}
-                <p style={{ margin: '0 0 4px', color: 'var(--text)', whiteSpace: 'pre-wrap' }}>{c.body}</p>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{fmtDate(c.created_at)}</span>
-                  <button onClick={() => onToggleResolved(c)} style={{ fontSize: 10, background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0 }}>
-                    {c.resolved ? 'Reopen' : 'Resolve'}
-                  </button>
-                  <button onClick={() => onDelete(c)} style={{ fontSize: 10, background: 'none', border: 'none', color: 'var(--warn)', cursor: 'pointer', padding: 0 }}>
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+          {unanchored.map(c => (
+            <CommentCard key={c.id} comment={c} active={activeId === c.id} onToggleResolved={onToggleResolved} onDelete={onDelete} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -341,7 +413,7 @@ function PendingCommentBubble({ pending, onCancel, onSubmit }) {
   )
 }
 
-function SectionBlock({ section, onSave, savingIndex, onShowHistory, comments, onOpenComments }) {
+function SectionBlock({ section, onSave, savingIndex, onShowHistory, comments, onFocusComment }) {
   // section.body's first line is the "## Heading" line itself (see
   // parseSections) — kept out of the block breakdown below and stitched
   // back on unchanged when a block edit is saved, since renaming the
@@ -351,7 +423,6 @@ function SectionBlock({ section, onSave, savingIndex, onShowHistory, comments, o
   const restBody = useMemo(() => section.body.split('\n').slice(1).join('\n'), [section.body])
   const blocks = useMemo(() => parseBlocks(restBody), [restBody])
   const sectionComments = useMemo(() => comments.filter(c => c.section === section.heading), [comments, section.heading])
-  const openCount = sectionComments.filter(c => !c.resolved).length
 
   function handleBlockChange(index, newRaw) {
     const updated = blocks.map((b, i) => (i === index ? { ...b, raw: newRaw } : b))
@@ -360,10 +431,7 @@ function SectionBlock({ section, onSave, savingIndex, onShowHistory, comments, o
 
   return (
     <section id={section.slug} style={{ scrollMarginTop: 90, marginBottom: 8 }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 4 }}>
-        <button onClick={() => onOpenComments(section.heading)} style={btn}>
-          💬 {sectionComments.length ? `${sectionComments.length}${openCount ? ` (${openCount} open)` : ''}` : 'Comments'}
-        </button>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
         <button onClick={onShowHistory} style={btn}>History</button>
       </div>
 
@@ -376,7 +444,7 @@ function SectionBlock({ section, onSave, savingIndex, onShowHistory, comments, o
         <h2>{section.heading}</h2>
         <SectionBody
           blocks={blocks} onBlockChange={handleBlockChange} savingIndex={savingIndex}
-          comments={sectionComments} onCommentClick={id => onOpenComments(section.heading, id)}
+          comments={sectionComments} onCommentClick={onFocusComment}
         />
       </div>
     </section>
@@ -392,8 +460,9 @@ export default function PlanPage() {
   const [savingBlock, setSavingBlock] = useState(null) // { slug, index } | null
   const [historySlug, setHistorySlug] = useState(null)
   const [activeSlug, setActiveSlug] = useState(null)
-  const [commentsModal, setCommentsModal] = useState(null) // { heading, focusId? } | null
   const [pendingComment, setPendingComment] = useState(null) // { section, quote, x, y } | null
+  const [activeCommentId, setActiveCommentId] = useState(null) // flashes/scrolls the margin card when a highlight is clicked
+  const contentRef = useRef(null) // the scrollable content column — CommentMargin measures mark positions against this
 
   const load = useCallback(async () => {
     const [planRes, commentsRes] = await Promise.all([
@@ -505,6 +574,14 @@ export default function PlanPage() {
     setComments(prev => prev.filter(c => c.id !== comment.id))
   }
 
+  // Clicking a highlighted phrase scrolls/flashes its margin card instead
+  // of opening anything — the card is always visible over there already.
+  function handleFocusComment(id) {
+    setActiveCommentId(id)
+    document.getElementById(`pc-comment-${id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    setTimeout(() => setActiveCommentId(current => (current === id ? null : current)), 2200)
+  }
+
   if (error) return <p style={{ fontSize: 13, color: 'var(--warn)' }}>{error}</p>
   if (plan === undefined) return <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</p>
 
@@ -525,8 +602,8 @@ export default function PlanPage() {
   }
 
   return (
-    <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start', maxWidth: 1100 }}>
-      <nav style={{ width: 200, flexShrink: 0, position: 'sticky', top: 90, display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <div style={{ display: 'flex', gap: 28, alignItems: 'flex-start', maxWidth: 1440 }}>
+      <nav style={{ width: 190, flexShrink: 0, position: 'sticky', top: 90, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <span style={{ fontSize: 10, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
           Sections
         </span>
@@ -555,8 +632,11 @@ export default function PlanPage() {
       {/* onMouseUp here (not on individual sections) means one listener
           covers every section; handleContentMouseUp figures out which
           section a selection belongs to via the closest data-section
-          ancestor SectionBlock renders. */}
-      <div style={{ flex: 1, minWidth: 0, paddingBottom: 60 }} onMouseUp={handleContentMouseUp}>
+          ancestor SectionBlock renders. contentRef is what CommentMargin
+          measures mark positions against — it and the margin column below
+          are both flex-start siblings in this row, so they share a top
+          edge and a card's `top: X` lines up with its mark's real position. */}
+      <div ref={contentRef} style={{ flex: 1, minWidth: 0, paddingBottom: 60 }} onMouseUp={handleContentMouseUp}>
         <div className="plan-content" dangerouslySetInnerHTML={{ __html: preambleHtml }} />
 
         {sections.map((s, i) => (
@@ -567,23 +647,19 @@ export default function PlanPage() {
               onSave={(newBody, index) => handleSave(s, newBody, index)}
               onShowHistory={() => setHistorySlug(s.heading)}
               comments={comments}
-              onOpenComments={(heading, focusId) => setCommentsModal({ heading, focusId })}
+              onFocusComment={handleFocusComment}
             />
           </div>
         ))}
       </div>
 
+      <CommentMargin
+        comments={comments} containerRef={contentRef} activeId={activeCommentId}
+        onToggleResolved={handleToggleResolved} onDelete={handleDeleteComment}
+      />
+
       {historySlug && (
         <HistoryPopup heading={historySlug} versions={versions} onClose={() => setHistorySlug(null)} />
-      )}
-
-      {commentsModal && (
-        <SectionCommentsModal
-          heading={commentsModal.heading} comments={comments} focusId={commentsModal.focusId}
-          onClose={() => setCommentsModal(null)}
-          onToggleResolved={handleToggleResolved}
-          onDelete={handleDeleteComment}
-        />
       )}
 
       {pendingComment && (
