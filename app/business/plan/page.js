@@ -74,25 +74,23 @@ function applyCommentHighlights(html, quotes) {
 function EditableLine({ block, onCommit, saving, comments, onCommentClick }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(block.raw)
-  // Captured from the rendered element the instant before it's replaced by
-  // the textarea, and applied as the textarea's minHeight — without this,
-  // the textarea's initial size came from its `rows` count, which is based
-  // on literal "\n" characters in the raw markdown (usually 0 or 1 for a
-  // single paragraph), not the wrapped visual height the paragraph actually
-  // occupies on screen (often 2-4 lines). That mismatch is what made
-  // clicking a paragraph visibly shrink/jump before this.
-  const [editHeight, setEditHeight] = useState(null)
+  // Width and height captured from the rendered element the instant before
+  // it's replaced by the textarea, and applied as *explicit pixel* values
+  // (not a CSS trick like rows= or width:auto) — see the long comment where
+  // they're used below for why two earlier attempts at this were both wrong.
+  const [editSize, setEditSize] = useState(null) // { width, height } | null
   useEffect(() => { setDraft(block.raw) }, [block.raw])
 
   function handleClick(e) {
     const markEl = e.target.closest && e.target.closest('mark.pc-comment')
     if (markEl) { e.stopPropagation(); onCommentClick(markEl.dataset.commentId); return }
-    // Math.ceil + a couple px of slack: getBoundingClientRect returns a
-    // sub-pixel float, and the textarea's box model can't match the
-    // paragraph's to better than ~1px (see the width:auto comment below)
-    // — rounding down or matching exactly risked the last line sitting
-    // just outside the box, forcing an internal scroll to reach it.
-    setEditHeight(Math.ceil(e.currentTarget.getBoundingClientRect().height) + 2)
+    const rect = e.currentTarget.getBoundingClientRect()
+    // Math.ceil + a couple px of slack on height: getBoundingClientRect
+    // returns a sub-pixel float, and the textarea's box model can't match
+    // the paragraph's to the sub-pixel (it has a 1px border the paragraph
+    // doesn't) — matching exactly risked the last line sitting just
+    // outside the box, forcing an internal scroll to reach it.
+    setEditSize({ width: Math.ceil(rect.width), height: Math.ceil(rect.height) + 2 })
     setEditing(true)
   }
 
@@ -103,7 +101,7 @@ function EditableLine({ block, onCommit, saving, comments, onCommentClick }) {
         autoFocus value={draft} onChange={e => setDraft(e.target.value)}
         onBlur={() => { setEditing(false); if (draft !== block.raw) onCommit(draft) }}
         onKeyDown={e => { if (e.key === 'Escape') { setDraft(block.raw); setEditing(false) } }}
-        style={{ width: '100%', minHeight: editHeight ? `${editHeight}px` : 120, fontSize: 12, fontFamily: 'monospace', lineHeight: 1.6, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box', resize: 'vertical' }}
+        style={{ width: '100%', minHeight: editSize ? `${editSize.height}px` : 120, fontSize: 12, fontFamily: 'monospace', lineHeight: 1.6, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box', resize: 'vertical' }}
       />
     ) : (
       <div onClick={handleClick} style={{ cursor: 'text', opacity: saving ? 0.5 : 1 }} dangerouslySetInnerHTML={{ __html: applyCommentHighlights(addHeadingIds(marked.parse(block.raw)), comments) }} />
@@ -121,19 +119,27 @@ function EditableLine({ block, onCommit, saving, comments, onCommentClick }) {
           else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.blur() }
         }}
         style={{
-          // display:block + width:auto (NOT width:'100%') is what actually
-          // matters here: the <p>/<li>/<hN> below use the browser's default
-          // block width:auto, which lets padding/margin net out to zero
-          // width change (that's the whole point of the -6/-6 margin
-          // trick). width:'100%' on a border-box element pins the OUTER
-          // box to the container instead, so the same padding+border eats
-          // into the content area rather than being absorbed by the
-          // margin — the textarea ends up with less usable width than the
-          // paragraph had, text wraps onto an extra line, and the line
-          // that no longer fits gets clipped by the captured minHeight.
-          // That mismatch was the "shrinks / cuts off text" bug.
-          display: 'block', width: 'auto', fontSize: 13.5, fontFamily: 'inherit', lineHeight: 1.65, padding: '2px 6px', marginLeft: -6, marginRight: -6,
-          minHeight: editHeight ? `${editHeight}px` : undefined,
+          // Explicit pixel width + minHeight, copied directly from the
+          // paragraph's own getBoundingClientRect() — not a CSS trick like
+          // width:'100%' or width:'auto'. Both of those were tried and
+          // both were wrong, for the same underlying reason: a <textarea>
+          // is a CSS "replaced element" (like <img> or <input>), and
+          // replaced elements size themselves completely differently from
+          // a plain block like <p>. width:'100%' pinned the outer box to
+          // the container while the paragraph's padding/negative-margin
+          // trick assumed the <p>'s own "fill remaining space" auto-width
+          // behavior, so they disagreed by exactly the padding+border.
+          // width:'auto' was worse: for a replaced element, auto-width
+          // falls back to the textarea's *intrinsic* size (its `cols`
+          // attribute, ~20 characters by default) — nowhere near the
+          // paragraph's actual width — which is almost certainly why it
+          // visibly jumped to a much narrower box and needed even more
+          // scrolling than before. Setting width in px sidesteps both
+          // failure modes: it's not an algorithm to get right, it's a
+          // number copied from the thing it needs to match.
+          width: editSize ? `${editSize.width}px` : '100%',
+          fontSize: 13.5, fontFamily: 'inherit', lineHeight: 1.65, padding: '2px 6px', marginLeft: -6,
+          minHeight: editSize ? `${editSize.height}px` : undefined,
           border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box', resize: 'vertical',
         }}
       />
