@@ -117,7 +117,18 @@ function EditableLine({ block, onCommit, saving, comments, onCommentClick }) {
           else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.blur() }
         }}
         style={{
-          width: '100%', fontSize: 13.5, fontFamily: 'inherit', lineHeight: 1.65, padding: '2px 6px', marginLeft: -6, marginRight: -6,
+          // display:block + width:auto (NOT width:'100%') is what actually
+          // matters here: the <p>/<li>/<hN> below use the browser's default
+          // block width:auto, which lets padding/margin net out to zero
+          // width change (that's the whole point of the -6/-6 margin
+          // trick). width:'100%' on a border-box element pins the OUTER
+          // box to the container instead, so the same padding+border eats
+          // into the content area rather than being absorbed by the
+          // margin — the textarea ends up with less usable width than the
+          // paragraph had, text wraps onto an extra line, and the line
+          // that no longer fits gets clipped by the captured minHeight.
+          // That mismatch was the "shrinks / cuts off text" bug.
+          display: 'block', width: 'auto', fontSize: 13.5, fontFamily: 'inherit', lineHeight: 1.65, padding: '2px 6px', marginLeft: -6, marginRight: -6,
           minHeight: editHeight ? `${editHeight}px` : undefined,
           border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box', resize: 'vertical',
         }}
