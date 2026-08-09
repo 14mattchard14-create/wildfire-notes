@@ -87,7 +87,12 @@ function EditableLine({ block, onCommit, saving, comments, onCommentClick }) {
   function handleClick(e) {
     const markEl = e.target.closest && e.target.closest('mark.pc-comment')
     if (markEl) { e.stopPropagation(); onCommentClick(markEl.dataset.commentId); return }
-    setEditHeight(e.currentTarget.getBoundingClientRect().height)
+    // Math.ceil + a couple px of slack: getBoundingClientRect returns a
+    // sub-pixel float, and the textarea's box model can't match the
+    // paragraph's to better than ~1px (see the width:auto comment below)
+    // — rounding down or matching exactly risked the last line sitting
+    // just outside the box, forcing an internal scroll to reach it.
+    setEditHeight(Math.ceil(e.currentTarget.getBoundingClientRect().height) + 2)
     setEditing(true)
   }
 
@@ -110,7 +115,6 @@ function EditableLine({ block, onCommit, saving, comments, onCommentClick }) {
     return (
       <textarea
         autoFocus value={draft} onChange={e => setDraft(e.target.value)}
-        onFocus={e => e.target.setSelectionRange(e.target.value.length, e.target.value.length)}
         onBlur={commit}
         onKeyDown={e => {
           if (e.key === 'Escape') { setDraft(block.raw); setEditing(false) }
