@@ -391,21 +391,41 @@ const label = { display: 'block', fontSize: 10, fontFamily: 'monospace', letterS
 const input = { width: '100%', fontSize: 12.5, padding: '6px 8px', border: '1px solid var(--line)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit', boxSizing: 'border-box' }
 const card = { border: '1px solid var(--line)', borderRadius: 8, padding: 14, background: 'var(--surface)' }
 
-// Small "(i)" badge with a native hover tooltip (title attribute) — same
-// pattern the Margins & marketing card already used for its source
-// citation, pulled out here so every input that needs an explanation (not
-// just a source citation) can use it without repeating the markup.
+// Small "(i)" badge with a custom hover tooltip. Originally just a native
+// `title` attribute (same as the old Margins-card info dot), but native
+// title tooltips turned out unreliable in practice — long/inconsistent
+// browser hover delay before they appear, easy to trigger without ever
+// actually seeing one pop up. This renders its own positioned bubble on
+// hover instead, so it shows immediately and looks the same everywhere.
 function InfoDot({ text }) {
+  const [hover, setHover] = useState(false)
   if (!text) return null
   return (
     <span
-      title={text}
-      style={{
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
-        border: '1px solid var(--text-muted)', color: 'var(--text-muted)', fontSize: 9.5, fontWeight: 700, cursor: 'help', lineHeight: 1,
-      }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}
     >
-      i
+      <span
+        style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: '50%',
+          border: '1px solid var(--text-muted)', color: 'var(--text-muted)', fontSize: 9.5, fontWeight: 700, cursor: 'help', lineHeight: 1,
+        }}
+      >
+        i
+      </span>
+      {hover && (
+        <span
+          style={{
+            position: 'absolute', bottom: '150%', left: '50%', transform: 'translateX(-50%)', zIndex: 30,
+            width: 240, padding: '8px 10px', borderRadius: 6, background: 'var(--surface-2)', border: '1px solid var(--line)',
+            color: 'var(--text)', fontSize: 11, fontWeight: 400, lineHeight: 1.5, textTransform: 'none', letterSpacing: 'normal',
+            whiteSpace: 'pre-line', boxShadow: '0 4px 14px rgba(0,0,0,0.25)', pointerEvents: 'none',
+          }}
+        >
+          {text}
+        </span>
+      )}
     </span>
   )
 }
