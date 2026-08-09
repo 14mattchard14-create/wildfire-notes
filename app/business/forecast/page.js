@@ -391,10 +391,29 @@ const label = { display: 'block', fontSize: 10, fontFamily: 'monospace', letterS
 const input = { width: '100%', fontSize: 12.5, padding: '6px 8px', border: '1px solid var(--line)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit', boxSizing: 'border-box' }
 const card = { border: '1px solid var(--line)', borderRadius: 8, padding: 14, background: 'var(--surface)' }
 
-function Field({ text, value, onChange, step = 'any', prefix }) {
+// Small "(i)" badge with a native hover tooltip (title attribute) — same
+// pattern the Margins & marketing card already used for its source
+// citation, pulled out here so every input that needs an explanation (not
+// just a source citation) can use it without repeating the markup.
+function InfoDot({ text }) {
+  if (!text) return null
+  return (
+    <span
+      title={text}
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+        border: '1px solid var(--text-muted)', color: 'var(--text-muted)', fontSize: 9.5, fontWeight: 700, cursor: 'help', lineHeight: 1,
+      }}
+    >
+      i
+    </span>
+  )
+}
+
+function Field({ text, value, onChange, step = 'any', prefix, info }) {
   return (
     <div>
-      <span style={label}>{text}</span>
+      <span style={{ ...label, display: 'flex', alignItems: 'center', gap: 5 }}>{text}<InfoDot text={info} /></span>
       <div style={{ position: 'relative' }}>
         {prefix && <span style={{ position: 'absolute', left: 8, top: 7, fontSize: 12.5, color: 'var(--text-muted)' }}>{prefix}</span>}
         <input
@@ -439,15 +458,7 @@ function AssumptionsPanel({ assumptions, onChange }) {
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
           <h3 style={{ fontSize: 12.5, fontWeight: 700, margin: 0, color: 'var(--text)' }}>Margins &amp; marketing</h3>
-          <span
-            title={'Audit/Self Margin ~90%: business-plan.md §4.2/§7 — ~$35 variable COGS per $500 audit.\nHardening Margin ~65%: business-plan.md §7 — hardening materials/labor run ~35% of hardening revenue.'}
-            style={{
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: '50%',
-              border: '1px solid var(--text-muted)', color: 'var(--text-muted)', fontSize: 9.5, fontWeight: 700, cursor: 'help', lineHeight: 1,
-            }}
-          >
-            i
-          </span>
+          <InfoDot text={'Audit/Self Margin ~90%: business-plan.md §4.2/§7 — ~$35 variable COGS per $500 audit.\nHardening Margin ~65%: business-plan.md §7 — hardening materials/labor run ~35% of hardening revenue.'} />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
           <Field text="Audit/Self Margin (0-1)" value={assumptions.auditMargin} onChange={set('auditMargin')} />
@@ -631,11 +642,26 @@ function StatCard({ text, value, accent, warn, sub }) {
 // panel start out saying the same thing.
 const QUICK_MC_RANGES = { volume: [60, 100, 140], hours: [85, 100, 125], margin: [85, 100, 105], capacity: [80, 100, 110] }
 
-function RangeField({ text, low, likely, high, onChange }) {
+// What each Monte Carlo / Marketing Optimizer input actually does to the
+// underlying numbers — see runMonteCarlo() above for the exact mechanics
+// (one multiplier per driver, drawn once per trial and held for all 12
+// months, not randomized month-by-month).
+const MC_FIELD_INFO = {
+  volume: "Multiplies every month's audit, self-inspection, and hardening job counts by this % in each simulated trial. Represents uncertainty in how many jobs actually land vs. what's typed into the Monthly volumes table — e.g. a Low of 60% models a bad stretch where real demand comes in at 60% of plan.",
+  hours: "Multiplies hours-per-audit, hours-per-self-inspection, and hours-per-hardening-job by this % in each trial. Doesn't change job counts — a higher % just means each job eats more of the available weekly hours than assumed, which can push a month over capacity even at planned volume.",
+  margin: "Multiplies Audit/Self Margin and Hardening Margin by this % in each trial (capped at 100%). Represents uncertainty in per-job profitability — materials or costs running higher than assumed shows up here.",
+  capacity: "Multiplies every person's hours/week (P1/P2/PH1/PH2 from the Monthly volumes table) by this % in each trial. Represents uncertainty in how many hours are actually available that year — sick time, a day job running long, life happening.",
+  responseEffectiveness: "Multiplies the response curve's predicted audits-from-spend by this % in each trial. Represents uncertainty in whether a dollar of marketing spend converts to leads as well as the Anchor Spend/Anchor Audits calibration below assumes.",
+  trials: 'How many random trials to simulate. More trials = smoother, more statistically stable percentile estimates, but takes longer to compute — 10,000 is a reasonable default; drop to 1,000 while iterating on assumptions, use 50,000 for a final read.',
+  targetNetProfit: "Optional. If set, the results below add a 'Prob. Hits Target' card — the % of simulated trials where net profit met or beat this number.",
+  responseCurve: 'The response curve is audits = organic baseline + k·spend^elasticity, with k solved so the curve passes through your Anchor Spend/Anchor Audits point. business-plan.md §6.5 gives the one real data point this business has: ~$200–350/mo marketing burn produces ~4–8 audits/mo — a reasonable starting anchor, but replace it with your own actuals once you have them.',
+}
+
+function RangeField({ text, low, likely, high, onChange, info }) {
   const set = (which) => (val) => onChange({ low, likely, high, [which]: val })
   return (
     <div>
-      <span style={label}>{text} (% of plan)</span>
+      <span style={{ ...label, display: 'flex', alignItems: 'center', gap: 5 }}>{text} (% of plan)<InfoDot text={info} /></span>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
         <input type="number" style={{ ...input, fontSize: 12 }} value={low} onChange={e => set('low')(e.target.value)} title="Low (pessimistic)" />
         <input type="number" style={{ ...input, fontSize: 12 }} value={likely} onChange={e => set('likely')(e.target.value)} title="Most likely" />
@@ -748,22 +774,22 @@ function MonteCarloPanel({ assumptions, monthly }) {
           </p>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
-            <RangeField text="Demand / job volume" {...volumeRange} onChange={setVolumeRange} />
-            <RangeField text="Hours per job" {...hoursRange} onChange={setHoursRange} />
-            <RangeField text="Margins" {...marginRange} onChange={setMarginRange} />
-            <RangeField text="Available capacity" {...capacityRange} onChange={setCapacityRange} />
+            <RangeField text="Demand / job volume" {...volumeRange} onChange={setVolumeRange} info={MC_FIELD_INFO.volume} />
+            <RangeField text="Hours per job" {...hoursRange} onChange={setHoursRange} info={MC_FIELD_INFO.hours} />
+            <RangeField text="Margins" {...marginRange} onChange={setMarginRange} info={MC_FIELD_INFO.margin} />
+            <RangeField text="Available capacity" {...capacityRange} onChange={setCapacityRange} info={MC_FIELD_INFO.capacity} />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
             <div>
-              <span style={label}>Trials</span>
+              <span style={{ ...label, display: 'flex', alignItems: 'center', gap: 5 }}>Trials<InfoDot text={MC_FIELD_INFO.trials} /></span>
               <select value={trials} onChange={e => setTrials(Number(e.target.value))} style={input}>
                 <option value={1000}>1,000 (fast)</option>
                 <option value={10000}>10,000 (recommended)</option>
                 <option value={50000}>50,000 (max precision)</option>
               </select>
             </div>
-            <Field text="Target Net Profit ($, optional)" prefix="$" value={targetNetProfit} onChange={setTargetNetProfit} />
+            <Field text="Target Net Profit ($, optional)" prefix="$" value={targetNetProfit} onChange={setTargetNetProfit} info={MC_FIELD_INFO.targetNetProfit} />
           </div>
 
           <button onClick={run} disabled={running} style={{ justifySelf: 'start', fontSize: 11.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 4, padding: '9px 16px', cursor: 'pointer', opacity: running ? 0.6 : 1 }}>
@@ -1190,7 +1216,7 @@ function MarketingOptimizerPanel({ scenarios, onSave }) {
           </div>
 
           <div>
-            <h4 style={{ fontSize: 11.5, fontWeight: 700, margin: '0 0 8px', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Response curve calibration</h4>
+            <h4 style={{ fontSize: 11.5, fontWeight: 700, margin: '0 0 8px', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>Response curve calibration<InfoDot text={MC_FIELD_INFO.responseCurve} /></h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
               <Field text="Anchor Spend ($/mo)" prefix="$" value={anchorSpend} onChange={setAnchorSpend} />
               <Field text="Anchor Audits (at that spend)" value={anchorAudits} onChange={setAnchorAudits} />
@@ -1206,7 +1232,7 @@ function MarketingOptimizerPanel({ scenarios, onSave }) {
               <Field text="Max ($/mo)" prefix="$" value={spendMax} onChange={setSpendMax} />
               <Field text="Step ($)" prefix="$" value={spendStep} onChange={setSpendStep} />
               <div>
-                <span style={label}>Trials per spend level</span>
+                <span style={{ ...label, display: 'flex', alignItems: 'center', gap: 5 }}>Trials per spend level<InfoDot text={MC_FIELD_INFO.trials} /></span>
                 <select value={trialsPerPoint} onChange={e => setTrialsPerPoint(Number(e.target.value))} style={input}>
                   <option value={1000}>1,000 (fast)</option>
                   <option value={3000}>3,000 (recommended)</option>
@@ -1219,10 +1245,10 @@ function MarketingOptimizerPanel({ scenarios, onSave }) {
           <div>
             <h4 style={{ fontSize: 11.5, fontWeight: 700, margin: '0 0 8px', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Uncertainty ranges (% of plan, same as Monte Carlo above)</h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
-              <RangeField text="Marketing response effectiveness" {...responseRange} onChange={setResponseRange} />
-              <RangeField text="Hours per job" {...hoursRange} onChange={setHoursRange} />
-              <RangeField text="Margins" {...marginRange} onChange={setMarginRange} />
-              <RangeField text="Available capacity" {...capacityRange} onChange={setCapacityRange} />
+              <RangeField text="Marketing response effectiveness" {...responseRange} onChange={setResponseRange} info={MC_FIELD_INFO.responseEffectiveness} />
+              <RangeField text="Hours per job" {...hoursRange} onChange={setHoursRange} info={MC_FIELD_INFO.hours} />
+              <RangeField text="Margins" {...marginRange} onChange={setMarginRange} info={MC_FIELD_INFO.margin} />
+              <RangeField text="Available capacity" {...capacityRange} onChange={setCapacityRange} info={MC_FIELD_INFO.capacity} />
             </div>
           </div>
 
