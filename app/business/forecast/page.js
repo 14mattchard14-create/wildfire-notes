@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Plus, Trash2, Copy, Save } from 'lucide-react'
+import { authFetch } from '@/lib/authFetch'
+import { Plus, Trash2, Copy, Save, Sparkles, Send } from 'lucide-react'
 
 // Financial forecasting calculator — the in-app replacement for
 // growth-poam.xlsx. Every scenario is a row in financial_scenarios
@@ -485,6 +486,94 @@ function AssumptionsPanel({ assumptions, onChange }) {
   )
 }
 
+// Small chat-style panel that sits next to the Monthly volumes table:
+// describe the staffing/growth plan in plain English and it fills all 12
+// months of the table via /api/forecast-fill, instead of hand-typing 7
+// numbers x 12 months for every scenario. Sends the current monthly array
+// along so a partial description ("just bump P2 to 40 hrs from month 6")
+// can adjust just that piece rather than requiring the whole year spelled
+// out every time. Local-only message log (no persistence) — it's a fill
+// tool, not a saved conversation; scenario.notes is still the place for a
+// durable written description.
+function MonthlyFillAssistant({ scenario, onApply }) {
+  const [description, setDescription] = useState('')
+  const [messages, setMessages] = useState([])
+  const [loading, setLoading] = useState(false)
+  const logRef = useRef(null)
+
+  useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight }, [messages, loading])
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    const text = description.trim()
+    if (!text || loading) return
+    setMessages(m => [...m, { role: 'user', text }])
+    setDescription('')
+    setLoading(true)
+    try {
+      const res = await authFetch('/api/forecast-fill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: text, currentMonthly: scenario.monthly, assumptions: scenario.assumptions }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Generation failed')
+      onApply(data.monthly)
+      setMessages(m => [...m, { role: 'assistant', text: 'Filled in the 12-month table below — review it, then hit Save if it looks right.' }])
+    } catch (err) {
+      setMessages(m => [...m, { role: 'assistant', text: `Couldn't do that: ${err.message}`, error: true }])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{ ...card, width: 260, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 340 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Sparkles className="size-3.5" style={{ color: 'var(--accent)' }} />
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text)' }}>Fill from a description</span>
+      </div>
+      <div ref={logRef} style={{ flex: messages.length ? 1 : undefined, minHeight: messages.length ? 60 : undefined, maxHeight: 180, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {messages.length === 0 && (
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+            Describe the staffing plan and it'll fill all 12 months for you — e.g. "P1 works evenings at 12 hrs/wk on inspections all year, ramping hardening from month 3. P2 joins full-time at 40 hrs/wk starting month 6."
+          </p>
+        )}
+        {messages.map((m, i) => (
+          <div key={i} style={{
+            alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+            maxWidth: '92%', fontSize: 11, lineHeight: 1.45, padding: '6px 9px', borderRadius: 8,
+            background: m.role === 'user' ? 'var(--accent)' : m.error ? 'rgba(200,60,60,0.12)' : 'var(--surface-2)',
+            color: m.role === 'user' ? '#fff' : m.error ? 'var(--warn)' : 'var(--text)',
+          }}>
+            {m.text}
+          </div>
+        ))}
+        {loading && (
+          <div style={{ alignSelf: 'flex-start', fontSize: 11, color: 'var(--text-muted)', padding: '6px 9px' }}>Thinking…</div>
+        )}
+      </div>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 6 }}>
+        <textarea
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e) } }}
+          placeholder="Describe the plan…"
+          disabled={loading}
+          style={{ ...input, flex: 1, fontSize: 11.5, minHeight: 36, maxHeight: 80, resize: 'vertical', padding: '6px 8px' }}
+        />
+        <button type="submit" disabled={loading || !description.trim()} title="Fill table" style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, flexShrink: 0,
+          background: 'var(--accent)', border: 'none', borderRadius: 4, cursor: loading ? 'default' : 'pointer',
+          opacity: loading || !description.trim() ? 0.5 : 1,
+        }}>
+          <Send className="size-3.5" style={{ color: '#fff' }} />
+        </button>
+      </form>
+    </div>
+  )
+}
+
 function MonthlyGrid({ monthly, forecast, onChange }) {
   const setCell = (idx, field) => (val) => {
     const next = monthly.map((m, i) => i === idx ? { ...m, [field]: val } : m)
@@ -781,7 +870,12 @@ function ScenarioEditor({ scenario, onChange, onSave, onDuplicate, onDelete, sav
 
       <div>
         <h3 style={{ fontSize: 12.5, fontWeight: 700, margin: '0 0 8px', color: 'var(--text)' }}>Monthly volumes</h3>
-        <MonthlyGrid monthly={scenario.monthly} forecast={forecast} onChange={m => onChange({ ...scenario, monthly: m })} />
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+          <MonthlyFillAssistant scenario={scenario} onApply={m => onChange({ ...scenario, monthly: m })} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <MonthlyGrid monthly={scenario.monthly} forecast={forecast} onChange={m => onChange({ ...scenario, monthly: m })} />
+          </div>
+        </div>
       </div>
 
       <MonteCarloPanel assumptions={scenario.assumptions} monthly={scenario.monthly} />
