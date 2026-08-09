@@ -98,6 +98,7 @@ function EditableLine({ block, onCommit, saving, comments, onCommentClick }) {
   if (block.type === 'table') {
     return editing ? (
       <textarea
+        data-slot="editable-line"
         autoFocus value={draft} onChange={e => setDraft(e.target.value)}
         onBlur={() => { setEditing(false); if (draft !== block.raw) onCommit(draft) }}
         onKeyDown={e => { if (e.key === 'Escape') { setDraft(block.raw); setEditing(false) } }}
@@ -112,6 +113,7 @@ function EditableLine({ block, onCommit, saving, comments, onCommentClick }) {
     const commit = () => { setEditing(false); if (draft !== block.raw) onCommit(draft) }
     return (
       <textarea
+        data-slot="editable-line"
         autoFocus value={draft} onChange={e => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={e => {
@@ -137,6 +139,21 @@ function EditableLine({ block, onCommit, saving, comments, onCommentClick }) {
           // scrolling than before. Setting width in px sidesteps both
           // failure modes: it's not an algorithm to get right, it's a
           // number copied from the thing it needs to match.
+          //
+          // data-slot="editable-line" above is load-bearing, not
+          // decorative: app/globals.css has a legacy
+          // `textarea:not([data-slot]) { width:100% !important;
+          // font-size:15px !important; padding:10px 12px !important;
+          // line-height:1.5 !important; min-height:72px !important; ... }`
+          // reset for raw form textareas. !important always beats an
+          // inline style regardless of specificity, so every dimension
+          // this component sets below was silently being clobbered back
+          // to that reset's values — the real reason all previous sizing
+          // fixes never actually took effect in the browser, confirmed by
+          // rendering this exact component in a real headless Chromium
+          // and reading its computed style. data-slot opts this element
+          // out of that selector (same convention shadcn/ui components
+          // already use for the same reason).
           width: editSize ? `${editSize.width}px` : '100%',
           fontSize: 13.5, fontFamily: 'inherit', lineHeight: 1.65, padding: '2px 6px', marginLeft: -6,
           minHeight: editSize ? `${editSize.height}px` : undefined,
