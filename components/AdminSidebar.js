@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { Home, Users, Activity, Sparkles, Settings, SidebarClose, SidebarOpen, Calculator, TrendingUp } from 'lucide-react'
+import { Home, Users, Activity, Sparkles, Settings, SidebarClose, SidebarOpen, Calculator, TrendingUp, UserCog, FileText } from 'lucide-react'
+import { useAuth } from './AuthProvider'
 
 // Persistent left-nav for every inspector-facing admin page — same list,
 // same highlighting, everywhere (properties table, a single property, the
@@ -12,6 +13,10 @@ import { Home, Users, Activity, Sparkles, Settings, SidebarClose, SidebarOpen, C
 // more specific routes are listed before the broader ones they'd otherwise
 // also match. Lessons Learned lives inside the Report Quality page itself
 // (as a tab) rather than as its own nav entry — see components/LessonsLearned.js.
+// Users & Roles and Documentation are `adminOnly` — see
+// PORTALS_AND_ROLES_PLAN.md: both are visible only to role === 'admin',
+// filtered at render time below (not exported/hidden via CSS, so a
+// non-admin never even gets the item in the DOM).
 const NAV = [
   { href: '/insights/settings', label: 'Settings', icon: Settings, match: p => p.startsWith('/insights/settings') },
   { href: '/insights', label: 'Activity', icon: Activity, match: p => p === '/insights' },
@@ -20,12 +25,14 @@ const NAV = [
   { href: '/business', label: 'Business', icon: TrendingUp, match: p => p.startsWith('/business') },
   { href: '/crm', label: 'CRM', icon: Users, match: p => p.startsWith('/crm') },
   { href: '/manage', label: 'Properties', icon: Home, match: p => p === '/manage' || p.startsWith('/manage/') },
+  { href: '/users', label: 'Users & Roles', icon: UserCog, match: p => p.startsWith('/users'), adminOnly: true },
+  { href: '/documentation', label: 'Documentation', icon: FileText, match: p => p.startsWith('/documentation'), adminOnly: true },
 ]
 
 // Rendered in NAV's intended display order — the array above is ordered
 // for match-priority, not display, so we sort it here. Settings is pinned
 // to the very bottom regardless of what else is added to this list later.
-const DISPLAY_ORDER = ['/manage', '/crm', '/estimate', '/business', '/insights', '/quality']
+const DISPLAY_ORDER = ['/manage', '/crm', '/estimate', '/business', '/users', '/documentation', '/insights', '/quality']
 const ORDERED_NAV = DISPLAY_ORDER.map(href => NAV.find(item => item.href === href))
 const SETTINGS_ITEM = NAV.find(item => item.href === '/insights/settings')
 
@@ -58,6 +65,8 @@ function NavButton({ item, active, collapsed, onClick }) {
 export default function AdminSidebar() {
   const router = useRouter()
   const pathname = usePathname()
+  const { isAdmin } = useAuth()
+  const visibleNav = ORDERED_NAV.filter(item => !item.adminOnly || isAdmin)
   const activeItem = NAV.find(item => item.match(pathname))
   const [collapsed, setCollapsed] = useState(false)
   const [ready, setReady] = useState(false)
@@ -108,7 +117,7 @@ export default function AdminSidebar() {
       </button>
 
       <div>
-        {ORDERED_NAV.map(item => (
+        {visibleNav.map(item => (
           <NavButton key={item.href} item={item} active={item === activeItem} collapsed={collapsed} onClick={() => router.push(item.href)} />
         ))}
       </div>

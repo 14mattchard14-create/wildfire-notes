@@ -1,9 +1,16 @@
 # Status — wildfire-notes
 
-_Last updated: 2026-08-02_
+_Last updated: 2026-08-18_
 
 ## ⚠️ Action required — new migration
 
+- Run `supabase/migrations/029_roles_and_documents.sql` — expands `profiles.role`'s check
+  constraint to add `admin`, `partner`, `field_inspector`, `manager` (keeps `employee` and
+  `homeowner`), adds `properties.assigned_inspector_id`, and creates `admin_documents`.
+  Required for the new Users & Roles and Documentation tabs (see round below) to work at all.
+  After running it, reassign your own account's role to `admin` from the new `/users` tab —
+  every account defaults to `employee` until reassigned, nothing is auto-migrated (see
+  PORTALS_AND_ROLES_PLAN.md resolved question #8).
 - Run `supabase/migrations/024_job_numbers.sql` — adds `properties.job_number` (auto-assigned via
   trigger on every insert) and backfills existing rows in creation order. Required for the new
   Job # column in CRM/Properties (round 60 below) to show anything.
@@ -25,6 +32,40 @@ _Last updated: 2026-08-02_
   (`lead_source`, `booking_status`, `booking_event_uid`, `intro_call_at`) and two new tables,
   `crm_payments` and `crm_discounts`. Required for the CRM's Payments section, Discount Codes
   panel, and the Cal.com webhook to work at all.
+
+## Done this session (2026-08-18 — role schema + Users & Roles + Documentation tabs)
+
+Phase 1 of the portal-split/permissions initiative — see `PORTALS_AND_ROLES_PLAN.md` for the
+full design and decisions. Building now, per that doc: the role schema and two new admin-only
+tabs. **Not** built yet: the CG Inspector portal itself, per-route permission enforcement
+across the ~30 existing API routes (they still all just check `role !== 'employee'`), Partner's
+business-plan approval workflow, the report-delete-request flow, and property-access-request
+flow — all explicitly deferred.
+
+- **Migration** `029_roles_and_documents.sql`: `profiles.role` check constraint now allows
+  `admin`, `partner`, `field_inspector`, `manager` alongside the existing `employee`/`homeowner`
+  (nothing auto-migrated — every account stays whatever it already was until reassigned).
+  Added `properties.assigned_inspector_id` (per-property, not tied to a fixed role — groundwork
+  for the future CG Inspector portal's "my assigned properties" filter, not used by any UI yet).
+  Added `admin_documents` table for the new Documentation tab.
+- **`AuthProvider`**: exposes a new `isAdmin` boolean (`role === 'admin'`) alongside the
+  existing `isHomeowner`.
+- **`AdminSidebar`**: now role-aware — reads `isAdmin` via `useAuth()` and only renders the two
+  new nav items (Users & Roles, Documentation) for admins. Every other nav item is unchanged
+  and still visible to any inspector account, exactly as before.
+- **Users & Roles tab** (`/users`, admin-only): lists every account (email, name, join date,
+  last sign-in) with a dropdown to change its role. Reads via a new `GET /api/admin/users`
+  (uses the Supabase admin API to list auth users, joined with `profiles`), writes via
+  `PATCH /api/admin/users/[id]`. This is the tool for the account-reassignment step above —
+  no bulk/automatic reassignment happens anywhere.
+- **Documentation tab** (`/documentation`, admin-only): simple list/create/edit/delete for
+  storing planning docs (like this file, or `PORTALS_AND_ROLES_PLAN.md`) inside the app itself.
+  Plain-text/Markdown-source editor, no rendering yet. New `admin_documents` table + CRUD API
+  at `/api/admin/documents`. Nothing is seeded automatically — copy content in manually if you
+  want a doc mirrored here.
+
+All new/changed files passed a Babel syntax check (`next build` itself doesn't run in this
+sandbox — ARM64 SWC binary isn't installed here, unrelated to this code).
 
 ## ⚠️ Action required — Cal.com setup (for the booking webhook)
 
