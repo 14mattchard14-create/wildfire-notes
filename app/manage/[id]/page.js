@@ -153,21 +153,47 @@ export default function PropertyReviewPage() {
                 )}
                 {property?.visit_date && <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)' }}>Visit: {property.visit_date}</span>}
 
-                {/* Admin-only — assigns/reassigns who sees this property in
-                    the CG Inspector portal (filtered to
-                    assigned_inspector_id there, regardless of the
-                    assignee's overall role). Same permission tier as
-                    property/invite creation per PORTALS_AND_ROLES_PLAN.md. */}
-                {isAdmin && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                    <UserCog className="size-3.5" style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                {/* Assigning who sees this property in the CG Inspector
+                    portal (filtered to assigned_inspector_id there,
+                    regardless of the assignee's overall role). Two tiers:
+                    any signed-in staff account can self-assign with one
+                    click (no admin needed — this is what unblocks a single-
+                    operator account before anyone's gone through /users to
+                    set up admin), while assigning it to *someone else*
+                    stays admin-only, matching property/invite creation's
+                    permission tier per PORTALS_AND_ROLES_PLAN.md. */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                  <UserCog className="size-3.5" style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                  {property?.assigned_inspector_id ? (
+                    <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                      Assigned to: {property.assigned_inspector_id === user?.id ? 'you' : (staff.find(s => s.id === property.assigned_inspector_id)?.fullName || staff.find(s => s.id === property.assigned_inspector_id)?.email || property.assigned_inspector_id)}
+                      {' '}
+                      <button
+                        onClick={() => setAssignedInspector(null)}
+                        disabled={savingInspector}
+                        style={{ background: 'none', border: 'none', padding: 0, marginLeft: 4, color: 'var(--warn)', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}
+                      >
+                        Unassign
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setAssignedInspector(user?.id)}
+                      disabled={savingInspector || !user}
+                      style={{ fontSize: 11, fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 20, padding: '3px 9px', background: 'transparent', cursor: 'pointer' }}
+                    >
+                      Assign to me
+                    </button>
+                  )}
+
+                  {isAdmin && (
                     <Select
                       value={property?.assigned_inspector_id || 'unassigned'}
                       onValueChange={val => setAssignedInspector(val === 'unassigned' ? null : val)}
                       disabled={savingInspector}
                     >
-                      <SelectTrigger className="h-7 w-[220px]" style={{ fontSize: 11.5 }}>
-                        <SelectValue placeholder="Assign inspector…" />
+                      <SelectTrigger className="h-7 w-[200px]" style={{ fontSize: 11.5 }}>
+                        <SelectValue placeholder="Assign someone else…" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="unassigned">Unassigned</SelectItem>
@@ -176,8 +202,11 @@ export default function PropertyReviewPage() {
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                )}
+                  )}
+                  {isAdmin && staff.length === 0 && (
+                    <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>(no other staff accounts found)</span>
+                  )}
+                </div>
               </div>
 
               <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
