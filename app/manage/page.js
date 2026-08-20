@@ -94,7 +94,35 @@ export default function PropertiesTablePage() {
 
   async function createProperty() {
     if (!address.trim()) return
-    setSavingNew(true); setFhszLoading(true)
+    setSavingNew(true)
+
+    // Duplicate-address guard — property creation never checked this
+    // before, so re-entering an address (typo fix, accidental resubmit,
+    // or a real property genuinely revisited later) silently forked a
+    // second, disconnected property record with its own entries/report
+    // instead of surfacing the one that already exists. Exact
+    // (case-insensitive) match only — near-duplicates from inconsistent
+    // autocomplete formatting won't be caught, but this covers the actual
+    // failure mode seen so far (identical address re-entered outright).
+    const { data: existing } = await supabase
+      .from('properties')
+      .select('id, job_number, created_at')
+      .ilike('address', address.trim())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (existing) {
+      const when = existing.created_at ? new Date(existing.created_at).toLocaleDateString() : 'an earlier date'
+      const openExisting = confirm(`A property already exists at this address (${existing.job_number || 'no job number'}, created ${when}).\n\nOK — open that one instead\nCancel — create a new, separate property anyway`)
+      if (openExisting) {
+        setSavingNew(false)
+        router.push(`/manage/${existing.id}`)
+        return
+      }
+    }
+
+    setFhszLoading(true)
     const fhsz = await lookupFHSZ(address.trim())
     setFhszLoading(false)
     const userName = user?.user_metadata?.full_name || user?.email || 'Unknown'
