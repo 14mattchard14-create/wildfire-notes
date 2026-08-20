@@ -15,7 +15,7 @@ import GuidedEntry from '@/components/GuidedEntry'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
-import { Pencil, Check, X, ClipboardList, UserCog } from 'lucide-react'
+import { Pencil, Check, X, ClipboardList, UserCog, UserPlus, Eye } from 'lucide-react'
 
 // This page used to be a 4-tab property workspace (Entries / Site Notes /
 // Priorities / Report). Site Notes is now embedded directly in Guided Entry
@@ -37,6 +37,11 @@ export default function PropertyReviewPage() {
   const [savingAddress, setSavingAddress] = useState(false)
   const [staff, setStaff] = useState([])
   const [savingInspector, setSavingInspector] = useState(false)
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviting, setInviting] = useState(false)
+  const [inviteLink, setInviteLink] = useState(null)
+  const [inviteCopied, setInviteCopied] = useState(false)
 
   const load = useCallback(async () => {
     setFetching(true)
@@ -65,6 +70,38 @@ export default function PropertyReviewPage() {
     setSavingInspector(false)
     if (error) { alert('Could not update assigned inspector: ' + error.message); return }
     setProperty(p => ({ ...p, assigned_inspector_id: inspectorId || null }))
+  }
+
+  // Restored from the pre-rebuild PropertySelector.js — that component
+  // became orphaned when /manage was rebuilt as a full table (round 33+),
+  // taking the only "Invite Homeowner" entry point in the app with it.
+  // Since then the sole way a homeowner invite got created was the public
+  // guided-request flow on charred-guard-site. This puts a manual trigger
+  // back for the case where a lead didn't come through that funnel.
+  async function inviteHomeowner() {
+    if (!inviteEmail.trim()) return
+    setInviting(true); setInviteLink(null); setInviteCopied(false)
+    try {
+      const res = await authFetch('/api/homeowner-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyId: id, email: inviteEmail.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not create invite')
+      setInviteLink(`${window.location.origin}/invite/${data.token}`)
+    } catch (err) {
+      alert('Invite failed: ' + err.message)
+    } finally {
+      setInviting(false)
+    }
+  }
+
+  function copyInviteLink() {
+    if (!inviteLink) return
+    navigator.clipboard.writeText(inviteLink)
+    setInviteCopied(true)
+    setTimeout(() => setInviteCopied(false), 2000)
   }
 
   function startEditAddress() {
@@ -207,6 +244,61 @@ export default function PropertyReviewPage() {
                     <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>(no other staff accounts found)</span>
                   )}
                 </div>
+
+                {/* Manual homeowner invite — the only other way an invite
+                    gets created is the public guided-request flow on
+                    charred-guard-site, which won't apply to every lead
+                    (phone-in, walk-up, referral). Any staff role can send
+                    one; the API only blocks actual homeowner accounts. */}
+                <div style={{ marginTop: 8 }}>
+                  {!inviteOpen && !inviteLink && (
+                    <button
+                      onClick={() => setInviteOpen(true)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 20, padding: '3px 9px', background: 'transparent', cursor: 'pointer' }}
+                    >
+                      <UserPlus className="size-3" /> Invite Homeowner
+                    </button>
+                  )}
+
+                  {inviteOpen && !inviteLink && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, border: '1px solid var(--line)', background: 'var(--surface)', borderRadius: 6, padding: 10, maxWidth: 420 }}>
+                      <span style={{ fontSize: 10, fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>Homeowner's email</span>
+                      <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: 0 }}>The invite link only works with this exact email — it locks the field on their end.</p>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <Input
+                          type="email"
+                          placeholder="homeowner@email.com"
+                          value={inviteEmail}
+                          onChange={e => setInviteEmail(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && inviteHomeowner()}
+                          autoFocus
+                          className="h-8 text-[13px]"
+                        />
+                        <Button onClick={inviteHomeowner} disabled={inviting || !inviteEmail.trim()} className="h-8 shrink-0 px-3 font-mono text-[10.5px] normal-case">
+                          {inviting ? 'Generating…' : 'Generate Link'}
+                        </Button>
+                        <Button variant="outline" onClick={() => { setInviteOpen(false); setInviteEmail('') }} className="h-8 shrink-0 px-3 font-mono text-[10.5px] normal-case">
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {inviteLink && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, border: '1px solid var(--line)', background: 'var(--surface)', borderRadius: 6, padding: 10, maxWidth: 460 }}>
+                      <span style={{ fontSize: 10, fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>Invite link for {inviteEmail} — share this separately</span>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <Input readOnly value={inviteLink} onFocus={e => e.target.select()} className="h-8 font-mono text-[12px]" />
+                        <Button variant="outline" onClick={copyInviteLink} className="h-8 shrink-0 px-3 font-mono text-[10.5px] normal-case">
+                          {inviteCopied ? '✓ Copied' : 'Copy'}
+                        </Button>
+                      </div>
+                      <button onClick={() => { setInviteOpen(false); setInviteLink(null); setInviteEmail('') }} style={{ alignSelf: 'flex-start', fontSize: 10.5, color: 'var(--text-muted)', textDecoration: 'underline', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                        Done
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
@@ -217,6 +309,14 @@ export default function PropertyReviewPage() {
                   className="gap-1.5 text-[11.5px] font-bold uppercase tracking-wide h-auto py-2 px-3"
                 >
                   <UserCog className="size-3.5" /> Field Capture
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push(`/manage/${id}/homeowner-preview`)}
+                  title="See exactly what a homeowner sees on this property — safe to click around, nothing is sent to the customer"
+                  className="gap-1.5 text-[11.5px] font-bold uppercase tracking-wide h-auto py-2 px-3"
+                >
+                  <Eye className="size-3.5" /> Preview as Homeowner
                 </Button>
                 <Button
                   variant="outline"

@@ -7,7 +7,11 @@ export async function POST(request) {
   try {
     const { user, profile } = await getAuthedUser(request)
     if (!user) return Response.json({ error: 'Not signed in' }, { status: 401 })
-    if (profile.role !== 'employee') return Response.json({ error: 'Only inspectors can invite homeowners' }, { status: 403 })
+    // Any staff role can invite — only homeowner accounts are blocked. Was
+    // `profile.role !== 'employee'`, a leftover from before the role enum
+    // expanded (migration 029) to admin/partner/field_inspector/manager,
+    // which meant every non-'employee' staff account got a false 403 here.
+    if (profile.role === 'homeowner') return Response.json({ error: 'Only inspectors can invite homeowners' }, { status: 403 })
 
     const { propertyId, email } = await request.json()
     if (!propertyId) return Response.json({ error: 'propertyId is required' }, { status: 400 })

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { authFetch } from '@/lib/authFetch'
 import { ZONES } from '@/lib/criteria'
@@ -18,7 +19,13 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 // status is kept out of the response — this component staying "clean"
 // is a UX nicety, not the security boundary.
 
-export default function HomeownerHome({ user }) {
+// `propertyId` + `previewMode`: used only by the admin-only Preview as
+// Homeowner tool (app/manage/[id]/homeowner-preview/page.js) so staff can
+// QA this exact screen against a real property without a second account.
+// A real homeowner never passes these — their own hook call omits both,
+// same as before this override existed.
+export default function HomeownerHome({ user, propertyId = null, previewMode = false }) {
+  const router = useRouter()
   const [property, setProperty] = useState(null)
   const [entries,  setEntries]  = useState([])
   const [loading,  setLoading]  = useState(true)
@@ -31,10 +38,12 @@ export default function HomeownerHome({ user }) {
   const [error,    setError]    = useState(null)
   const [finishing, setFinishing] = useState(false)
 
+  const qs = propertyId ? `?propertyId=${propertyId}` : ''
+
   async function load() {
     setLoading(true)
     try {
-      const res = await authFetch('/api/homeowner/entries')
+      const res = await authFetch(`/api/homeowner/entries${qs}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Could not load your property')
       setProperty(data.property)
@@ -46,11 +55,19 @@ export default function HomeownerHome({ user }) {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [propertyId])
 
   async function finish() {
     if (entries.length === 0) {
       alert("Add at least one note before finishing — walk around and jot down what you see.")
+      return
+    }
+    // Preview mode never calls the real finish endpoint — that route sends
+    // a live notification email and flips the property's real
+    // homeowner_status, neither of which should happen from a staff
+    // clicking around to see what this screen looks like.
+    if (previewMode) {
+      alert("Preview mode — this doesn't actually submit anything or email the team. A real homeowner clicking this would.")
       return
     }
     if (!confirm("Ready to send this to your inspector? You can still add more later if you remember something.")) return
@@ -91,7 +108,12 @@ export default function HomeownerHome({ user }) {
 
   return (
     <div style={{ minHeight: '100vh', paddingBottom: 48 }}>
-      <header style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--header-bg)', borderBottom: '1px solid var(--line)' }}>
+      {previewMode && (
+        <div style={{ position: 'sticky', top: 0, zIndex: 21, background: 'var(--accent)', color: '#fff', textAlign: 'center', padding: '6px 12px', fontSize: 11, fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Preview mode — this is what the homeowner sees. Notes you add here are saved for real; "I'm Done" does not submit or email anyone.
+        </div>
+      )}
+      <header style={{ position: 'sticky', top: previewMode ? 30 : 0, zIndex: 20, background: 'var(--header-bg)', borderBottom: '1px solid var(--line)' }}>
         <div style={{ maxWidth: CONTENT_WIDTH, margin: '0 auto', padding: '18px 16px 14px' }}>
           <span style={{ fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 4, fontFamily: 'monospace', display: 'block' }}>
             Field Notes · Wildfire Inspection
@@ -105,12 +127,21 @@ export default function HomeownerHome({ user }) {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <ThemeToggle />
-              <button
-                onClick={() => supabase.auth.signOut()}
-                style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--header-text)', opacity: 0.7, background: 'none', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}
-              >
-                Sign Out
-              </button>
+              {previewMode ? (
+                <button
+                  onClick={() => router.push(`/manage/${propertyId}`)}
+                  style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--header-text)', opacity: 0.7, background: 'none', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+                >
+                  ← Back to Property
+                </button>
+              ) : (
+                <button
+                  onClick={() => supabase.auth.signOut()}
+                  style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--header-text)', opacity: 0.7, background: 'none', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+                >
+                  Sign Out
+                </button>
+              )}
             </div>
           </div>
         </div>
