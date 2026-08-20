@@ -4,12 +4,20 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/components/AuthProvider'
 import ThemeToggle from '@/components/ThemeToggle'
+import LoginPage from '@/app/login/page'
 
 // CG Inspector — the mobile-first, staff-only field capture portal. See
 // PORTALS_AND_ROLES_PLAN.md: this is deliberately NOT the admin shell
 // (no AdminSidebar, no BackNav) — a stripped-down surface built for
 // standing at a property with a phone, not a desk. Any staff role can use
 // it (employee/admin/partner/field_inspector/manager); homeowners cannot.
+//
+// Deliberately self-contained for signing in: the root `/` page forces
+// every signed-in staff account to /manage (the BOS shell) regardless of
+// where they started, which defeats the point of bookmarking /inspector
+// directly on a phone. Rendering LoginPage here — rather than routing
+// through `/` — means signing in from a bookmarked /inspector link keeps
+// you on /inspector afterward instead of bouncing through BOS first.
 export default function InspectorLayout({ children }) {
   const router = useRouter()
   const { user, loading, isHomeowner, profileReady } = useAuth()
@@ -20,7 +28,9 @@ export default function InspectorLayout({ children }) {
     </div>
   )
 
-  if (!user || isHomeowner) return (
+  if (!user) return <LoginPage />
+
+  if (isHomeowner) return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>Inspector account required to view this page.</p>
     </div>
