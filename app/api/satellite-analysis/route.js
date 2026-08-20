@@ -31,7 +31,11 @@ function safeParseJson(text) {
 export async function POST(request) {
   const { user, profile } = await getAuthedUser(request)
   if (!user) return Response.json({ error: 'Not signed in' }, { status: 401 })
-  if (profile.role !== 'employee') return Response.json({ error: 'Inspector account required' }, { status: 403 })
+  // Was `profile.role !== 'employee'`, a leftover from before the role
+  // enum expanded (migration 029) — blocked every admin/partner/
+  // field_inspector/manager account with a false 403. Only homeowners
+  // should never trigger this.
+  if (profile.role === 'homeowner') return Response.json({ error: 'Inspector account required' }, { status: 403 })
 
   const { propertyId } = await request.json()
   if (!propertyId) return Response.json({ error: 'propertyId is required' }, { status: 400 })

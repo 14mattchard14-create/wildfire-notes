@@ -1,13 +1,19 @@
 import { getAuthedUser, supabaseAdmin } from '@/lib/auth-server'
 
-// Admin-only: list every account with its current role and assigned
-// property (if any), for the Users & Roles tab. See
-// PORTALS_AND_ROLES_PLAN.md resolved question #8 — existing accounts get
-// reassigned explicitly through this UI, not auto-migrated.
+// Admin AND Manager: list every account with its current role and
+// assigned property (if any). Originally admin-only for the Users & Roles
+// tab (see PORTALS_AND_ROLES_PLAN.md resolved question #8 — existing
+// accounts get reassigned explicitly through that UI, not auto-migrated);
+// Manager was added so the "assign someone else" picker in
+// /manage/[id] has a roster to populate for non-admin managers too. The
+// Users & Roles page itself stays admin-only (gated separately in
+// AdminSidebar.js via adminOnly), so a Manager calling this route only
+// ever sees it rendered as a plain assignee dropdown, not the full
+// role-management UI.
 export async function GET(request) {
   const { user, profile } = await getAuthedUser(request)
   if (!user) return Response.json({ error: 'Not signed in' }, { status: 401 })
-  if (profile.role !== 'admin') return Response.json({ error: 'Admin account required' }, { status: 403 })
+  if (profile.role !== 'admin' && profile.role !== 'manager') return Response.json({ error: 'Admin or Manager account required' }, { status: 403 })
 
   // auth.users isn't queryable via the normal Supabase client — the
   // service-role admin API is the only way to list accounts + emails.

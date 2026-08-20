@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { authFetch } from '@/lib/authFetch'
 import { useAuth } from '@/components/AuthProvider'
 import ThemeToggle from '@/components/ThemeToggle'
 import BrandLogo from '@/components/BrandLogo'
@@ -105,6 +106,24 @@ export default function PropertiesTablePage() {
     }).select().single()
     setSavingNew(false)
     if (error) { alert('Could not create property: ' + error.message); return }
+
+    // Kick off the satellite/street-view pre-flight scan right away, not
+    // awaited — the inspector shouldn't wait on it here, and it used to
+    // only run from a manual button inside Guided Entry while standing at
+    // the property. Running it now means it's already done by the time
+    // anyone opens Guided Entry. Only fires if the FHSZ lookup actually
+    // resolved coordinates; if not, the manual "Analyze Satellite View"
+    // button inside Guided Entry still works as a fallback. Failures here
+    // are silent by design — this is a nice-to-have pre-fetch, not a
+    // blocking step in property creation.
+    if (fhsz?.lat && fhsz?.lng) {
+      authFetch('/api/satellite-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyId: data.id }),
+      }).catch(() => {})
+    }
+
     router.push(`/manage/${data.id}`)
   }
 

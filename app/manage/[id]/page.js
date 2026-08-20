@@ -27,7 +27,8 @@ import { Pencil, Check, X, ClipboardList, UserCog, UserPlus, Eye } from 'lucide-
 export default function PropertyReviewPage() {
   const { id } = useParams()
   const router = useRouter()
-  const { user, loading, isHomeowner, isAdmin, profileReady } = useAuth()
+  const { user, loading, isHomeowner, isAdmin, isManager, profileReady } = useAuth()
+  const canAssignOthers = isAdmin || isManager
   const [property, setProperty] = useState(null)
   const [entries,  setEntries]  = useState([])
   const [fetching, setFetching] = useState(true)
@@ -56,13 +57,13 @@ export default function PropertyReviewPage() {
 
   useEffect(() => { load() }, [load])
 
-  // Assigned Inspector picker is admin-only (same permission tier as
-  // creating properties/invites, per PORTALS_AND_ROLES_PLAN.md) — only
-  // fetch the staff list when an admin is actually viewing this page.
+  // Assigned Inspector picker is Admin + Manager tier (Manager added so
+  // an ops lead can staff properties without full admin/user-management
+  // access — Users & Roles and Documentation stay admin-only elsewhere).
   useEffect(() => {
-    if (!isAdmin) return
+    if (!canAssignOthers) return
     authFetch('/api/admin/users').then(res => res.json()).then(data => setStaff(data.users ?? [])).catch(() => {})
-  }, [isAdmin])
+  }, [canAssignOthers])
 
   async function setAssignedInspector(inspectorId) {
     setSavingInspector(true)
@@ -196,9 +197,11 @@ export default function PropertyReviewPage() {
                     any signed-in staff account can self-assign with one
                     click (no admin needed — this is what unblocks a single-
                     operator account before anyone's gone through /users to
-                    set up admin), while assigning it to *someone else*
-                    stays admin-only, matching property/invite creation's
-                    permission tier per PORTALS_AND_ROLES_PLAN.md. */}
+                    set up admin); assigning it to *someone else* requires
+                    Admin or Manager — Manager exists specifically so an
+                    ops lead can staff properties without full user-
+                    management access (Users & Roles / Documentation stay
+                    admin-only, gated separately in AdminSidebar.js). */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                   <UserCog className="size-3.5" style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                   {property?.assigned_inspector_id ? (
@@ -223,7 +226,7 @@ export default function PropertyReviewPage() {
                     </button>
                   )}
 
-                  {isAdmin && (
+                  {canAssignOthers && (
                     <Select
                       value={property?.assigned_inspector_id || 'unassigned'}
                       onValueChange={val => setAssignedInspector(val === 'unassigned' ? null : val)}
@@ -240,7 +243,7 @@ export default function PropertyReviewPage() {
                       </SelectContent>
                     </Select>
                   )}
-                  {isAdmin && staff.length === 0 && (
+                  {canAssignOthers && staff.length === 0 && (
                     <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>(no other staff accounts found)</span>
                   )}
                 </div>
