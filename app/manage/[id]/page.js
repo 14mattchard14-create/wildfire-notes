@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { authFetch } from '@/lib/authFetch'
 import { useAuth } from '@/components/AuthProvider'
 import ThemeToggle from '@/components/ThemeToggle'
 import BrandLogo from '@/components/BrandLogo'
@@ -13,7 +14,8 @@ import EntryForm from '@/components/EntryForm'
 import GuidedEntry from '@/components/GuidedEntry'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Pencil, Check, X, ClipboardList } from 'lucide-react'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { Pencil, Check, X, ClipboardList, UserCog } from 'lucide-react'
 
 // This page used to be a 4-tab property workspace (Entries / Site Notes /
 // Priorities / Report). Site Notes is now embedded directly in Guided Entry
@@ -25,7 +27,7 @@ import { Pencil, Check, X, ClipboardList } from 'lucide-react'
 export default function PropertyReviewPage() {
   const { id } = useParams()
   const router = useRouter()
-  const { user, loading, isHomeowner, profileReady } = useAuth()
+  const { user, loading, isHomeowner, isAdmin, profileReady } = useAuth()
   const [property, setProperty] = useState(null)
   const [entries,  setEntries]  = useState([])
   const [fetching, setFetching] = useState(true)
@@ -33,6 +35,8 @@ export default function PropertyReviewPage() {
   const [editingAddress, setEditingAddress] = useState(false)
   const [addressDraft, setAddressDraft] = useState('')
   const [savingAddress, setSavingAddress] = useState(false)
+  const [staff, setStaff] = useState([])
+  const [savingInspector, setSavingInspector] = useState(false)
 
   const load = useCallback(async () => {
     setFetching(true)
@@ -46,6 +50,22 @@ export default function PropertyReviewPage() {
   }, [id])
 
   useEffect(() => { load() }, [load])
+
+  // Assigned Inspector picker is admin-only (same permission tier as
+  // creating properties/invites, per PORTALS_AND_ROLES_PLAN.md) — only
+  // fetch the staff list when an admin is actually viewing this page.
+  useEffect(() => {
+    if (!isAdmin) return
+    authFetch('/api/admin/users').then(res => res.json()).then(data => setStaff(data.users ?? [])).catch(() => {})
+  }, [isAdmin])
+
+  async function setAssignedInspector(inspectorId) {
+    setSavingInspector(true)
+    const { error } = await supabase.from('properties').update({ assigned_inspector_id: inspectorId || null }).eq('id', id)
+    setSavingInspector(false)
+    if (error) { alert('Could not update assigned inspector: ' + error.message); return }
+    setProperty(p => ({ ...p, assigned_inspector_id: inspectorId || null }))
+  }
 
   function startEditAddress() {
     setAddressDraft(property?.address ?? '')
@@ -132,17 +152,53 @@ export default function PropertyReviewPage() {
                   </div>
                 )}
                 {property?.visit_date && <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)' }}>Visit: {property.visit_date}</span>}
+
+                {/* Admin-only — assigns/reassigns who sees this property in
+                    the CG Inspector portal (filtered to
+                    assigned_inspector_id there, regardless of the
+                    assignee's overall role). Same permission tier as
+                    property/invite creation per PORTALS_AND_ROLES_PLAN.md. */}
+                {isAdmin && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                    <UserCog className="size-3.5" style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                    <Select
+                      value={property?.assigned_inspector_id || 'unassigned'}
+                      onValueChange={val => setAssignedInspector(val === 'unassigned' ? null : val)}
+                      disabled={savingInspector}
+                    >
+                      <SelectTrigger className="h-7 w-[220px]" style={{ fontSize: 11.5 }}>
+                        <SelectValue placeholder="Assign inspector…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">Unassigned</SelectItem>
+                        {staff.map(s => (
+                          <SelectItem key={s.id} value={s.id}>{s.fullName || s.email}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
 
-              <Button
-                variant="outline"
-                onClick={() => router.push(`/manage/${id}/review`)}
-                disabled={entries.length === 0}
-                title={entries.length === 0 ? 'Log at least one entry first' : undefined}
-                className="gap-1.5 text-[11.5px] font-bold uppercase tracking-wide h-auto py-2 px-3 shrink-0"
-              >
-                <ClipboardList className="size-3.5" /> Review & Publish
-              </Button>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push(`/inspector/${id}`)}
+                  title="Open the mobile-first field capture portal for this property"
+                  className="gap-1.5 text-[11.5px] font-bold uppercase tracking-wide h-auto py-2 px-3"
+                >
+                  <UserCog className="size-3.5" /> Field Capture
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push(`/manage/${id}/review`)}
+                  disabled={entries.length === 0}
+                  title={entries.length === 0 ? 'Log at least one entry first' : undefined}
+                  className="gap-1.5 text-[11.5px] font-bold uppercase tracking-wide h-auto py-2 px-3"
+                >
+                  <ClipboardList className="size-3.5" /> Review & Publish
+                </Button>
+              </div>
             </div>
 
             <Button
