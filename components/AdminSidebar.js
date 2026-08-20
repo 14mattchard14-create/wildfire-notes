@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { Home, Users, Activity, Sparkles, Settings, SidebarClose, SidebarOpen, Calculator, TrendingUp, UserCog, FileText } from 'lucide-react'
+import { Home, Users, Activity, Sparkles, Settings, SidebarClose, SidebarOpen, Calculator, TrendingUp, UserCog, FileText, Smartphone } from 'lucide-react'
 import { useAuth } from './AuthProvider'
 
 // Persistent left-nav for every inspector-facing admin page — same list,
@@ -25,6 +25,7 @@ const NAV = [
   { href: '/business', label: 'Business', icon: TrendingUp, match: p => p.startsWith('/business') },
   { href: '/crm', label: 'CRM', icon: Users, match: p => p.startsWith('/crm') },
   { href: '/manage', label: 'Properties', icon: Home, match: p => p === '/manage' || p.startsWith('/manage/') },
+  { href: '/inspector', label: 'CG Inspector', icon: Smartphone, match: p => p.startsWith('/inspector') },
   { href: '/users', label: 'Users & Roles', icon: UserCog, match: p => p.startsWith('/users'), adminOnly: true },
   { href: '/documentation', label: 'Documentation', icon: FileText, match: p => p.startsWith('/documentation'), adminOnly: true },
 ]
@@ -32,7 +33,7 @@ const NAV = [
 // Rendered in NAV's intended display order — the array above is ordered
 // for match-priority, not display, so we sort it here. Settings is pinned
 // to the very bottom regardless of what else is added to this list later.
-const DISPLAY_ORDER = ['/manage', '/crm', '/estimate', '/business', '/users', '/documentation', '/insights', '/quality']
+const DISPLAY_ORDER = ['/manage', '/inspector', '/crm', '/estimate', '/business', '/users', '/documentation', '/insights', '/quality']
 const ORDERED_NAV = DISPLAY_ORDER.map(href => NAV.find(item => item.href === href))
 const SETTINGS_ITEM = NAV.find(item => item.href === '/insights/settings')
 
