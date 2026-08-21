@@ -60,9 +60,15 @@ export default function PropertyReviewPage() {
   // Assigned Inspector picker is Admin + Manager tier (Manager added so
   // an ops lead can staff properties without full admin/user-management
   // access — Users & Roles and Documentation stay admin-only elsewhere).
+  // /api/admin/users returns every account (it also feeds the full Users
+  // & Roles page, which needs homeowners visible), so homeowner-role
+  // accounts are filtered out here — this dropdown is for assigning who
+  // does the inspection, not who owns the property.
   useEffect(() => {
     if (!canAssignOthers) return
-    authFetch('/api/admin/users').then(res => res.json()).then(data => setStaff(data.users ?? [])).catch(() => {})
+    authFetch('/api/admin/users').then(res => res.json())
+      .then(data => setStaff((data.users ?? []).filter(u => u.role !== 'homeowner')))
+      .catch(() => {})
   }, [canAssignOthers])
 
   async function setAssignedInspector(inspectorId) {
@@ -193,30 +199,43 @@ export default function PropertyReviewPage() {
 
                 {/* Assigning who sees this property in the CG Inspector
                     portal (filtered to assigned_inspector_id there,
-                    regardless of the assignee's overall role). Two tiers:
-                    any signed-in staff account can self-assign with one
-                    click (no admin needed — this is what unblocks a single-
-                    operator account before anyone's gone through /users to
-                    set up admin); assigning it to *someone else* requires
-                    Admin or Manager — Manager exists specifically so an
-                    ops lead can staff properties without full user-
-                    management access (Users & Roles / Documentation stay
-                    admin-only, gated separately in AdminSidebar.js). */}
+                    regardless of the assignee's overall role). Admin or
+                    Manager tier — Manager exists specifically so an ops
+                    lead can staff properties without full user-management
+                    access (Users & Roles / Documentation stay admin-only,
+                    gated separately in AdminSidebar.js). The dropdown is
+                    the only assignment control now — it already includes
+                    "you" as an option, so a separate one-click "assign to
+                    me" button was redundant and got removed. Labeled by
+                    email rather than the account's self-entered display
+                    name (user_metadata.full_name), since that field is
+                    freeform and unreliable — email is the one thing that
+                    reliably identifies which real account is which. */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                   <UserCog className="size-3.5" style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                  {property?.assigned_inspector_id ? (
+                  {property?.assigned_inspector_id && (
                     <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-                      Assigned to: {property.assigned_inspector_id === user?.id ? 'you' : (staff.find(s => s.id === property.assigned_inspector_id)?.fullName || staff.find(s => s.id === property.assigned_inspector_id)?.email || property.assigned_inspector_id)}
-                      {' '}
-                      <button
-                        onClick={() => setAssignedInspector(null)}
-                        disabled={savingInspector}
-                        style={{ background: 'none', border: 'none', padding: 0, marginLeft: 4, color: 'var(--warn)', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}
-                      >
-                        Unassign
-                      </button>
+                      Assigned to: {property.assigned_inspector_id === user?.id ? 'you' : (staff.find(s => s.id === property.assigned_inspector_id)?.email || property.assigned_inspector_id)}
                     </span>
-                  ) : (
+                  )}
+
+                  {canAssignOthers ? (
+                    <Select
+                      value={property?.assigned_inspector_id || 'unassigned'}
+                      onValueChange={val => setAssignedInspector(val === 'unassigned' ? null : val)}
+                      disabled={savingInspector}
+                    >
+                      <SelectTrigger className="h-7 w-[200px]" style={{ fontSize: 11.5 }}>
+                        <SelectValue placeholder="Assign…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">Unassigned</SelectItem>
+                        {staff.map(s => (
+                          <SelectItem key={s.id} value={s.id}>{s.email}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : !property?.assigned_inspector_id && (
                     <button
                       onClick={() => setAssignedInspector(user?.id)}
                       disabled={savingInspector || !user}
@@ -225,23 +244,14 @@ export default function PropertyReviewPage() {
                       Assign to me
                     </button>
                   )}
-
-                  {canAssignOthers && (
-                    <Select
-                      value={property?.assigned_inspector_id || 'unassigned'}
-                      onValueChange={val => setAssignedInspector(val === 'unassigned' ? null : val)}
+                  {property?.assigned_inspector_id && (
+                    <button
+                      onClick={() => setAssignedInspector(null)}
                       disabled={savingInspector}
+                      style={{ background: 'none', border: 'none', padding: 0, color: 'var(--warn)', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}
                     >
-                      <SelectTrigger className="h-7 w-[200px]" style={{ fontSize: 11.5 }}>
-                        <SelectValue placeholder="Assign someone else…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="unassigned">Unassigned</SelectItem>
-                        {staff.map(s => (
-                          <SelectItem key={s.id} value={s.id}>{s.fullName || s.email}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      Unassign
+                    </button>
                   )}
                   {canAssignOthers && staff.length === 0 && (
                     <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>(no other staff accounts found)</span>
