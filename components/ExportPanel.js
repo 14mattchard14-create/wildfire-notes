@@ -5,9 +5,11 @@ import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 import { X } from 'lucide-react'
 
 export default function ExportPanel({ property, entries, user }) {
+  const { alertDialog } = useConfirmDialog()
   const [tab,        setTab]        = useState('raw')
   const [text,       setText]       = useState('')
   const [report,     setReport]     = useState('')
@@ -74,7 +76,7 @@ export default function ExportPanel({ property, entries, user }) {
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       setReport(data.report); downloadDocx(data.docx)
-    } catch (err) { alert('Report generation failed: ' + err.message) }
+    } catch (err) { await alertDialog('Report generation failed: ' + err.message) }
     setGenning(false)
   }
 

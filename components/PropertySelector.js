@@ -14,11 +14,13 @@ import {
 import { MapPin, Pencil, Plus, RotateCw, UserPlus } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { authFetch } from '@/lib/authFetch'
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 
 const FHSZ_COLOR = { 'Moderate': 'var(--info)', 'High': '#c97c2a', 'Very High': 'var(--warn)' }
 
 export default function PropertySelector({ selected, onSelect, user }) {
   const { isHomeowner } = useAuth() ?? {}
+  const { alertDialog } = useConfirmDialog()
   const [properties,  setProperties]  = useState([])
   const [creating,    setCreating]    = useState(false)
   const [editing,     setEditing]     = useState(false)
@@ -56,8 +58,8 @@ export default function PropertySelector({ selected, onSelect, user }) {
 
   function selectSuggestion(s) { setAddress(s); setSuggestions([]) }
 
-  function locateMe() {
-    if (!navigator.geolocation) { alert('Geolocation not supported.'); return }
+  async function locateMe() {
+    if (!navigator.geolocation) { await alertDialog('Geolocation not supported.'); return }
     setLocating(true)
     navigator.geolocation.getCurrentPosition(async pos => {
       try {
@@ -65,9 +67,9 @@ export default function PropertySelector({ selected, onSelect, user }) {
         const res = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`)
         const data = await res.json()
         if (data.address) { setAddress(data.address); setSuggestions([]) }
-      } catch { alert('Could not reverse geocode location.') }
+      } catch { await alertDialog('Could not reverse geocode location.') }
       setLocating(false)
-    }, () => { alert('Location access denied.'); setLocating(false) }, { enableHighAccuracy: true, timeout: 10000 })
+    }, async () => { await alertDialog('Location access denied.'); setLocating(false) }, { enableHighAccuracy: true, timeout: 10000 })
   }
 
   async function lookupFHSZ(addr) {
@@ -83,7 +85,7 @@ export default function PropertySelector({ selected, onSelect, user }) {
     const fhsz = await lookupFHSZ(selected.address)
     setFhszLoading(false)
     const { data, error } = await supabase.from('properties').update({ fhsz: fhsz?.fhsz ?? null, fhsz_sra: fhsz?.sra ?? null, fhsz_county: fhsz?.county ?? null, lat: fhsz?.lat ?? null, lng: fhsz?.lng ?? null }).eq('id', selected.id).select().single()
-    if (error) { alert('Refresh failed: ' + error.message); return }
+    if (error) { await alertDialog('Refresh failed: ' + error.message); return }
     setProperties(prev => prev.map(p => p.id === data.id ? data : p)); onSelect(data)
   }
 
@@ -95,7 +97,7 @@ export default function PropertySelector({ selected, onSelect, user }) {
     const userName = user?.user_metadata?.full_name || user?.email || 'Unknown'
     const { data, error } = await supabase.from('properties').insert({ address: address.trim(), visit_date: visitDate || null, created_by: user?.id || null, created_by_name: userName, fhsz: fhsz?.fhsz ?? null, fhsz_sra: fhsz?.sra ?? null, fhsz_county: fhsz?.county ?? null, lat: fhsz?.lat ?? null, lng: fhsz?.lng ?? null }).select().single()
     setLoading(false)
-    if (error) { alert('Could not create property: ' + error.message); return }
+    if (error) { await alertDialog('Could not create property: ' + error.message); return }
     setProperties(prev => [data, ...prev]); onSelect(data); setCreating(false); setAddress(''); setVisitDate('')
   }
 
@@ -111,7 +113,7 @@ export default function PropertySelector({ selected, onSelect, user }) {
     }
     const { data, error } = await supabase.from('properties').update({ address: address.trim(), visit_date: visitDate || null, ...fhszFields }).eq('id', selected.id).select().single()
     setLoading(false)
-    if (error) { alert('Could not update property: ' + error.message); return }
+    if (error) { await alertDialog('Could not update property: ' + error.message); return }
     setProperties(prev => prev.map(p => p.id === data.id ? data : p)); onSelect(data); setEditing(false)
   }
 
@@ -130,7 +132,7 @@ export default function PropertySelector({ selected, onSelect, user }) {
       if (!res.ok) throw new Error(data.error || 'Could not create invite')
       setInviteLink(`${window.location.origin}/invite/${data.token}`)
     } catch (err) {
-      alert('Invite failed: ' + err.message)
+      await alertDialog('Invite failed: ' + err.message)
     } finally {
       setInviting(false)
     }

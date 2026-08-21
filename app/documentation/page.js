@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Plus, Trash2, FileText } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 
 function fmtDateTime(iso) {
   if (!iso) return '—'
@@ -13,6 +14,7 @@ function fmtDateTime(iso) {
 }
 
 export default function DocumentationPage() {
+  const { confirmDialog, alertDialog } = useConfirmDialog()
   const [documents, setDocuments] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -61,7 +63,7 @@ export default function DocumentationPage() {
       if (!res.ok) throw new Error(data.error || 'Create failed')
       await load(data.document.id)
     } catch (err) {
-      alert('Could not create document: ' + err.message)
+      await alertDialog('Could not create document: ' + err.message)
     } finally {
       setCreating(false)
     }
@@ -81,14 +83,14 @@ export default function DocumentationPage() {
       setDocuments(prev => prev.map(d => (d.id === selectedId ? data.document : d)))
       setDirty(false)
     } catch (err) {
-      alert('Could not save: ' + err.message)
+      await alertDialog('Could not save: ' + err.message)
     } finally {
       setSaving(false)
     }
   }
 
   async function remove(id) {
-    if (!confirm('Delete this document? This cannot be undone.')) return
+    if (!(await confirmDialog('Delete this document? This cannot be undone.'))) return
     try {
       const res = await authFetch(`/api/admin/documents/${id}`, { method: 'DELETE' })
       const data = await res.json()
@@ -97,7 +99,7 @@ export default function DocumentationPage() {
       setDocuments(remaining)
       if (selectedId === id) select(remaining[0])
     } catch (err) {
-      alert('Could not delete: ' + err.message)
+      await alertDialog('Could not delete: ' + err.message)
     }
   }
 

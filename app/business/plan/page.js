@@ -5,6 +5,7 @@ import { marked } from 'marked'
 import { authFetch } from '@/lib/authFetch'
 import { wordDiff } from '@/lib/reportSchema'
 import { parseSections, parseBlocks, blocksToMarkdown, slugify } from '@/lib/planSchema'
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 
 // Editable, version-tracked, commentable view of the business plan
 // (migration 027 — business_plan / business_plan_versions /
@@ -536,6 +537,7 @@ function SectionBlock({ section, onSave, savingIndex, onShowHistory, comments, o
 }
 
 export default function PlanPage() {
+  const { confirmDialog, alertDialog } = useConfirmDialog()
   const [plan, setPlan] = useState(undefined) // undefined = loading, null = no plan yet
   const [versions, setVersions] = useState([])
   const [comments, setComments] = useState([])
@@ -606,7 +608,7 @@ export default function PlanPage() {
       body: JSON.stringify({ action: 'edit', heading: section.heading, newBody }),
     }).then(r => r.json())
     setSavingBlock(null)
-    if (res.error) { alert('Save failed: ' + res.error); return }
+    if (res.error) { await alertDialog('Save failed: ' + res.error); return }
     await load()
   }
 
@@ -615,7 +617,7 @@ export default function PlanPage() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ section, body, quote }),
     }).then(r => r.json())
-    if (res.error) { alert('Could not post comment: ' + res.error); return }
+    if (res.error) { await alertDialog('Could not post comment: ' + res.error); return }
     setComments(prev => [...prev, res.comment])
   }
 
@@ -679,14 +681,14 @@ export default function PlanPage() {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: comment.id, resolved: !comment.resolved }),
     }).then(r => r.json())
-    if (res.error) { alert('Could not update comment: ' + res.error); return }
+    if (res.error) { await alertDialog('Could not update comment: ' + res.error); return }
     setComments(prev => prev.map(c => (c.id === comment.id ? res.comment : c)))
   }
 
   async function handleDeleteComment(comment) {
-    if (!confirm('Delete this comment?')) return
+    if (!(await confirmDialog('Delete this comment?'))) return
     const res = await authFetch(`/api/business-plan-comments?id=${comment.id}`, { method: 'DELETE' }).then(r => r.json())
-    if (res.error) { alert('Could not delete comment: ' + res.error); return }
+    if (res.error) { await alertDialog('Could not delete comment: ' + res.error); return }
     setComments(prev => prev.filter(c => c.id !== comment.id))
   }
 

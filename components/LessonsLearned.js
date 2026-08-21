@@ -6,6 +6,7 @@ import { authFetch } from '@/lib/authFetch'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 import { Check, Trash2, Plus } from 'lucide-react'
 
 // Freeform "lessons learned" notes — the human-written half of the Report
@@ -56,6 +57,7 @@ function LessonRow({ lesson, onToggleApplied, onDelete }) {
 }
 
 export default function LessonsLearned() {
+  const { confirmDialog, alertDialog } = useConfirmDialog()
   const [lessons, setLessons] = useState([])
   const [properties, setProperties] = useState([])
   const [fetching, setFetching] = useState(true)
@@ -93,7 +95,7 @@ export default function LessonsLearned() {
       setPropertyId('')
       load()
     } catch (err) {
-      alert(err.message)
+      await alertDialog(err.message)
     } finally {
       setSaving(false)
     }
@@ -110,7 +112,7 @@ export default function LessonsLearned() {
   }
 
   async function deleteLesson(lesson) {
-    if (!confirm('Delete this lesson?')) return
+    if (!(await confirmDialog('Delete this lesson?'))) return
     setLessons(prev => prev.filter(l => l.id !== lesson.id))
     await authFetch(`/api/lessons/${lesson.id}`, { method: 'DELETE' }).catch(() => {})
   }

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ZONES } from '@/lib/criteria'
 import InfoModal from './InfoModal'
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 
 const c = {
   surface: 'var(--surface)',
@@ -60,6 +61,7 @@ const DISTANCE_TYPES = [
 const inputStyle = { width: '100%', background: 'var(--bg)', border: `1px solid ${c.line}`, borderRadius: 4, color: c.text, fontSize: 14, padding: '8px 10px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }
 
 export default function EntriesList({ entries, onDeleted }) {
+  const { confirmDialog, alertDialog } = useConfirmDialog()
   const [expanded,  setExpanded]  = useState(null)
   const [lightbox,   setLightbox]  = useState(null)
   const [editingId, setEditingId] = useState(null)
@@ -69,7 +71,7 @@ export default function EntriesList({ entries, onDeleted }) {
   const [viewInfoOpen, setViewInfoOpen] = useState(null) // view-mode info modal: holds category string
 
   async function deleteEntry(id) {
-    if (!confirm('Delete this entry?')) return
+    if (!(await confirmDialog('Delete this entry?'))) return
     await supabase.from('entries').delete().eq('id', id)
     onDeleted()
   }
@@ -106,7 +108,7 @@ export default function EntriesList({ entries, onDeleted }) {
       detail:   editData.detail.trim() || null,
     }).eq('id', id)
     setSaving(false)
-    if (error) { alert('Save failed: ' + error.message); return }
+    if (error) { await alertDialog('Save failed: ' + error.message); return }
     setEditingId(null)
     onDeleted() // reuse refresh callback
   }

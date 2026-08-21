@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 
 const FHSZ_COLOR = { 'Moderate': 'var(--info)', 'High': '#c97c2a', 'Very High': 'var(--warn)' }
 
 export default function FireData({ property, propertyId }) {
+  const { alertDialog } = useConfirmDialog()
   const [fireHistory, setFireHistory] = useState(null)
   const [fireLoading, setFireLoading] = useState(false)
   const [notes,  setNotes]  = useState({ wui: '', local_agency: '' })
@@ -30,7 +32,7 @@ export default function FireData({ property, propertyId }) {
     const { error } = await supabase.from('site_notes')
       .upsert({ property_id: propertyId, ...notes, updated_at: new Date().toISOString() }, { onConflict: 'property_id' })
     setSaving(false)
-    if (error) { alert('Save failed: ' + error.message); return }
+    if (error) { await alertDialog('Save failed: ' + error.message); return }
     setSaved(true); setTimeout(() => setSaved(false), 2000)
   }
 

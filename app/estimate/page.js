@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { parseReportData } from '@/lib/reportSchema'
 import { Pencil, Trash2, Plus, ChevronDown, ChevronRight, X, Check } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 
 // The "table with draft values, used to estimate price" the user asked
 // for: mitigation_price_rates (migrations 022 + 023) holds a cost-per-unit
@@ -28,6 +29,7 @@ function emptyRateDraft() { return { category: '', unit: 'ft', material_rate_low
 function totalOf(low, high) { return { low: Number(low) || 0, high: Number(high) || 0 } }
 
 function RateRow({ rate, onSave, onDelete }) {
+  const { alertDialog } = useConfirmDialog()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(rate)
   const [saving, setSaving] = useState(false)
@@ -35,9 +37,9 @@ function RateRow({ rate, onSave, onDelete }) {
   function startEdit() { setDraft(rate); setEditing(true) }
 
   async function save() {
-    if (!draft.category.trim()) { alert('Category is required.'); return }
+    if (!draft.category.trim()) { await alertDialog('Category is required.'); return }
     const vals = [draft.material_rate_low, draft.material_rate_high, draft.labor_rate_low, draft.labor_rate_high].map(Number)
-    if (vals.some(v => !Number.isFinite(v))) { alert('Material/Labor rates must be numbers.'); return }
+    if (vals.some(v => !Number.isFinite(v))) { await alertDialog('Material/Labor rates must be numbers.'); return }
     setSaving(true)
     await onSave(rate.id, {
       category: draft.category.trim(), unit: draft.unit,
@@ -95,14 +97,15 @@ function RateRow({ rate, onSave, onDelete }) {
 }
 
 function RatesTable({ rates, onAdd, onSave, onDelete }) {
+  const { alertDialog } = useConfirmDialog()
   const [adding, setAdding] = useState(false)
   const [draft, setDraft] = useState(emptyRateDraft())
   const [saving, setSaving] = useState(false)
 
   async function submitAdd() {
-    if (!draft.category.trim()) { alert('Category is required.'); return }
+    if (!draft.category.trim()) { await alertDialog('Category is required.'); return }
     const vals = [draft.material_rate_low, draft.material_rate_high, draft.labor_rate_low, draft.labor_rate_high].map(Number)
-    if (vals.some(v => !Number.isFinite(v))) { alert('Material/Labor rates must be numbers.'); return }
+    if (vals.some(v => !Number.isFinite(v))) { await alertDialog('Material/Labor rates must be numbers.'); return }
     setSaving(true)
     await onAdd({
       category: draft.category.trim(), unit: draft.unit,
@@ -256,6 +259,7 @@ function PropertyEstimateRow({ property, rates }) {
 }
 
 export default function EstimatePage() {
+  const { confirmDialog, alertDialog } = useConfirmDialog()
   const [rates, setRates] = useState([])
   const [properties, setProperties] = useState([])
   const [fetching, setFetching] = useState(true)
@@ -275,18 +279,18 @@ export default function EstimatePage() {
 
   async function addRate(payload) {
     const { error } = await supabase.from('mitigation_price_rates').insert(payload)
-    if (error) { alert('Save failed: ' + error.message); return }
+    if (error) { await alertDialog('Save failed: ' + error.message); return }
     load()
   }
   async function saveRate(id, payload) {
     const { error } = await supabase.from('mitigation_price_rates').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', id)
-    if (error) { alert('Save failed: ' + error.message); return }
+    if (error) { await alertDialog('Save failed: ' + error.message); return }
     load()
   }
   async function deleteRate(id) {
-    if (!confirm('Delete this rate category? Any measurements categorized under it will show as unpriced until re-categorized or the rate is re-added.')) return
+    if (!(await confirmDialog('Delete this rate category? Any measurements categorized under it will show as unpriced until re-categorized or the rate is re-added.'))) return
     const { error } = await supabase.from('mitigation_price_rates').delete().eq('id', id)
-    if (error) { alert('Delete failed: ' + error.message); return }
+    if (error) { await alertDialog('Delete failed: ' + error.message); return }
     load()
   }
 

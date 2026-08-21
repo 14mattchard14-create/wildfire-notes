@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 
 function compressImage(file, maxDim = 800, targetBytes = 700_000) {
   return new Promise((resolve, reject) => {
@@ -41,6 +42,7 @@ export default function PhotoUpload({ propertyId, onPhotoUrl, initialUrl }) {
   // entries but would silently drop an existing photo on first render of
   // an edit form (the parent's photoUrl state matches, but the widget
   // itself would show "+ Take / Upload Photo" as if nothing were set).
+  const { alertDialog } = useConfirmDialog()
   const [preview,   setPreview]   = useState(initialUrl || null)
   const [uploading, setUploading] = useState(false)
   const inputRef = useRef()
@@ -55,7 +57,7 @@ export default function PhotoUpload({ propertyId, onPhotoUrl, initialUrl }) {
       const publicUrl = await uploadToSupabase(compressed, propertyId)
       onPhotoUrl(publicUrl)
     } catch (err) {
-      alert('Photo upload failed: ' + err.message); setPreview(null); onPhotoUrl(null)
+      await alertDialog('Photo upload failed: ' + err.message); setPreview(null); onPhotoUrl(null)
     }
     setUploading(false)
   }

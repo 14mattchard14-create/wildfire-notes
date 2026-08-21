@@ -8,6 +8,7 @@ import { parseSatellite, getAreaText } from '@/lib/satellite'
 import PhotoUpload from './PhotoUpload'
 import InfoModal from './InfoModal'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 
 const c = {
   bg:      'var(--bg)',
@@ -35,6 +36,7 @@ function itemDone(entries, item) {
 // instead of inserting) — omit it to add a new entry, which is the
 // original behavior.
 function ItemInlineForm({ item, propertyId, user, existingEntry, onSaved, onCancel, onDeleted }) {
+  const { confirmDialog, alertDialog } = useConfirmDialog()
   const [status,   setStatus]   = useState(existingEntry?.status || null)
   const [note,     setNote]     = useState(existingEntry?.note || '')
   const [photoUrl, setPhotoUrl] = useState(existingEntry?.photo_url || null)
@@ -44,15 +46,15 @@ function ItemInlineForm({ item, propertyId, user, existingEntry, onSaved, onCanc
   const isEdit = !!existingEntry
 
   async function save() {
-    if (!note.trim()) { alert('Add a quick note describing what you see.'); return }
-    if (!status)      { alert('Select a status.'); return }
+    if (!note.trim()) { await alertDialog('Add a quick note describing what you see.'); return }
+    if (!status)      { await alertDialog('Select a status.'); return }
     setSaving(true)
     if (isEdit) {
       const { error } = await supabase.from('entries')
         .update({ status, note: note.trim(), photo_url: photoUrl || null })
         .eq('id', existingEntry.id)
       setSaving(false)
-      if (error) { alert('Save failed: ' + error.message); return }
+      if (error) { await alertDialog('Save failed: ' + error.message); return }
     } else {
       const userName = user?.user_metadata?.full_name || user?.email || 'Unknown'
       const { error } = await supabase.from('entries').insert({
@@ -67,17 +69,17 @@ function ItemInlineForm({ item, propertyId, user, existingEntry, onSaved, onCanc
         created_by_name: userName,
       })
       setSaving(false)
-      if (error) { alert('Save failed: ' + error.message); return }
+      if (error) { await alertDialog('Save failed: ' + error.message); return }
     }
     onSaved()
   }
 
   async function del() {
-    if (!confirm('Delete this entry? This can\'t be undone.')) return
+    if (!(await confirmDialog('Delete this entry? This can\'t be undone.'))) return
     setDeleting(true)
     const { error } = await supabase.from('entries').delete().eq('id', existingEntry.id)
     setDeleting(false)
-    if (error) { alert('Delete failed: ' + error.message); return }
+    if (error) { await alertDialog('Delete failed: ' + error.message); return }
     onDeleted()
   }
 
@@ -132,28 +134,29 @@ function ItemInlineForm({ item, propertyId, user, existingEntry, onSaved, onCanc
 // `existingPlant` to replace an already-saved photo (or delete it) instead
 // of adding a new one. Mirrors ItemInlineForm's add/edit/delete shape.
 function PlantInlineForm({ propertyId, zone, existingPlant, onSaved, onCancel, onDeleted }) {
+  const { confirmDialog, alertDialog } = useConfirmDialog()
   const [photoUrl, setPhotoUrl] = useState(existingPlant?.photo_url || null)
   const [saving,   setSaving]   = useState(false)
   const [deleting, setDeleting] = useState(false)
   const isEdit = !!existingPlant
 
   async function save() {
-    if (!photoUrl) { alert('Take a photo of the plant first.'); return }
+    if (!photoUrl) { await alertDialog('Take a photo of the plant first.'); return }
     setSaving(true)
     const { error } = isEdit
       ? await supabase.from('property_plants').update({ photo_url: photoUrl }).eq('id', existingPlant.id)
       : await supabase.from('property_plants').insert({ property_id: propertyId, zone, photo_url: photoUrl })
     setSaving(false)
-    if (error) { alert('Save failed: ' + error.message); return }
+    if (error) { await alertDialog('Save failed: ' + error.message); return }
     onSaved()
   }
 
   async function del() {
-    if (!confirm('Delete this plant photo? This can\'t be undone.')) return
+    if (!(await confirmDialog('Delete this plant photo? This can\'t be undone.'))) return
     setDeleting(true)
     const { error } = await supabase.from('property_plants').delete().eq('id', existingPlant.id)
     setDeleting(false)
-    if (error) { alert('Delete failed: ' + error.message); return }
+    if (error) { await alertDialog('Delete failed: ' + error.message); return }
     onDeleted()
   }
 
@@ -195,6 +198,7 @@ function PlantInlineForm({ propertyId, zone, existingPlant, onSaved, onCancel, o
 // /estimate tab (see mitigation_price_rates, migration 022), so matching
 // has to be an exact category lookup, not fuzzy label text.
 function MeasurementInlineForm({ propertyId, zone, existingMeasurement, onSaved, onCancel, onDeleted }) {
+  const { confirmDialog, alertDialog } = useConfirmDialog()
   const [label,    setLabel]    = useState(existingMeasurement?.label || '')
   const [category, setCategory] = useState(existingMeasurement?.category || '')
   const [rates,    setRates]    = useState([])
@@ -212,25 +216,25 @@ function MeasurementInlineForm({ propertyId, zone, existingMeasurement, onSaved,
   const unit = selectedRate?.unit || existingMeasurement?.unit || ''
 
   async function save() {
-    if (!label.trim()) { alert('Describe what you\'re measuring (e.g. "brush clearance run").'); return }
-    if (!category) { alert('Pick a mitigation category — it\'s how the Estimate tab matches this to a cost rate.'); return }
-    if (!photoUrl) { alert('Take a photo first — lay a standard sheet of paper flat in the same shot as what you\'re measuring, for scale.'); return }
+    if (!label.trim()) { await alertDialog('Describe what you\'re measuring (e.g. "brush clearance run").'); return }
+    if (!category) { await alertDialog('Pick a mitigation category — it\'s how the Estimate tab matches this to a cost rate.'); return }
+    if (!photoUrl) { await alertDialog('Take a photo first — lay a standard sheet of paper flat in the same shot as what you\'re measuring, for scale.'); return }
     setSaving(true)
     const payload = { label: label.trim(), category, unit, photo_url: photoUrl, reference_type: 'letter_paper' }
     const { error } = isEdit
       ? await supabase.from('property_measurements').update(payload).eq('id', existingMeasurement.id)
       : await supabase.from('property_measurements').insert({ property_id: propertyId, zone, ...payload })
     setSaving(false)
-    if (error) { alert('Save failed: ' + error.message); return }
+    if (error) { await alertDialog('Save failed: ' + error.message); return }
     onSaved()
   }
 
   async function del() {
-    if (!confirm('Delete this measurement? This can\'t be undone.')) return
+    if (!(await confirmDialog('Delete this measurement? This can\'t be undone.'))) return
     setDeleting(true)
     const { error } = await supabase.from('property_measurements').delete().eq('id', existingMeasurement.id)
     setDeleting(false)
-    if (error) { alert('Delete failed: ' + error.message); return }
+    if (error) { await alertDialog('Delete failed: ' + error.message); return }
     onDeleted()
   }
 
@@ -295,6 +299,7 @@ const SATELLITE_STEP = {
 const STEPS = [SATELLITE_STEP, ...GUIDED_SEGMENTS]
 
 export default function GuidedEntry({ propertyId, property, entries: entriesProp, user, onClose, onSaved }) {
+  const { alertDialog } = useConfirmDialog()
   const [entries, setEntries] = useState(entriesProp || [])
   const [activeKey, setActiveKey] = useState(SATELLITE_STEP.key)
   const [openItemLabel, setOpenItemLabel] = useState(null)
@@ -396,7 +401,7 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
       { onConflict: 'property_id,segment_key' }
     )
     setSavingNotes(false)
-    if (error) { alert('Save failed: ' + error.message); return }
+    if (error) { await alertDialog('Save failed: ' + error.message); return }
     setSegRows(prev => ({ ...prev, [activeKey]: { ...(prev[activeKey] || {}), segment_key: activeKey, notes: notesDraft } }))
     setNotesSaved(true); setTimeout(() => setNotesSaved(false), 2000)
   }
@@ -424,7 +429,7 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
       setStreetViewImageUrl(data.streetViewImageUrl ?? null)
       setSatelliteAt(new Date().toISOString())
     } catch (err) {
-      alert('Satellite analysis failed: ' + err.message)
+      await alertDialog('Satellite analysis failed: ' + err.message)
     } finally {
       setSatelliteRunning(false)
     }
@@ -432,7 +437,7 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
 
   async function analyzeSegment() {
     const photoUrl = segPhotoDraft || activeRow?.photo_url
-    if (!photoUrl) { alert('Take a whole-side photo first.'); return }
+    if (!photoUrl) { await alertDialog('Take a whole-side photo first.'); return }
     setAnalyzing(true)
     try {
       const res = await authFetch('/api/segment-analysis', {
@@ -443,7 +448,7 @@ export default function GuidedEntry({ propertyId, property, entries: entriesProp
       if (!res.ok) throw new Error(data.error || 'Analysis failed')
       setSegRows(prev => ({ ...prev, [activeKey]: { ...(prev[activeKey] || {}), segment_key: activeKey, photo_url: photoUrl, ai_suggestions: data.suggestions } }))
     } catch (err) {
-      alert('Segment analysis failed: ' + err.message)
+      await alertDialog('Segment analysis failed: ' + err.message)
     } finally {
       setAnalyzing(false)
     }

@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Check, Trash2, Plus, Send, RotateCcw, Pencil, X, ChevronDown, ChevronRight, Phone, MessageSquare, StickyNote, Mail, BellOff, Bell, CalendarPlus } from 'lucide-react'
 import { googleCalendarLink } from '@/lib/googleCalendar'
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 
 // CRM tab — a customer table, grouped by customer (not by property): a
 // customer with more than one property shows as one row with all their
@@ -893,6 +894,7 @@ function customerKey(p) {
 }
 
 export default function CrmPage() {
+  const { confirmDialog, alertDialog } = useConfirmDialog()
   const [properties, setProperties] = useState([])
   const [followups, setFollowups] = useState([])
   const [templates, setTemplates] = useState([])
@@ -937,7 +939,7 @@ export default function CrmPage() {
     const ids = group.properties.map(p => p.id)
     setProperties(prev => prev.map(p => ids.includes(p.id) ? { ...p, [field]: value || null } : p))
     const { error } = await supabase.from('properties').update({ [field]: value || null }).in('id', ids)
-    if (error) alert(`Could not update: ${error.message}`)
+    if (error) await alertDialog(`Could not update: ${error.message}`)
   }
 
   async function toggleUnsubscribed(group) {
@@ -945,7 +947,7 @@ export default function CrmPage() {
     const ids = group.properties.map(p => p.id)
     setProperties(prev => prev.map(p => ids.includes(p.id) ? { ...p, unsubscribed: next } : p))
     const { error } = await supabase.from('properties').update({ unsubscribed: next, unsubscribed_at: next ? new Date().toISOString() : null }).in('id', ids)
-    if (error) alert(`Could not update: ${error.message}`)
+    if (error) await alertDialog(`Could not update: ${error.message}`)
   }
 
   async function addFollowup(propertyId, dueDate, note) {
@@ -958,7 +960,7 @@ export default function CrmPage() {
       if (!res.ok) throw new Error((await res.json()).error || 'Failed to save')
       load()
     } catch (err) {
-      alert(err.message)
+      await alertDialog(err.message)
     }
   }
 
@@ -972,7 +974,7 @@ export default function CrmPage() {
       if (!res.ok) throw new Error((await res.json()).error || 'Failed to save')
       load()
     } catch (err) {
-      alert(err.message)
+      await alertDialog(err.message)
     }
   }
 
@@ -987,7 +989,7 @@ export default function CrmPage() {
       if (!res.ok) throw new Error((await res.json()).error || 'Send failed')
       load()
     } catch (err) {
-      alert(err.message)
+      await alertDialog(err.message)
     } finally {
       setSending(null)
     }
@@ -1004,7 +1006,7 @@ export default function CrmPage() {
       if (!res.ok) throw new Error((await res.json()).error || 'Send failed')
       load()
     } catch (err) {
-      alert(err.message)
+      await alertDialog(err.message)
     } finally {
       setSending(null)
     }
@@ -1021,56 +1023,56 @@ export default function CrmPage() {
   }
 
   async function deleteFollowup(f) {
-    if (!confirm('Delete this entry?')) return
+    if (!(await confirmDialog('Delete this entry?'))) return
     setFollowups(prev => prev.filter(x => x.id !== f.id))
     await authFetch(`/api/crm/followups/${f.id}`, { method: 'DELETE' }).catch(() => {})
   }
 
   async function addTemplate(t) {
     const res = await authFetch('/api/crm/templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(t) })
-    if (!res.ok) { alert((await res.json()).error || 'Failed to save template'); return }
+    if (!res.ok) { await alertDialog((await res.json()).error || 'Failed to save template'); return }
     load()
   }
   async function updateTemplate(id, t) {
     const res = await authFetch(`/api/crm/templates/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(t) })
-    if (!res.ok) { alert((await res.json()).error || 'Failed to save template'); return }
+    if (!res.ok) { await alertDialog((await res.json()).error || 'Failed to save template'); return }
     load()
   }
   async function deleteTemplate(id) {
-    if (!confirm('Delete this template?')) return
+    if (!(await confirmDialog('Delete this template?'))) return
     await authFetch(`/api/crm/templates/${id}`, { method: 'DELETE' }).catch(() => {})
     load()
   }
 
   async function addPayment(payment) {
     const res = await authFetch('/api/crm/payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payment) })
-    if (!res.ok) { alert((await res.json()).error || 'Failed to save payment'); return false }
+    if (!res.ok) { await alertDialog((await res.json()).error || 'Failed to save payment'); return false }
     load()
     return true
   }
   async function setPaymentStatus(id, status) {
     const res = await authFetch(`/api/crm/payments/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
-    if (!res.ok) { alert((await res.json()).error || 'Failed to update payment'); return }
+    if (!res.ok) { await alertDialog((await res.json()).error || 'Failed to update payment'); return }
     load()
   }
   async function deletePayment(id) {
-    if (!confirm('Delete this payment record?')) return
+    if (!(await confirmDialog('Delete this payment record?'))) return
     await authFetch(`/api/crm/payments/${id}`, { method: 'DELETE' }).catch(() => {})
     load()
   }
 
   async function addDiscount(d) {
     const res = await authFetch('/api/crm/discounts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d) })
-    if (!res.ok) { alert((await res.json()).error || 'Failed to save discount'); return }
+    if (!res.ok) { await alertDialog((await res.json()).error || 'Failed to save discount'); return }
     load()
   }
   async function updateDiscount(id, d) {
     const res = await authFetch(`/api/crm/discounts/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d) })
-    if (!res.ok) { alert((await res.json()).error || 'Failed to save discount'); return }
+    if (!res.ok) { await alertDialog((await res.json()).error || 'Failed to save discount'); return }
     load()
   }
   async function deleteDiscount(id) {
-    if (!confirm('Delete this discount code?')) return
+    if (!(await confirmDialog('Delete this discount code?'))) return
     await authFetch(`/api/crm/discounts/${id}`, { method: 'DELETE' }).catch(() => {})
     load()
   }

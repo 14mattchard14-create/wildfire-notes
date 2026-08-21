@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 
 const DISTANCE_ZONES = ['0-5 FT. Noncombustible Zone', '5-30 FT. Defensible Space - Vegetation', '10-30 FT. Defensible Space - Detached Structures & Other Large Items']
 const DISTANCE_TYPES = ['Distance from home','Distance between objects','Distance between tree canopies','Distance between shrubs','Other']
@@ -47,6 +48,7 @@ function StatusBtn({ value, label, status, setStatus }) {
 }
 
 export default function EntryForm({ propertyId, onSaved, user }) {
+  const { alertDialog } = useConfirmDialog()
   const [zone,         setZone]         = useState(ZONES[0])
   const [status,       setStatus]       = useState(null)
   const [distance,     setDistance]     = useState('')
@@ -61,8 +63,8 @@ export default function EntryForm({ propertyId, onSaved, user }) {
   const [photoKey,     setPhotoKey]     = useState(0)
 
   async function save() {
-    if (!note.trim()) { alert('Add a finding before saving.'); return }
-    if (!status)      { alert('Select a status.'); return }
+    if (!note.trim()) { await alertDialog('Add a finding before saving.'); return }
+    if (!status)      { await alertDialog('Select a status.'); return }
     setSaving(true)
     const userName = user?.user_metadata?.full_name || user?.email || 'Unknown'
     const { error } = await supabase.from('entries').insert({
@@ -72,7 +74,7 @@ export default function EntryForm({ propertyId, onSaved, user }) {
       created_by: user?.id || null, created_by_name: userName,
     })
     setSaving(false)
-    if (error) { alert('Save failed: ' + error.message); return }
+    if (error) { await alertDialog('Save failed: ' + error.message); return }
     setStatus(null); setDistance(''); setNote(''); setDetail('')
     setDistanceType(''); setShowDist(false)
     setPhotoUrl(null); setPhotoKey(k => k + 1); setShowDetail(false)

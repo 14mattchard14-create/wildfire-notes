@@ -1,4 +1,5 @@
 import { AuthProvider } from '@/components/AuthProvider'
+import { ConfirmDialogProvider } from '@/components/ConfirmDialogProvider'
 import './globals.css'
 
 export const metadata = {
@@ -11,7 +12,9 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body>
         <AuthProvider>
-          {children}
+          <ConfirmDialogProvider>
+            {children}
+          </ConfirmDialogProvider>
         </AuthProvider>
       </body>
     </html>

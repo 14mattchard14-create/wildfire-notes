@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { authFetch } from '@/lib/authFetch'
 import { Plus, Trash2, Copy, Save, Sparkles, Send } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 
 // Financial forecasting calculator — the in-app replacement for
 // growth-poam.xlsx. Every scenario is a row in financial_scenarios
@@ -1353,6 +1354,7 @@ function MarketingOptimizerPanel({ scenarios, onSave }) {
 }
 
 export default function ForecastPage() {
+  const { confirmDialog, alertDialog } = useConfirmDialog()
   const [scenarios, setScenarios] = useState([])
   const [fetching, setFetching] = useState(true)
   const [selectedId, setSelectedId] = useState(null)
@@ -1374,9 +1376,9 @@ export default function ForecastPage() {
 
   useEffect(() => { load() }, [load])
 
-  function selectScenario(id) {
+  async function selectScenario(id) {
     if (dirty) {
-      const ok = confirm('You have unsaved changes to the current scenario. Switch anyway and lose them?')
+      const ok = await confirmDialog('You have unsaved changes to the current scenario. Switch anyway and lose them?')
       if (!ok) return
     }
     setSelectedId(id)
@@ -1387,7 +1389,7 @@ export default function ForecastPage() {
     setSeeding(true)
     const { data, error } = await supabase.from('financial_scenarios').insert(STARTER_SCENARIOS).select()
     setSeeding(false)
-    if (error) { alert('Could not create starter scenarios: ' + error.message); return }
+    if (error) { await alertDialog('Could not create starter scenarios: ' + error.message); return }
     await load(data?.[0]?.id)
   }
 
@@ -1395,7 +1397,7 @@ export default function ForecastPage() {
     const { data, error } = await supabase.from('financial_scenarios').insert({
       name: 'New Scenario', notes: '', assumptions: DEFAULT_ASSUMPTIONS, monthly: emptyMonthly(),
     }).select().single()
-    if (error) { alert('Could not create scenario: ' + error.message); return }
+    if (error) { await alertDialog('Could not create scenario: ' + error.message); return }
     await load(data.id)
   }
 
@@ -1407,7 +1409,7 @@ export default function ForecastPage() {
       updated_at: new Date().toISOString(),
     }).eq('id', draft.id)
     setSaving(false)
-    if (error) { alert('Save failed: ' + error.message); return }
+    if (error) { await alertDialog('Save failed: ' + error.message); return }
     await load(draft.id)
   }
 
@@ -1416,15 +1418,15 @@ export default function ForecastPage() {
     const { data, error } = await supabase.from('financial_scenarios').insert({
       name: `${draft.name} (copy)`, notes: draft.notes, assumptions: draft.assumptions, monthly: draft.monthly,
     }).select().single()
-    if (error) { alert('Could not duplicate: ' + error.message); return }
+    if (error) { await alertDialog('Could not duplicate: ' + error.message); return }
     await load(data.id)
   }
 
   async function deleteDraft() {
     if (!draft) return
-    if (!confirm(`Delete "${draft.name}"? This can't be undone.`)) return
+    if (!(await confirmDialog(`Delete "${draft.name}"? This can't be undone.`))) return
     const { error } = await supabase.from('financial_scenarios').delete().eq('id', draft.id)
-    if (error) { alert('Delete failed: ' + error.message); return }
+    if (error) { await alertDialog('Delete failed: ' + error.message); return }
     await load()
   }
 
@@ -1432,7 +1434,7 @@ export default function ForecastPage() {
     const { data, error } = await supabase.from('financial_scenarios').insert({
       name, notes: notes || 'Generated scenario — edit freely like any other.', assumptions, monthly,
     }).select().single()
-    if (error) { alert('Could not save scenario: ' + error.message); return }
+    if (error) { await alertDialog('Could not save scenario: ' + error.message); return }
     await load(data.id)
   }
 

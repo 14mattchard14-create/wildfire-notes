@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 
 // Homeowner-facing capture view. Deliberately has NO status/compliance UI
 // anywhere — homeowners only ever record raw facts (what they see, a
@@ -26,6 +27,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 // same as before this override existed.
 export default function HomeownerHome({ user, propertyId = null, previewMode = false }) {
   const router = useRouter()
+  const { confirmDialog, alertDialog } = useConfirmDialog()
   const [property, setProperty] = useState(null)
   const [entries,  setEntries]  = useState([])
   const [loading,  setLoading]  = useState(true)
@@ -59,7 +61,7 @@ export default function HomeownerHome({ user, propertyId = null, previewMode = f
 
   async function finish() {
     if (entries.length === 0) {
-      alert("Add at least one note before finishing — walk around and jot down what you see.")
+      await alertDialog("Add at least one note before finishing — walk around and jot down what you see.")
       return
     }
     // Preview mode never calls the real finish endpoint — that route sends
@@ -67,10 +69,10 @@ export default function HomeownerHome({ user, propertyId = null, previewMode = f
     // homeowner_status, neither of which should happen from a staff
     // clicking around to see what this screen looks like.
     if (previewMode) {
-      alert("Preview mode — this doesn't actually submit anything or email the team. A real homeowner clicking this would.")
+      await alertDialog("Preview mode — this doesn't actually submit anything or email the team. A real homeowner clicking this would.")
       return
     }
-    if (!confirm("Ready to send this to your inspector? You can still add more later if you remember something.")) return
+    if (!(await confirmDialog("Ready to send this to your inspector? You can still add more later if you remember something."))) return
     setFinishing(true)
     try {
       const res = await authFetch('/api/homeowner/finish', { method: 'POST' })
@@ -78,14 +80,14 @@ export default function HomeownerHome({ user, propertyId = null, previewMode = f
       if (!res.ok) throw new Error(data.error || 'Could not submit')
       setProperty(p => ({ ...p, homeowner_status: 'submitted' }))
     } catch (err) {
-      alert('Could not submit: ' + err.message)
+      await alertDialog('Could not submit: ' + err.message)
     } finally {
       setFinishing(false)
     }
   }
 
   async function save() {
-    if (!note.trim()) { alert('Add a quick note describing what you see.'); return }
+    if (!note.trim()) { await alertDialog('Add a quick note describing what you see.'); return }
     setSaving(true)
     try {
       const res = await authFetch('/api/homeowner/entries', {
@@ -98,7 +100,7 @@ export default function HomeownerHome({ user, propertyId = null, previewMode = f
       setEntries(prev => [data.entry, ...prev])
       setNote(''); setDetail(''); setPhotoUrl(null); setPhotoKey(k => k + 1)
     } catch (err) {
-      alert('Save failed: ' + err.message)
+      await alertDialog('Save failed: ' + err.message)
     } finally {
       setSaving(false)
     }

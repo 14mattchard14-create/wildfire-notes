@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { authFetch } from '@/lib/authFetch'
 import { useAuth } from '@/components/AuthProvider'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 
 // Roles per PORTALS_AND_ROLES_PLAN.md. 'employee' is kept as a legacy
 // option (existing accounts default to it) rather than hidden, so an
@@ -26,6 +27,7 @@ function fmtDate(iso) {
 
 export default function UsersPage() {
   const { user: currentUser } = useAuth()
+  const { alertDialog } = useConfirmDialog()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -59,7 +61,7 @@ export default function UsersPage() {
       if (!res.ok) throw new Error(data.error || 'Update failed')
       setUsers(prev => prev.map(u => (u.id === id ? { ...u, role } : u)))
     } catch (err) {
-      alert('Could not update role: ' + err.message)
+      await alertDialog('Could not update role: ' + err.message)
     } finally {
       setSavingId(null)
     }

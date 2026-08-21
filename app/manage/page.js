@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Plus, MapPin, Pencil } from 'lucide-react'
 import AdminSidebar from '@/components/AdminSidebar'
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 
 const HOMEOWNER_BADGE = {
   invited:     { label: 'Invited',     color: 'var(--text-muted)' },
@@ -32,6 +33,7 @@ const REVIEW_ACTION = {
 export default function PropertiesTablePage() {
   const router = useRouter()
   const { user, loading, isHomeowner, profileReady } = useAuth()
+  const { confirmDialog, alertDialog } = useConfirmDialog()
   const [properties, setProperties] = useState([])
   const [fetching,   setFetching]   = useState(true)
   const [search,     setSearch]     = useState('')
@@ -71,8 +73,8 @@ export default function PropertiesTablePage() {
     debounceRef.current = setTimeout(() => fetchSuggestions(val), 300)
   }
 
-  function locateMe() {
-    if (!navigator.geolocation) { alert('Geolocation not supported.'); return }
+  async function locateMe() {
+    if (!navigator.geolocation) { await alertDialog('Geolocation not supported.'); return }
     setLocating(true)
     navigator.geolocation.getCurrentPosition(async pos => {
       try {
@@ -80,9 +82,9 @@ export default function PropertiesTablePage() {
         const res = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`)
         const data = await res.json()
         if (data.address) { setAddress(data.address); setSuggestions([]) }
-      } catch { alert('Could not reverse geocode location.') }
+      } catch { await alertDialog('Could not reverse geocode location.') }
       setLocating(false)
-    }, () => { alert('Location access denied.'); setLocating(false) }, { enableHighAccuracy: true, timeout: 10000 })
+    }, async () => { await alertDialog('Location access denied.'); setLocating(false) }, { enableHighAccuracy: true, timeout: 10000 })
   }
 
   async function lookupFHSZ(addr) {
@@ -114,7 +116,7 @@ export default function PropertiesTablePage() {
 
     if (existing) {
       const when = existing.created_at ? new Date(existing.created_at).toLocaleDateString() : 'an earlier date'
-      const openExisting = confirm(`A property already exists at this address (${existing.job_number || 'no job number'}, created ${when}).\n\nOK — open that one instead\nCancel — create a new, separate property anyway`)
+      const openExisting = await confirmDialog(`A property already exists at this address (${existing.job_number || 'no job number'}, created ${when}).\n\nOK — open that one instead\nCancel — create a new, separate property anyway`)
       if (openExisting) {
         setSavingNew(false)
         router.push(`/manage/${existing.id}`)
@@ -133,7 +135,7 @@ export default function PropertiesTablePage() {
       lead_source: 'manual',
     }).select().single()
     setSavingNew(false)
-    if (error) { alert('Could not create property: ' + error.message); return }
+    if (error) { await alertDialog('Could not create property: ' + error.message); return }
 
     // Kick off the satellite/street-view pre-flight scan right away, not
     // awaited — the inspector shouldn't wait on it here, and it used to

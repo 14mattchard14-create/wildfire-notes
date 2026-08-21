@@ -24,6 +24,7 @@ import AdminSidebar from '@/components/AdminSidebar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Pencil, Check, X, Plus, Trash2, Copy, History, Flag, RotateCcw, ZoomIn, GripVertical } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 
 const c = reportColors
 const iconBtnStyle = { background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }
@@ -206,6 +207,7 @@ function dropIndicatorStyle(side, axis) {
 }
 
 function CopyButton({ text }) {
+  const { alertDialog } = useConfirmDialog()
   const [copied, setCopied] = useState(false)
   async function copy() {
     try {
@@ -213,7 +215,7 @@ function CopyButton({ text }) {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     } catch {
-      alert('Could not copy automatically — copy it manually: ' + text)
+      await alertDialog('Could not copy automatically — copy it manually: ' + text)
     }
   }
   return (
@@ -632,6 +634,7 @@ function SectionHistoryPopup({ sectionKey, versions, onClose }) {
 export default function PropertyReviewFlow() {
   const { id } = useParams()
   const router = useRouter()
+  const { confirmDialog, alertDialog } = useConfirmDialog()
   const { user, loading, isHomeowner, profileReady } = useAuth()
   const [property, setProperty] = useState(null)
   const [entries, setEntries] = useState([])
@@ -710,7 +713,7 @@ export default function PropertyReviewFlow() {
   useEffect(() => { load() }, [load])
 
   async function generateDraft() {
-    if ((draftData || legacyDraft) && !confirm('This will overwrite the current draft with a freshly generated one. Continue?')) return
+    if ((draftData || legacyDraft) && !(await confirmDialog('This will overwrite the current draft with a freshly generated one. Continue?'))) return
     setGenerating(true)
     try {
       const res = await authFetch('/api/report-draft', {
@@ -726,7 +729,7 @@ export default function PropertyReviewFlow() {
       // in the section popups right away.
       load()
     } catch (err) {
-      alert('Could not generate draft: ' + err.message)
+      await alertDialog('Could not generate draft: ' + err.message)
     } finally {
       setGenerating(false)
     }
@@ -737,7 +740,7 @@ export default function PropertyReviewFlow() {
     setSaving(true)
     const { error } = await supabase.from('properties').update({ report_draft_markdown: JSON.stringify(draftData) }).eq('id', id)
     setSaving(false)
-    if (error) { alert('Save failed: ' + error.message); return }
+    if (error) { await alertDialog('Save failed: ' + error.message); return }
     if (!silent) { setSavedMsg('Saved'); setTimeout(() => setSavedMsg(''), 2000) }
   }
 
@@ -780,10 +783,10 @@ export default function PropertyReviewFlow() {
         setFinalMsg('Saved as final ✓')
         setTimeout(() => setFinalMsg(''), 2500)
       } else {
-        alert('Could not save final version: ' + data.error)
+        await alertDialog('Could not save final version: ' + data.error)
       }
     } catch (err) {
-      alert('Could not save final version: ' + err.message)
+      await alertDialog('Could not save final version: ' + err.message)
     }
     setMarkingFinal(false)
   }
@@ -798,13 +801,13 @@ export default function PropertyReviewFlow() {
     const trimmed = customerEmailDraft.trim()
     const { error } = await supabase.from('properties').update({ customer_email: trimmed || null }).eq('id', id)
     setSavingCustomerEmail(false)
-    if (error) { alert('Could not update customer email: ' + error.message); return }
+    if (error) { await alertDialog('Could not update customer email: ' + error.message); return }
     setProperty(p => ({ ...p, customer_email: trimmed || null }))
     setEditingCustomerEmail(false)
   }
 
   async function publish() {
-    if (!draftData) { alert('Generate a draft before publishing.'); return }
+    if (!draftData) { await alertDialog('Generate a draft before publishing.'); return }
     setPublishing(true)
     try {
       await saveDraft(true)
@@ -817,7 +820,7 @@ export default function PropertyReviewFlow() {
       setProperty(p => ({ ...p, report_status: 'published' }))
       setShareInfo(prev => ({ token: data.token, accessCode: data.accessCode ?? prev?.accessCode ?? null }))
     } catch (err) {
-      alert('Could not publish: ' + err.message)
+      await alertDialog('Could not publish: ' + err.message)
     } finally {
       setPublishing(false)
     }
@@ -838,7 +841,7 @@ export default function PropertyReviewFlow() {
       if (!res.ok) throw new Error(data.error || 'Could not build preview')
       setSendPreview(data)
     } catch (err) {
-      alert('Could not prepare send-to-customer preview: ' + err.message)
+      await alertDialog('Could not prepare send-to-customer preview: ' + err.message)
     } finally {
       setLoadingPreview(false)
     }
@@ -856,7 +859,7 @@ export default function PropertyReviewFlow() {
       setProperty(p => ({ ...p, customer_notified_at: new Date().toISOString() }))
       setSendPreview(null)
     } catch (err) {
-      alert('Could not send to customer: ' + err.message)
+      await alertDialog('Could not send to customer: ' + err.message)
     } finally {
       setNotifyingCustomer(false)
     }
@@ -954,7 +957,7 @@ export default function PropertyReviewFlow() {
       const zones = draftData.zones.map((z, i) => i === zi ? { ...z, extraPhotos: [...(z.extraPhotos || []), newPhoto] } : z)
       patch({ zones })
     } catch (err) {
-      alert('Photo upload failed: ' + err.message)
+      await alertDialog('Photo upload failed: ' + err.message)
     }
     setUploadingZone(null)
   }
@@ -1003,7 +1006,7 @@ export default function PropertyReviewFlow() {
         zones: prev.zones.map((z, i) => i === zi ? { ...z, extraPhotos: [...(z.extraPhotos || []), newPhoto], findings: [...z.findings, emptyFinding()] } : z),
       }))
     } catch (err) {
-      alert('Photo upload failed: ' + err.message)
+      await alertDialog('Photo upload failed: ' + err.message)
     }
     setUploadingZone(null)
   }

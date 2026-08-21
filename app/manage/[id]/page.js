@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Pencil, Check, X, ClipboardList, UserCog, UserPlus, Eye } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 
 // This page used to be a 4-tab property workspace (Entries / Site Notes /
 // Priorities / Report). Site Notes is now embedded directly in Guided Entry
@@ -28,6 +29,7 @@ export default function PropertyReviewPage() {
   const { id } = useParams()
   const router = useRouter()
   const { user, loading, isHomeowner, isAdmin, isManager, profileReady } = useAuth()
+  const { alertDialog } = useConfirmDialog()
   const canAssignOthers = isAdmin || isManager
   const [property, setProperty] = useState(null)
   const [entries,  setEntries]  = useState([])
@@ -75,7 +77,7 @@ export default function PropertyReviewPage() {
     setSavingInspector(true)
     const { error } = await supabase.from('properties').update({ assigned_inspector_id: inspectorId || null }).eq('id', id)
     setSavingInspector(false)
-    if (error) { alert('Could not update assigned inspector: ' + error.message); return }
+    if (error) { await alertDialog('Could not update assigned inspector: ' + error.message); return }
     setProperty(p => ({ ...p, assigned_inspector_id: inspectorId || null }))
   }
 
@@ -98,7 +100,7 @@ export default function PropertyReviewPage() {
       if (!res.ok) throw new Error(data.error || 'Could not create invite')
       setInviteLink(`${window.location.origin}/invite/${data.token}`)
     } catch (err) {
-      alert('Invite failed: ' + err.message)
+      await alertDialog('Invite failed: ' + err.message)
     } finally {
       setInviting(false)
     }
@@ -121,7 +123,7 @@ export default function PropertyReviewPage() {
     setSavingAddress(true)
     const { error } = await supabase.from('properties').update({ address: addressDraft.trim() }).eq('id', id)
     setSavingAddress(false)
-    if (error) { alert('Could not update address: ' + error.message); return }
+    if (error) { await alertDialog('Could not update address: ' + error.message); return }
     setProperty(p => ({ ...p, address: addressDraft.trim() }))
     setEditingAddress(false)
   }
