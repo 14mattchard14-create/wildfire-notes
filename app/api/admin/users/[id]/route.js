@@ -23,3 +23,21 @@ export async function PATCH(request, { params }) {
   if (error) return Response.json({ error: error.message }, { status: 500 })
   return Response.json({ profile: data })
 }
+
+// Admin-only: permanently delete an account (auth.users row + cascaded
+// profiles row). Blocks self-deletion so an admin can't lock themselves
+// out. Will fail with a DB foreign-key error if the account has created
+// or redeemed a homeowner invite (homeowner_invites.created_by/used_by
+// has no ON DELETE clause) — that's intentional rather than silently
+// orphaning invite history; check for that first if this errors.
+export async function DELETE(request, { params }) {
+  const { id } = await params
+  const { user, profile } = await getAuthedUser(request)
+  if (!user) return Response.json({ error: 'Not signed in' }, { status: 401 })
+  if (profile.role !== 'admin') return Response.json({ error: 'Admin account required' }, { status: 403 })
+  if (id === user.id) return Response.json({ error: "Can't delete your own account" }, { status: 400 })
+
+  const { error } = await supabaseAdmin.auth.admin.deleteUser(id)
+  if (error) return Response.json({ error: error.message }, { status: 500 })
+  return Response.json({ ok: true })
+}
