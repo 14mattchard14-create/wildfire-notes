@@ -1,8 +1,10 @@
 # CharredGuard Fire Risk Mitigation Services LLC — Business Plan
 
-**Status:** First draft (produced with Gemini), captured here as the reference version.
+**Status:** First draft (produced with Gemini), captured here as the reference version. **Superseded in part as of August 2026** — see the "Solo pivot" note below; sections below still describe the original two-founder, two-tier model except where marked updated.
 **Captured:** August 2026
-**Reconciled against:** `charred-guard-site` (marketing website) as of commit `2eeb29b` — pricing ($500 on-site / $200 guided) and geography (Southern California, primary areas North San Diego County + Orange County) already matched between this plan and the live site as of that commit. Where earlier site copy didn't match this plan (it previously said $450 and "statewide"), the site was corrected to match this plan, not the other way around — this document is the source of truth for pricing and service area.
+**Reconciled against:** `charred-guard-site` (marketing website) as of commit `ec8b21c` — pricing ($200 guided self-inspection only, on-site tier discontinued) and geography (Southern California, no travel-radius constraint since assessments are fully remote) already matched between this plan and the live site as of that commit. This document is the source of truth for pricing and service area; the site is reconciled against it, not the other way around.
+
+**Solo pivot (August 2026):** The business partner (Johnny) has left. CharredGuard is now a solo operation offering **only the $200 Guided Homeowner Self-Inspection** — the $500 On-Site Risk Audit tier is discontinued, and the Minor Hardening Add-On line (already gated pending legal sign-off, see `legal-risk-notes.md`) is off the table for the foreseeable future along with it, since it was staff-performed on-site work. Sections below that still describe the two-tier or hardening-inclusive model are kept for historical/reference reasons (e.g. if a partner or the hardening line-item ever comes back) but no longer reflect current operations. `growth-poam.xlsx`'s "Homeowner Inspections Only" scenario is the closest existing match but still assumes the $500 audit tier stays — it needs a manual update to drop that too; not done as part of this pass since it's a live spreadsheet model, not something to edit blind.
 
 **See also:** `legal-risk-notes.md` for open legal/compliance questions raised against this plan (marketing vs. contractor-licensing exemption, permit requirements, insurance-mandate language, contract-splitting discipline) — several sections below reference those flags. `growth-poam.xlsx` turns Section 8's growth curve into a live, adjustable capacity model and a phased Plan of Action & Milestones.
 
@@ -40,7 +42,7 @@ CharredGuard is built on a hyper-lean, high-margin operating framework.
 
 - **Startup Capital Requirement:** ~$2,500–$3,100, funding tools, NFPA CWMS certification, initial combined Errors & Omissions (E&O) / General Liability insurance, and California LLC registration ($800 FTB franchise tax + state filings).
 - **Fixed Operating Burn:** ~$223/month (combined GL/E&O policy, custom tech infrastructure, Google Workspace).
-- **Unit Economics & Profitability:** ~90%+ gross margin on inspection services. One $500 audit every two months covers fixed monthly overhead. Year 1 projections: $75,850 gross revenue, $57,246 net pre-tax profit.
+- **Unit Economics & Profitability:** ~90%+ gross margin on inspection services. **Post-pivot:** at the $200 guided-only rate, roughly 1.25 guided assessments/month covers fixed monthly overhead (see updated Section 7 break-even). Year 1 projections below ($75,850 gross revenue, $57,246 net pre-tax profit) assume the original two-tier model and have not been recomputed for guided-only — see the Solo pivot note above and `growth-poam.xlsx`.
 
 ---
 
@@ -94,9 +96,11 @@ CharredGuard is built on a hyper-lean, high-margin operating framework.
 
 ### 4.1 Service Offerings
 
-1. **Comprehensive On-Site Wildfire Risk Audit ($500)** — 90-minute on-site evaluation by an NFPA CWMS-trained inspector. Covers Zone 0 ignition zone, structural ember pathways (vents, gutters, roof valleys, eaves, glazing, garage seals), Zones 1 & 2 (canopy spacing, deadwood, propane clearance). Deliverable: photo-documented Wildfire Risk Mitigation Blueprint + Proof of Inspection Certificate.
-2. **Guided Homeowner Self-Inspection ($200)** — Remote, technology-assisted audit via guided mobile photo/measurement submission.
-3. **Minor Home-Hardening Add-Ons (under $1,000 threshold)** — Vent ember hardening (1/8" stainless mesh), Zone 0 clearing (gravel/river rock, gutter guards), siding & post-base retrofits. **Held pending legal/permit sign-off — see `legal-risk-notes.md`.**
+**Post-pivot, only #2 is currently offered** — see the Solo pivot note in the header. #1 and #3 are kept for reference.
+
+1. ~~**Comprehensive On-Site Wildfire Risk Audit ($500)**~~ **Discontinued** — 90-minute on-site evaluation by an NFPA CWMS-trained inspector. Covers Zone 0 ignition zone, structural ember pathways (vents, gutters, roof valleys, eaves, glazing, garage seals), Zones 1 & 2 (canopy spacing, deadwood, propane clearance). Deliverable: photo-documented Wildfire Risk Mitigation Blueprint + Proof of Inspection Certificate.
+2. **Guided Homeowner Self-Inspection ($200)** — Remote, technology-assisted audit via guided mobile photo/measurement submission. **Currently the only active service line.**
+3. **Minor Home-Hardening Add-Ons (under $1,000 threshold)** — Vent ember hardening (1/8" stainless mesh), Zone 0 clearing (gravel/river rock, gutter guards), siding & post-base retrofits. **Held pending legal/permit sign-off — see `legal-risk-notes.md`. Also off the table post-pivot since it was on-site staff work.**
 
 ### 4.2 Pricing Architecture & Revenue Strategy
 - ~90%+ gross margin on inspection services.
@@ -169,8 +173,8 @@ Fully bootstrapped (~$2,500–$3,100 from founder savings).
 | Marketing Materials | Lawn signs, postcards, business cards | ~$150 |
 | **TOTAL** | | **~$2,705** |
 
-**Monthly Fixed Overhead:** ~$223/mo (GL+E&O ~$145, tech stack ~$58, Workspace ~$20).
-**Break-Even:** $247.78/mo revenue ($223 / 90% margin). One $500 audit every two months covers it.
+**Monthly Fixed Overhead:** ~$223/mo (GL+E&O ~$145, tech stack ~$58, Workspace ~$20). **Post-pivot:** with no on-site work, the GL portion of this policy is worth reviewing with the insurance provider — it may have been priced assuming staff enter properties, which no longer happens under the guided-only model. Not changed here since that's a real coverage decision, not something to assume.
+**Break-Even (post-pivot, guided-only):** $247.78/mo revenue ($223 / 90% margin) ÷ $200/assessment ≈ **1.25 guided assessments/month**. (Original plan's "one $500 audit every two months" no longer applies — that tier is discontinued.)
 
 ---
 
@@ -178,17 +182,19 @@ Fully bootstrapped (~$2,500–$3,100 from founder savings).
 
 **See `growth-poam.xlsx` → "Growth Curve" tab for a live, formula-driven version of this table** — it recomputes revenue and estimates delivery hours/week from adjustable assumptions (hours per job type, solo capacity threshold), rather than the static numbers below. **See the "Scenarios" tab for the real open question this plan doesn't resolve yet: whether it ends up a business partner joining full-time once volume justifies it, a permanent part-time evenings-only operation, or a part-time homeowner-inspections-only business that drops the hardening add-on entirely — each with its own marketing spend and net-profit estimate, and built to have more scenarios added alongside them.**
 
-### Key Assumptions
+### Key Assumptions (original two-tier model — not recomputed post-pivot)
 - AOV: On-Site Audit $500, Guided Audit $200, Hardening Add-On $450 avg ticket.
 - ~40% of on-site audit clients convert to hardening add-ons.
 - Variable COGS: ~$35/audit; hardening materials/labor ~35% of hardening revenue.
 
-### Year-1 Summary
+### Year-1 Summary (original two-tier model — not recomputed post-pivot)
 - Gross Revenue: $75,850
 - Total Operating Expenses & COGS: $18,604
 - Net Operating Profit (Pre-Tax): $57,246
 - Net Profit Margin: 75.4%
 - Payback Period: Month 3
+
+**Post-pivot, these figures are stale** — guided-only revenue at $200/assessment with no on-site or hardening lines will be meaningfully lower unless volume increases significantly. Recomputing this table properly belongs in `growth-poam.xlsx` (a live formula model), not as a hand-edited estimate here.
 
 *(Full month-by-month table preserved in the original draft; see `growth-poam.xlsx` for the working version.)*
 

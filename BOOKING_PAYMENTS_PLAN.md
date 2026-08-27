@@ -115,9 +115,22 @@ mentioned wanting waits until later.
    extends the existing `crm_payments` table rather than replacing it.
 4. **Later, only if needed:** on-site inspection → Google Calendar via real OAuth sync.
 
-## Addendum: two people, staying on the free plan
+## Addendum: two people, staying on the free plan — OBSOLETE as of August 2026
 
-Considered upgrading to Cal.com's paid Teams plan (or switching to Calendly's, which is
+**Superseded by the solo pivot** (see `business/business-plan.md`'s header note) — Johnny is
+no longer with the business, so the two-calendar workaround below no longer applies. Kept for
+history in case a partner ever joins again.
+
+**Manual cleanup still needed in the Cal.com dashboard** (not something doable from code):
+disconnect the "Johnny" Google Calendar from the account, and narrow the 15-min intro call
+event type's availability window back down to Matt's actual real hours — it was deliberately
+widened to approximate "either of us is free," which is no longer the right behavior solo.
+Confirmed via research that Cal.com's free plan (what this account is already on) supports
+webhooks, so there's no reason to consider migrating to Calendly — Calendly's free plan
+notably does **not** include webhooks (paid tiers only), which would break the
+booking→CRM automation entirely. Staying on Cal.com free, simplified to one real calendar.
+
+~~Considered upgrading to Cal.com's paid Teams plan (or switching to Calendly's, which is
 pricier per-seat) to get automatic round-robin assignment between Matt and Johnny — i.e. a
 booking page that shows a slot as open if *either* is free, and auto-assigns it to whichever
 one. Decided against it: that's the one thing genuinely gated behind a paid tier on both
@@ -132,11 +145,22 @@ free. This means the booking page won't always be perfectly accurate to a specif
 conflicts — occasionally a customer could grab a slot neither of them can actually make, and
 it'd need a manual reschedule. When a booking comes in, Matt and Johnny sort out between
 themselves who takes it (matches how homeowner/property assignment already works — nothing in
-the CRM auto-assigns a specific inspector today, either).
+the CRM auto-assigns a specific inspector today, either).~~
 
-## Addendum: second event type — on-site inspection booking
+## Addendum: second event type — on-site inspection booking — DISCONTINUED as of August 2026
 
-Added a second free-plan Cal.com event type for the on-site inspection itself, not just the
+**Superseded by the solo pivot** — the on-site inspection tier is discontinued (guided-only
+now, see `business/business-plan.md`). `charred-guard-site` no longer has an on-site method to
+select, so this event type is never reached from the site. `CAL_COM_INSPECTION_URL` was
+removed from the site's `lib/calcom.js`. The webhook's `handleInspectionBooking` function and
+`CAL_COM_INSPECTION_EVENT_TYPE_ID` env var were deliberately **left in place** in
+`app/api/webhooks/calcom/route.js` as dormant infrastructure (matches how the CG Inspector
+portal and roles model are also being kept dormant rather than removed) — it already
+no-ops gracefully without the env var set, so there's nothing to clean up there. If the
+on-site tier never comes back, this event type in Cal.com's own dashboard (if it was ever
+created there) can be deleted; the "setup still needed" steps below are now moot.
+
+~~Added a second free-plan Cal.com event type for the on-site inspection itself, not just the
 15-min intro call. Customers who choose the "On-Site Inspection" method on `/get-started` see
 a booking widget right on the confirmation screen (no waiting for a callback to schedule it).
 
@@ -155,7 +179,7 @@ a booking widget right on the confirmation screen (no waiting for a callback to 
 add the same required "address" custom question + phone field, connect it to the same
 Google Calendar conflict-check, add `CAL_COM_INSPECTION_EVENT_TYPE_ID` and
 `NEXT_PUBLIC_CAL_COM_INSPECTION_LINK` as env vars on both Vercel projects. The webhook and
-site code are ready; this is the one manual step left.
+site code are ready; this is the one manual step left.~~
 
 ## Addendum: report-completion alerts
 

@@ -1,6 +1,6 @@
 # Status — wildfire-notes
 
-_Last updated: 2026-08-18_
+_Last updated: 2026-08-23_
 
 ## ⚠️ Action required — new migration
 
@@ -32,6 +32,38 @@ _Last updated: 2026-08-18_
   (`lead_source`, `booking_status`, `booking_event_uid`, `intro_call_at`) and two new tables,
   `crm_payments` and `crm_discounts`. Required for the CRM's Payments section, Discount Codes
   panel, and the Cal.com webhook to work at all.
+
+## Done this session (2026-08-23 — solo pivot: guided-only, business docs reconciled)
+
+Business partner left; CharredGuard is now solo and dropped the $500 on-site inspection tier
+entirely, keeping only the $200 Guided Homeowner Self-Inspection. This was a business-scope
+change, not a bug fix — updated both repos to match.
+
+- **charred-guard-site** (commit `ec8b21c`): removed the on-site tier from pricing cards, FAQ,
+  the get-started wizard (method-selection step deleted, `lib/payment.mjs` simplified to flat
+  guided pricing), and `lib/calcom.js` (dropped `CAL_COM_INSPECTION_URL`). Widened the
+  "where we work" copy since guided assessments have no travel radius. Softened the
+  post-mitigation follow-up report from a listed product to a case-by-case "may be available"
+  offering, since scope there is still undecided. Deleted `components/ProcessFormats.js`, an
+  unused 5-layout scaffold.
+- **business/business-plan.md, legal-risk-notes.md**: added "Solo pivot" notes; recomputed
+  break-even for guided-only (~1.25 assessments/month); marked the four legal-risk items that
+  were specifically about the hardening/on-site minor-work exemption (#1, #2, #5, #6) as moot
+  for now, not resolved — they apply again if hardening or on-site work ever comes back.
+- **Not done, flagged for a manual pass:** `growth-poam.xlsx` still models the old two-tier
+  system (its "Homeowner Inspections Only" scenario keeps the $500 audit, just drops
+  hardening) — needs a real edit in Excel/Numbers/Sheets, not attempted blind against a live
+  formula workbook. The combined GL+E&O insurance policy (~$145/mo) may have been priced
+  assuming staff enter properties for on-site visits — worth a call to the provider now that no
+  one does, not changed here since it's a real coverage decision.
+- **Deliberately left alone:** the CG Inspector portal, the roles model
+  (`profiles.role`/`PORTALS_AND_ROLES_PLAN.md`), and the Cal.com webhook's dormant
+  on-site-inspection handling (`app/api/webhooks/calcom/route.js`'s `handleInspectionBooking`,
+  gated behind `CAL_COM_INSPECTION_EVENT_TYPE_ID`) — all kept as infrastructure per explicit
+  instruction, in case a partner or on-site work returns later. Simplifying the Cal.com setup
+  itself (disconnecting the second Google Calendar, narrowing availability windows — see
+  `BOOKING_PAYMENTS_PLAN.md`'s updated addendum) needs to happen in the Cal.com dashboard
+  directly; not something doable from here.
 
 ## Done this session (2026-08-18 — role schema + Users & Roles + Documentation tabs)
 

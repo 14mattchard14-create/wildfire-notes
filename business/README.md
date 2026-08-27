@@ -4,7 +4,7 @@ Knowledge base for CharredGuard Fire Risk Mitigation Services LLC — plain mark
 
 ## Files
 
-- **`business-plan.md`** — the reference business plan (pricing, market analysis, service lines, financials, legal templates). Source of truth for pricing ($500 on-site / $200 guided) and service area (Southern California, primary areas North San Diego County + Orange County) — `charred-guard-site` is reconciled against this, not the other way around.
+- **`business-plan.md`** — the reference business plan (pricing, market analysis, service lines, financials, legal templates). Source of truth for pricing and service area — `charred-guard-site` is reconciled against this, not the other way around. **As of August 2026 (solo pivot, see the plan's header note): guided self-inspection only, $200 flat, no travel-radius constraint** — the on-site tier and hardening add-on are discontinued for now.
 - **`legal-risk-notes.md`** — living tracker of open legal/compliance questions raised against the plan (contractor-licensing exemption vs. marketing, permit requirements, regulatory citation accuracy, etc.). Update the Status column as items resolve.
 - **`competitive-research.md`** — scan of direct competitors (Madronus, Wildfire Mitigation Advisors, Trident Inspection Group) and the gap analysis that drove several site changes.
 - **`growth-poam.xlsx`** — four tabs:
