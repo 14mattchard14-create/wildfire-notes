@@ -52,7 +52,7 @@ export default function InspectorLayout({ children }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <ThemeToggle />
             <button
-              onClick={() => supabase.auth.signOut()}
+              onClick={() => supabase.auth.signOut().then(() => { window.location.href = '/' })}
               style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--header-text)', opacity: 0.7, background: 'none', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 4, padding: '4px 7px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}
             >
               Sign Out

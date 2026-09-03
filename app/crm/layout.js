@@ -40,7 +40,7 @@ export default function CrmLayout({ children }) {
             <ThemeToggle />
             <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--header-text)', opacity: 0.6 }}>{userName}</span>
             <button
-              onClick={() => supabase.auth.signOut()}
+              onClick={() => supabase.auth.signOut().then(() => { window.location.href = '/' })}
               style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--header-text)', opacity: 0.7, background: 'none', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}
             >
               Sign Out
