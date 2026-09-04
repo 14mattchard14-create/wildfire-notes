@@ -3,8 +3,8 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
-import LoginPage        from '@/app/login/page'
-import HomeownerHome    from '@/components/HomeownerHome'
+import LoginPage           from '@/app/login/page'
+import HomeownerGuidedEntry from '@/components/HomeownerGuidedEntry'
 
 export default function Home() {
   const { user, loading, isHomeowner, profileReady } = useAuth()
@@ -29,7 +29,7 @@ export default function Home() {
 
   if (!user) return <LoginPage />
 
-  if (isHomeowner) return <HomeownerHome user={user} />
+  if (isHomeowner) return <HomeownerGuidedEntry user={user} />
 
   // Employee: redirecting to /manage via the effect above.
   return (

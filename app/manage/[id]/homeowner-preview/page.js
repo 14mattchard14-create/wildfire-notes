@@ -2,14 +2,14 @@
 
 import { useParams } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
-import HomeownerHome from '@/components/HomeownerHome'
+import HomeownerGuidedEntry from '@/components/HomeownerGuidedEntry'
 
-// Admin/staff-only QA tool: renders the exact HomeownerHome screen a real
-// homeowner would see for this property, without needing a second account
-// or email. See app/api/homeowner/entries/route.js's resolvePropertyId()
-// for the server-side half of this — that route only honors the
-// ?propertyId= override for non-homeowner accounts, so a real homeowner
-// can never use this to see another property's data.
+// Admin/staff-only QA tool: renders the exact guided-walkthrough screen a
+// real homeowner would see for this property, without needing a second
+// account or email. See app/api/homeowner/segments/route.js's
+// resolvePropertyId() for the server-side half of this — that route only
+// honors the ?propertyId= override for non-homeowner accounts, so a real
+// homeowner can never use this to see another property's data.
 export default function HomeownerPreviewPage() {
   const { id } = useParams()
   const { user, loading, isHomeowner, profileReady } = useAuth()
@@ -26,5 +26,5 @@ export default function HomeownerPreviewPage() {
     </div>
   )
 
-  return <HomeownerHome user={user} propertyId={id} previewMode />
+  return <HomeownerGuidedEntry user={user} propertyId={id} previewMode />
 }
