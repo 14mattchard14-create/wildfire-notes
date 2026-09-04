@@ -53,7 +53,7 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
 
   const notesDirty = useRef(false)
   const notesTimer = useRef(null)
-  const tabRefs = useRef({}) // 'overview' | segment key -> button DOM node
+  const tabScrollRef = useRef(null) // the scrolling tab-pill container
 
   const qs = propertyId ? `?propertyId=${propertyId}` : ''
   const activeSegment = GUIDED_SEGMENTS[activeIdx]
@@ -85,7 +85,8 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
   // on narrow widths.
   useEffect(() => {
     const key = showOverview ? 'overview' : activeSegment.key
-    tabRefs.current[key]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+    const el = tabScrollRef.current?.querySelector(`[data-tab-key="${key}"]`)
+    el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
   }, [showOverview, activeIdx, activeSegment.key])
 
   // Re-sync the notes draft whenever the active segment changes, or after
@@ -260,8 +261,8 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
         <div style={{ display: 'flex', alignItems: 'center', borderTop: '1px solid var(--line)' }}>
           <button onClick={goBack} disabled={showOverview} aria-label="Previous step" style={{ flexShrink: 0, width: 34, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--header-bg)', border: 'none', color: showOverview ? 'var(--line)' : 'var(--text-muted)', fontSize: 14, cursor: showOverview ? 'default' : 'pointer' }}>←</button>
 
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', padding: '10px 10px' }}>
-            <button ref={el => { tabRefs.current.overview = el }} onClick={() => setShowOverview(true)} style={{
+          <div ref={tabScrollRef} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', padding: '10px 10px' }}>
+            <button data-tab-key="overview" onClick={() => setShowOverview(true)} style={{
               flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
               padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
               border: `1px solid ${showOverview ? 'var(--accent)' : 'var(--line)'}`,
@@ -274,7 +275,7 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
             {GUIDED_SEGMENTS.map((seg, idx) => {
               const active = !showOverview && idx === activeIdx
               return (
-                <button key={seg.key} ref={el => { tabRefs.current[seg.key] = el }} onClick={() => { setShowOverview(false); setActiveIdx(idx) }} style={{
+                <button key={seg.key} data-tab-key={seg.key} onClick={() => { setShowOverview(false); setActiveIdx(idx) }} style={{
                   flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
                   padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
                   border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
