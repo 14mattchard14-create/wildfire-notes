@@ -407,7 +407,7 @@ function SegmentScreen({
         <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: '0 0 10px' }}>
           One wide shot of this whole side, then check it.
         </p>
-        <PhotoUpload propertyId={propertyId} onPhotoUrl={setPhotoDraft} initialUrl={activeRow?.photo_url} />
+        <PhotoUpload key={activeSegment.key} propertyId={propertyId} onPhotoUrl={setPhotoDraft} initialUrl={activeRow?.photo_url} />
         {hasPhoto && (
           <button onClick={analyzeSegment} disabled={analyzing} style={{ marginTop: 10, fontSize: 11.5, fontFamily: 'monospace', color: 'var(--accent)', background: 'transparent', border: '1px solid var(--accent)', borderRadius: 4, padding: '7px 12px', cursor: 'pointer', opacity: analyzing ? 0.5 : 1 }}>
             {analyzing ? 'Checking…' : alreadyChecked ? 'Check Again' : 'Check My Photo'}
@@ -556,7 +556,7 @@ function ConsiderationModal({ modal, setModal, propertyId, segmentKey, onUpdate 
 
         <div style={{ marginBottom: 16 }}>
           <span style={{ display: 'block', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)', marginBottom: 6 }}>Or add a closer photo</span>
-          <PhotoUpload propertyId={propertyId} onPhotoUrl={setFollowUpPhoto} initialUrl={current.followUpPhotoUrl} />
+          <PhotoUpload key={current.id} propertyId={propertyId} onPhotoUrl={setFollowUpPhoto} initialUrl={current.followUpPhotoUrl} />
           {(followUpPhoto || current.followUpPhotoUrl) && !current.followUpResponse && (
             <button onClick={() => runFollowUp(followUpPhoto || current.followUpPhotoUrl)} disabled={checkingFollowUp} style={{ marginTop: 8, fontSize: 11.5, fontFamily: 'monospace', color: 'var(--accent)', background: 'transparent', border: '1px solid var(--accent)', borderRadius: 4, padding: '7px 12px', cursor: 'pointer', opacity: checkingFollowUp ? 0.5 : 1 }}>
               {checkingFollowUp ? 'Checking…' : 'Check This Photo'}
