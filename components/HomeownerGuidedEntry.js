@@ -44,6 +44,7 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
   const [loadError, setLoadError] = useState(null)
   const [showOverview, setShowOverview] = useState(true)
   const [activeIdx, setActiveIdx] = useState(0)
+  const [checklistOpen, setChecklistOpen] = useState(false)
   const [photoDraft, setPhotoDraft] = useState(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [notesDraft, setNotesDraft] = useState('')
@@ -81,6 +82,7 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
   useEffect(() => {
     setNotesDraft(segRows[activeSegment.key]?.notes ?? '')
     setPhotoDraft(null)
+    setChecklistOpen(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeIdx, segRows[activeSegment.key]?.notes])
 
@@ -176,14 +178,14 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
           <span style={{ fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 4, fontFamily: 'monospace', display: 'block' }}>
             Field Notes · Guided Walkthrough
           </span>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div>
-              <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '0.02em', margin: 0, color: 'var(--header-text)' }}>
+              <h1 style={{ fontSize: 'clamp(16px, 5vw, 20px)', fontWeight: 700, letterSpacing: '0.02em', margin: 0, color: 'var(--header-text)' }}>
                 {property?.address ?? 'Your Property'}
               </h1>
               <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--header-text)', opacity: 0.6 }}>{user?.user_metadata?.full_name || user?.email}</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <ThemeToggle />
               <button
                 onClick={() => setShowOverview(true)}
@@ -266,20 +268,19 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
               <span style={{ display: 'block', fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 10 }}>
                 What you&apos;ll cover
               </span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {GUIDED_SEGMENTS.map(seg => {
                   const done = !!(segRows[seg.key]?.photo_url || segRows[seg.key]?.notes?.trim())
                   return (
-                    <div key={seg.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: done ? 'var(--text-muted)' : 'var(--text)' }}>
-                      <span style={{
-                        width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
-                        border: `1px solid ${done ? 'var(--ok)' : 'var(--line)'}`,
-                        background: done ? 'var(--ok)' : 'transparent',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 9, color: '#FFFFFF',
-                      }}>{done ? '✓' : ''}</span>
-                      {seg.label}
-                    </div>
+                    <span key={seg.key} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      padding: '5px 10px', borderRadius: 14,
+                      border: `1px solid ${done ? 'var(--ok)' : 'var(--line)'}`,
+                      background: done ? 'rgba(58,125,68,.1)' : 'transparent',
+                      fontSize: 12, color: done ? 'var(--ok)' : 'var(--text)',
+                    }}>
+                      {done && '✓ '}{seg.label}
+                    </span>
                   )
                 })}
               </div>
@@ -295,14 +296,22 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
         <p style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 16 }}>{activeSegment.instructions}</p>
 
         <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, padding: 14, marginBottom: 16 }}>
-          <span style={{ display: 'block', fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 8 }}>
-            What to look for here
-          </span>
-          <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {activeSegment.items.map(item => (
-              <li key={item.label} style={{ fontSize: 12.5, color: 'var(--text)', lineHeight: 1.5 }}>{item.hint}</li>
-            ))}
-          </ul>
+          <button
+            onClick={() => setChecklistOpen(o => !o)}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+          >
+            <span style={{ fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)' }}>
+              What to look for here ({activeSegment.items.length})
+            </span>
+            <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)' }}>{checklistOpen ? '▲ Hide' : '▼ Show'}</span>
+          </button>
+          {checklistOpen && (
+            <ul style={{ margin: '10px 0 0', paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {activeSegment.items.map(item => (
+                <li key={item.label} style={{ fontSize: 12.5, color: 'var(--text)', lineHeight: 1.5 }}>{item.hint}</li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, padding: 14, marginBottom: 16 }}>
