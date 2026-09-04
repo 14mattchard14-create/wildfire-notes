@@ -4,13 +4,13 @@ _Last updated: 2026-08-23_
 
 ## ⚠️ Action required — new migration
 
-- Run `supabase/migrations/009_guided_segment_notes.sql` — adds `guided_segments.notes`
-  (`alter table guided_segments add column if not exists notes text;`). **Discovered live
-  2026-08-23, not a new gap** — this migration has existed in the repo since segment notes
-  were folded into Guided Entry, but was apparently never actually run. Every save to a
-  segment's Notes box — inspector or homeowner — has been failing with a schema-cache error
-  this whole time; `app/api/homeowner/segments/route.js` now degrades gracefully instead of
-  500ing, but the underlying feature needs this migration run to actually work.
+- Run `supabase/migrations/031_guided_segments_considerations.sql` — adds
+  `guided_segments.considerations` (jsonb, default `[]`). Required for the homeowner
+  walkthrough's new step-by-step AI considerations popup (`components/HomeownerGuidedEntry.js`)
+  to persist anything — `app/api/segment-analysis` and the new consideration-answer endpoint
+  degrade gracefully without it (same schema-cache-error fallback pattern as migration 009),
+  but the actual feature needs this run to work.
+- `009_guided_segment_notes.sql` — run 2026-08-23, confirmed working.
 - Run `supabase/migrations/029_roles_and_documents.sql` — expands `profiles.role`'s check
   constraint to add `admin`, `partner`, `field_inspector`, `manager` (keeps `employee` and
   `homeowner`), adds `properties.assigned_inspector_id`, and creates `admin_documents`.

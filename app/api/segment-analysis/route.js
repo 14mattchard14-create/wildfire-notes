@@ -71,7 +71,12 @@ export async function POST(request) {
 Things worth checking in this area:
 ${checklistBlock}
 
-Look at their photo and give brief, friendly, plain-language guidance — no technical jargon, no compliance terminology, no codes or standards references. If something on the list looks like it might need a closer look, say so simply (e.g. "Can't quite tell if there's mesh on that vent — a closer shot would help" rather than referencing ember-resistant mesh specifications). If you genuinely can't tell something important from this photo, end with ONE direct, simple yes/no or short-answer question you'd want them to answer (e.g. "Does the deck underneath look enclosed, or open?"). Only ask a question if you're truly unsure about something that matters — don't force one. Keep the whole response to 2-4 short lines.`
+Look at their photo and identify individual considerations worth raising with the homeowner — things that need a closer look, or something you genuinely can't tell from this photo and need to ask about. Do not mention or praise anything that already looks fine — only flag what's actually worth their attention. Each consideration should be plain language, no technical jargon, no compliance terminology, no codes or standards references, and no em dashes. If there's truly nothing worth raising, return an empty list.
+
+Respond with ONLY a JSON object, no other text, in exactly this shape:
+{"considerations": [{"text": "short plain-language observation or question", "isQuestion": true or false}]}
+
+Use "isQuestion": true only when you genuinely cannot tell something from the photo and need the homeowner to answer (e.g. "Does the deck underneath look enclosed, or open?"). Use "isQuestion": false for something worth a closer look that doesn't need an answer, just their attention. Keep each "text" to one short sentence. Return at most 4 considerations.`
   } else {
     const segmentZones = [...new Set(segment.items.map(i => i.zone))]
     const { data: allEntries } = await supabaseAdmin
@@ -101,7 +106,7 @@ ${entriesBlock}
 Looking at the photo, flag anything from the checklist that appears visible but is marked NOT YET LOGGED, and anything else in the photo that looks worth a closer look (even if it's not on the checklist). This is a soft suggestion only — the inspector decides what to actually log. Be brief and concrete. Output 2-5 short bullet points starting with "-". If nothing stands out beyond what's already logged, say so in one line.`
   }
 
-  let suggestions
+  let rawResponse
   try {
     const aiResponse = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
@@ -114,10 +119,41 @@ Looking at the photo, flag anything from the checklist that appears visible but 
         ],
       }],
     })
-    suggestions = aiResponse.content[0].text
+    rawResponse = aiResponse.content[0].text
   } catch (err) {
     console.error('segment-analysis AI error:', err)
     return Response.json({ error: 'Analysis failed: ' + err.message }, { status: 502 })
+  }
+
+  if (profile.role === 'homeowner') {
+    const considerations = parseConsiderations(rawResponse)
+
+    const { error } = await supabaseAdmin
+      .from('guided_segments')
+      .upsert({
+        property_id: propertyId,
+        segment_key: segmentKey,
+        photo_url: photoUrl,
+        considerations,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'property_id,segment_key' })
+
+    if (isMissingColumnError(error, 'considerations')) {
+      return Response.json({ error: 'This feature needs migration 031_guided_segments_considerations.sql run first.' }, { status: 500 })
+    }
+    if (error) return Response.json({ error: error.message }, { status: 500 })
+
+    // Same "first activity moves Invited -> In Progress" behavior as the
+    // homeowner/entries route — this is often a homeowner's first real
+    // action in the walkthrough, so it shouldn't be the only place that
+    // transition can happen, but it needs to happen here too.
+    await supabaseAdmin
+      .from('properties')
+      .update({ homeowner_status: 'in_progress' })
+      .eq('id', propertyId)
+      .eq('homeowner_status', 'invited')
+
+    return Response.json({ considerations })
   }
 
   const { error } = await supabaseAdmin
@@ -126,23 +162,53 @@ Looking at the photo, flag anything from the checklist that appears visible but 
       property_id: propertyId,
       segment_key: segmentKey,
       photo_url: photoUrl,
-      ai_suggestions: suggestions,
+      ai_suggestions: rawResponse,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'property_id,segment_key' })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
+  return Response.json({ suggestions: rawResponse })
+}
 
-  // Same "first activity moves Invited -> In Progress" behavior as the
-  // homeowner/entries route — this is often a homeowner's first real
-  // action in the walkthrough, so it shouldn't be the only place that
-  // transition can happen, but it needs to happen here too.
-  if (profile.role === 'homeowner') {
-    await supabaseAdmin
-      .from('properties')
-      .update({ homeowner_status: 'in_progress' })
-      .eq('id', propertyId)
-      .eq('homeowner_status', 'invited')
+// Claude sometimes wraps JSON in a markdown code fence despite being asked
+// not to — strip that before parsing. Falls back to a single non-question
+// consideration holding the raw text if parsing fails outright, so a
+// malformed response degrades to "something to read" rather than silently
+// vanishing.
+function parseConsiderations(rawResponse) {
+  const cleaned = rawResponse.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()
+  try {
+    const parsed = JSON.parse(cleaned)
+    const list = Array.isArray(parsed?.considerations) ? parsed.considerations : []
+    return list
+      .filter(c => c && typeof c.text === 'string' && c.text.trim())
+      .slice(0, 6)
+      .map(c => ({
+        id: crypto.randomUUID(),
+        text: c.text.trim(),
+        isQuestion: !!c.isQuestion,
+        answer: null,
+        answeredAt: null,
+        followUpPhotoUrl: null,
+        followUpResponse: null,
+      }))
+  } catch {
+    console.error('segment-analysis: could not parse considerations JSON:', rawResponse)
+    return [{
+      id: crypto.randomUUID(),
+      text: cleaned || 'Could not analyze this photo — try again.',
+      isQuestion: false,
+      answer: null,
+      answeredAt: null,
+      followUpPhotoUrl: null,
+      followUpResponse: null,
+    }]
   }
+}
 
-  return Response.json({ suggestions })
+// Same PostgREST dual-phrasing issue as app/api/homeowner/segments/route.js
+// — a missing column errors differently on read vs. write.
+function isMissingColumnError(error, columnName) {
+  if (!error?.message?.includes(columnName)) return false
+  return error.message.includes('does not exist') || error.message.includes('schema cache')
 }

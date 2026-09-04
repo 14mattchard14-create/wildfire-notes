@@ -15,8 +15,8 @@ function resolvePropertyId(request, profile) {
 // a read (raw Postgres error, "column ... does not exist") or a write
 // (its own schema-cache validation, "Could not find the 'X' column ...
 // in the schema cache") — same root cause, two different message shapes.
-function isMissingNotesColumnError(error) {
-  if (!error?.message?.includes('notes')) return false
+function isMissingColumnError(error, columnName) {
+  if (!error?.message?.includes(columnName)) return false
   return error.message.includes('does not exist') || error.message.includes('schema cache')
 }
 
@@ -27,35 +27,32 @@ export async function GET(request) {
   if (profile.role !== 'homeowner' && !propertyId) return Response.json({ error: 'propertyId is required for staff preview' }, { status: 400 })
   if (!propertyId) return Response.json({ error: 'No property linked to this account' }, { status: 400 })
 
-  const [segmentsResult, { data: property }] = await Promise.all([
-    supabaseAdmin
-      .from('guided_segments')
-      .select('segment_key, photo_url, ai_suggestions, notes')
-      .eq('property_id', propertyId),
-    supabaseAdmin
-      .from('properties')
-      .select('id, address, homeowner_status')
-      .eq('id', propertyId)
-      .maybeSingle(),
-  ])
+  const { data: property } = await supabaseAdmin
+    .from('properties')
+    .select('id, address, homeowner_status')
+    .eq('id', propertyId)
+    .maybeSingle()
 
-  let { data: segments, error } = segmentsResult
+  // Falls back column-by-column rather than 500ing the whole page when a
+  // migration (009 for notes, 031 for considerations) hasn't been run
+  // against this database yet — see NEXT_STEPS.md's Action Required list.
+  let columns = 'segment_key, photo_url, ai_suggestions, notes, considerations'
+  let { data: segments, error } = await supabaseAdmin.from('guided_segments').select(columns).eq('property_id', propertyId)
+  let considerationsColumnMissing = false
+  if (isMissingColumnError(error, 'considerations')) {
+    considerationsColumnMissing = true
+    columns = 'segment_key, photo_url, ai_suggestions, notes'
+    ;({ data: segments, error } = await supabaseAdmin.from('guided_segments').select(columns).eq('property_id', propertyId))
+  }
   let notesColumnMissing = false
-  // Migration 009_guided_segment_notes.sql (adds guided_segments.notes)
-  // exists in the repo but hasn't been run against this database yet —
-  // fall back to selecting without it rather than 500ing the whole page,
-  // so the core photo/AI-gap-check loop still works before that migration
-  // is applied. Remove this fallback once 009 has actually been run.
-  if (isMissingNotesColumnError(error)) {
+  if (isMissingColumnError(error, 'notes')) {
     notesColumnMissing = true
-    ;({ data: segments, error } = await supabaseAdmin
-      .from('guided_segments')
-      .select('segment_key, photo_url, ai_suggestions')
-      .eq('property_id', propertyId))
+    columns = 'segment_key, photo_url, ai_suggestions'
+    ;({ data: segments, error } = await supabaseAdmin.from('guided_segments').select(columns).eq('property_id', propertyId))
   }
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
-  return Response.json({ segments: segments || [], property, notesColumnMissing })
+  return Response.json({ segments: segments || [], property, notesColumnMissing, considerationsColumnMissing })
 }
 
 // Saves the freeform notes box for one segment — separate from
@@ -81,7 +78,7 @@ export async function POST(request) {
       updated_at: new Date().toISOString(),
     }, { onConflict: 'property_id,segment_key' })
 
-  if (isMissingNotesColumnError(error)) {
+  if (isMissingColumnError(error, 'notes')) {
     return Response.json({ error: 'Notes aren\'t set up on this database yet — run migration 009_guided_segment_notes.sql, then try again.' }, { status: 500 })
   }
   if (error) return Response.json({ error: error.message }, { status: 500 })
