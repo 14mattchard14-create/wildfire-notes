@@ -268,7 +268,7 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
             <button data-tab-key="overview" onClick={() => setShowOverview(true)} style={{
               flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
               padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
-              border: `1px solid ${showOverview ? 'var(--accent)' : 'transparent'}`,
+              border: `1px solid ${showOverview ? 'var(--accent)' : 'rgba(128,128,128,0.25)'}`,
               background: showOverview ? 'rgba(190,91,29,.15)' : 'transparent',
               color: showOverview ? 'var(--accent)' : 'var(--text-muted)',
               fontFamily: 'monospace', fontSize: 10.5, whiteSpace: 'nowrap',
@@ -281,7 +281,7 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
                 <button key={seg.key} data-tab-key={seg.key} onClick={() => { setShowOverview(false); setActiveIdx(idx) }} style={{
                   flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
                   padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
-                  border: `1px solid ${active ? 'var(--accent)' : 'transparent'}`,
+                  border: `1px solid ${active ? 'var(--accent)' : 'rgba(128,128,128,0.25)'}`,
                   background: active ? 'rgba(190,91,29,.15)' : 'transparent',
                   color: active ? 'var(--accent)' : 'var(--text-muted)',
                   fontFamily: 'monospace', fontSize: 10.5, whiteSpace: 'nowrap',
