@@ -143,6 +143,19 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
     }
   }
 
+  // Previous/Next over the whole Overview + segments sequence — backs the
+  // tab bar's bookend arrows as well as the buttons at the bottom of each
+  // segment screen, so both controls move through the same steps.
+  function goBack() {
+    if (showOverview) return
+    if (activeIdx === 0) { setShowOverview(true); return }
+    setActiveIdx(i => i - 1)
+  }
+  function goForward() {
+    if (showOverview) { setShowOverview(false); setActiveIdx(0); return }
+    setActiveIdx(i => Math.min(GUIDED_SEGMENTS.length - 1, i + 1))
+  }
+
   function updateModalConsideration(updated) {
     setModal(m => {
       if (!m) return m
@@ -224,14 +237,15 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
         </div>
 
         {/* Step nav — Overview is the first tab, not a separate header button.
-            Leading arrow is a real back button (browser history); trailing
-            arrow just bookends the row to signal this is a sequence to
-            click through, not a set of independent options — no arrow
-            between every pair, that read as too busy. No done/checkmark
-            styling here — that's tracked in the overview's own prose
+            Bookend arrows are real Previous/Next controls over the whole
+            Overview + segments sequence (same steps as the buttons at the
+            bottom of each segment screen), not decorative — disabled at
+            each true end. No arrow between every pair in between, that
+            read as too busy. No done/checkmark styling on the tabs
+            themselves — that's tracked in the overview's own prose
             instead, to avoid two competing "progress" signals. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-          <button onClick={() => router.back()} aria-label="Back" style={{ flexShrink: 0, background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', padding: '4px 2px' }}>←</button>
+          <button onClick={goBack} disabled={showOverview} aria-label="Previous step" style={{ flexShrink: 0, background: 'none', border: 'none', color: showOverview ? 'var(--line)' : 'var(--text-muted)', fontSize: 13, cursor: showOverview ? 'default' : 'pointer', padding: '4px 2px' }}>←</button>
           <button onClick={() => setShowOverview(true)} style={{
             flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
             padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
@@ -257,7 +271,7 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
               </button>
             )
           })}
-          <span style={{ color: 'var(--line)', fontSize: 11, flexShrink: 0 }}>→</span>
+          <button onClick={goForward} disabled={!showOverview && activeIdx === GUIDED_SEGMENTS.length - 1} aria-label="Next step" style={{ flexShrink: 0, background: 'none', border: 'none', color: (!showOverview && activeIdx === GUIDED_SEGMENTS.length - 1) ? 'var(--line)' : 'var(--text-muted)', fontSize: 13, cursor: (!showOverview && activeIdx === GUIDED_SEGMENTS.length - 1) ? 'default' : 'pointer', padding: '4px 2px' }}>→</button>
         </div>
       </header>
 
@@ -291,8 +305,8 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
             onNotesChange={handleNotesChange}
             notesStatus={notesStatus}
             notePlaceholder={activeSegment.notePlaceholder}
-            onPrev={() => setActiveIdx(i => Math.max(0, i - 1))}
-            onNext={() => setActiveIdx(i => Math.min(GUIDED_SEGMENTS.length - 1, i + 1))}
+            onPrev={goBack}
+            onNext={goForward}
             isFirst={activeIdx === 0}
             isLast={activeIdx === GUIDED_SEGMENTS.length - 1}
             doneCount={doneCount}
@@ -445,23 +459,28 @@ function SegmentScreen({
         />
       </CollapsibleSection>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-        <button onClick={onPrev} disabled={isFirst} style={{ flex: 1, padding: '12px', background: 'transparent', border: '1px solid var(--line)', borderRadius: 4, color: isFirst ? 'var(--line)' : 'var(--text-muted)', fontSize: 12.5, fontFamily: 'monospace', cursor: isFirst ? 'default' : 'pointer' }}>
-          ← Previous
+      <div style={{ display: 'flex', gap: 8, marginBottom: isLast ? 24 : 0 }}>
+        <button onClick={onPrev} style={{ flex: 1, padding: '12px', background: 'transparent', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text-muted)', fontSize: 12.5, fontFamily: 'monospace', cursor: 'pointer' }}>
+          {isFirst ? '← Overview' : '← Previous'}
         </button>
         <button onClick={onNext} disabled={isLast} style={{ flex: 1, padding: '12px', background: isLast ? 'transparent' : 'var(--accent)', border: isLast ? '1px solid var(--line)' : 'none', borderRadius: 4, color: isLast ? 'var(--line)' : '#FFFFFF', fontSize: 12.5, fontFamily: 'monospace', fontWeight: 700, cursor: isLast ? 'default' : 'pointer' }}>
           Next Side →
         </button>
       </div>
 
-      <div style={{ borderTop: '1px solid var(--line)', paddingTop: 20, textAlign: 'center' }}>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px' }}>
-          {doneCount} of {GUIDED_SEGMENTS.length} sides captured. Walked the whole property?
-        </p>
-        <Button onClick={finish} disabled={finishing}>
-          {finishing ? 'Sending…' : "I'm Done — Send to My Inspector"}
-        </Button>
-      </div>
+      {/* Only the last segment offers Finish — showing this on every
+          screen read as always-available when it's really meant to be the
+          natural end of the sequence. */}
+      {isLast && (
+        <div style={{ borderTop: '1px solid var(--line)', paddingTop: 20, marginTop: 24, textAlign: 'center' }}>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px' }}>
+            {doneCount} of {GUIDED_SEGMENTS.length} sides captured. Walked the whole property?
+          </p>
+          <Button onClick={finish} disabled={finishing}>
+            {finishing ? 'Sending…' : "I'm Done — Send to My Inspector"}
+          </Button>
+        </div>
+      )}
     </>
   )
 }
