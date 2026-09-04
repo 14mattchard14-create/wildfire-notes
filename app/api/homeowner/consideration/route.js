@@ -63,7 +63,7 @@ export async function POST(request) {
       return Response.json({ error: 'Could not load the follow-up photo: ' + err.message }, { status: 502 })
     }
 
-    const prompt = `A homeowner is doing a self-guided wildfire-risk walkthrough of the "${segment?.label || segmentKey}" area of their home. Earlier, this was flagged: "${updated.text}"${updated.answer ? ` They answered: "${updated.answer}".` : ''} They've now taken a closer follow-up photo specifically to help clarify this. Look at it and respond in 1-2 short, plain-language sentences confirming what you can now see, or saying what's still unclear. No jargon, no compliance terminology, no em dashes, no praise of unrelated things in the photo — stay focused on this one point.`
+    const prompt = `A homeowner is doing a self-guided wildfire-risk walkthrough of the "${segment?.label || segmentKey}" area of their home. Earlier, this was flagged: "${updated.text}"${updated.answer ? ` They answered: "${updated.answer}".` : ''} They've now taken a closer follow-up photo specifically to help clarify this. Look at it and respond in 1-2 short, plain-language sentences confirming what you can now see, or saying what's still unclear. No jargon, no compliance terminology, no praise of unrelated things in the photo, stay focused on this one point. Never use a dash or hyphen to join two clauses in one sentence (not even a plain "-") — write two separate sentences instead, or use a comma.`
 
     try {
       const aiResponse = await anthropic.messages.create({

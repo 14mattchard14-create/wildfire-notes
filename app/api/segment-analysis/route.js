@@ -71,7 +71,7 @@ export async function POST(request) {
 Things worth checking in this area:
 ${checklistBlock}
 
-Look at their photo and identify individual considerations worth raising with the homeowner — things that need a closer look, or something you genuinely can't tell from this photo and need to ask about. Do not mention or praise anything that already looks fine — only flag what's actually worth their attention. Each consideration should be plain language, no technical jargon, no compliance terminology, no codes or standards references, and no em dashes. If there's truly nothing worth raising, return an empty list.
+Look at their photo and identify individual considerations worth raising with the homeowner: things that need a closer look, or something you genuinely can't tell from this photo and need to ask about. Do not mention or praise anything that already looks fine, only flag what's actually worth their attention. Each consideration should be plain language, no technical jargon, no compliance terminology, no codes or standards references. Never use a dash or hyphen to join two clauses in one sentence (not even a plain "-") — write two separate sentences instead, or use a comma. If there's truly nothing worth raising, return an empty list.
 
 Respond with ONLY a JSON object, no other text, in exactly this shape:
 {"considerations": [{"text": "short plain-language observation or question", "isQuestion": true or false}]}
@@ -196,7 +196,7 @@ function parseConsiderations(rawResponse) {
     console.error('segment-analysis: could not parse considerations JSON:', rawResponse)
     return [{
       id: crypto.randomUUID(),
-      text: cleaned || 'Could not analyze this photo — try again.',
+      text: cleaned || 'Could not analyze this photo. Try again.',
       isQuestion: false,
       answer: null,
       answeredAt: null,
