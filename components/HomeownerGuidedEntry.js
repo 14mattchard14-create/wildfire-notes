@@ -240,38 +240,45 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
             Bookend arrows are real Previous/Next controls over the whole
             Overview + segments sequence (same steps as the buttons at the
             bottom of each segment screen), not decorative — disabled at
-            each true end. No arrow between every pair in between, that
-            read as too busy. No done/checkmark styling on the tabs
-            themselves — that's tracked in the overview's own prose
-            instead, to avoid two competing "progress" signals. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-          <button onClick={goBack} disabled={showOverview} aria-label="Previous step" style={{ flexShrink: 0, background: 'none', border: 'none', color: showOverview ? 'var(--line)' : 'var(--text-muted)', fontSize: 13, cursor: showOverview ? 'default' : 'pointer', padding: '4px 2px' }}>←</button>
-          <button onClick={() => setShowOverview(true)} style={{
-            flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
-            padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
-            border: `1px solid ${showOverview ? 'var(--accent)' : 'var(--line)'}`,
-            background: showOverview ? 'rgba(190,91,29,.15)' : 'transparent',
-            color: showOverview ? 'var(--accent)' : 'var(--text-muted)',
-            fontFamily: 'monospace', fontSize: 10.5, whiteSpace: 'nowrap',
-          }}>
-            Overview
-          </button>
-          {GUIDED_SEGMENTS.map((seg, idx) => {
-            const active = !showOverview && idx === activeIdx
-            return (
-              <button key={seg.key} onClick={() => { setShowOverview(false); setActiveIdx(idx) }} style={{
-                flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
-                padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
-                border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
-                background: active ? 'rgba(190,91,29,.15)' : 'transparent',
-                color: active ? 'var(--accent)' : 'var(--text-muted)',
-                fontFamily: 'monospace', fontSize: 10.5, whiteSpace: 'nowrap',
-              }}>
-                {seg.label}
-              </button>
-            )
-          })}
-          <button onClick={goForward} disabled={!showOverview && activeIdx === GUIDED_SEGMENTS.length - 1} aria-label="Next step" style={{ flexShrink: 0, background: 'none', border: 'none', color: (!showOverview && activeIdx === GUIDED_SEGMENTS.length - 1) ? 'var(--line)' : 'var(--text-muted)', fontSize: 13, cursor: (!showOverview && activeIdx === GUIDED_SEGMENTS.length - 1) ? 'default' : 'pointer', padding: '4px 2px' }}>→</button>
+            each true end. They sit OUTSIDE the scrolling pill row (not
+            flex children of it) so they stay pinned at the screen edges
+            and stay visible on narrow/mobile widths — only the pills
+            themselves scroll horizontally in between. No done/checkmark
+            styling on the tabs themselves — that's tracked in the
+            overview's own prose instead, to avoid two competing
+            "progress" signals. */}
+        <div style={{ display: 'flex', alignItems: 'center', borderTop: '1px solid var(--line)' }}>
+          <button onClick={goBack} disabled={showOverview} aria-label="Previous step" style={{ flexShrink: 0, width: 34, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--header-bg)', border: 'none', borderRight: '1px solid var(--line)', color: showOverview ? 'var(--line)' : 'var(--text-muted)', fontSize: 14, cursor: showOverview ? 'default' : 'pointer' }}>←</button>
+
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', padding: '10px 10px' }}>
+            <button onClick={() => setShowOverview(true)} style={{
+              flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
+              padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
+              border: `1px solid ${showOverview ? 'var(--accent)' : 'var(--line)'}`,
+              background: showOverview ? 'rgba(190,91,29,.15)' : 'transparent',
+              color: showOverview ? 'var(--accent)' : 'var(--text-muted)',
+              fontFamily: 'monospace', fontSize: 10.5, whiteSpace: 'nowrap',
+            }}>
+              Overview
+            </button>
+            {GUIDED_SEGMENTS.map((seg, idx) => {
+              const active = !showOverview && idx === activeIdx
+              return (
+                <button key={seg.key} onClick={() => { setShowOverview(false); setActiveIdx(idx) }} style={{
+                  flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
+                  padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
+                  border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
+                  background: active ? 'rgba(190,91,29,.15)' : 'transparent',
+                  color: active ? 'var(--accent)' : 'var(--text-muted)',
+                  fontFamily: 'monospace', fontSize: 10.5, whiteSpace: 'nowrap',
+                }}>
+                  {seg.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <button onClick={goForward} disabled={!showOverview && activeIdx === GUIDED_SEGMENTS.length - 1} aria-label="Next step" style={{ flexShrink: 0, width: 34, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--header-bg)', border: 'none', borderLeft: '1px solid var(--line)', color: (!showOverview && activeIdx === GUIDED_SEGMENTS.length - 1) ? 'var(--line)' : 'var(--text-muted)', fontSize: 14, cursor: (!showOverview && activeIdx === GUIDED_SEGMENTS.length - 1) ? 'default' : 'pointer' }}>→</button>
         </div>
       </header>
 
