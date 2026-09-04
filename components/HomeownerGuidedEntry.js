@@ -224,11 +224,13 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
         </div>
 
         {/* Step nav — Overview is the first tab, not a separate header button.
-            Arrow separators signal this is a sequence to click through, not
-            a set of independent options. No done/checkmark styling here —
-            that's tracked in the overview's own prose instead, to avoid two
-            competing "progress" signals. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflowX: 'auto', padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
+            A single arrow bookends each end of the row to signal this is a
+            sequence to click through, not a set of independent options —
+            no arrow between every pair, that read as too busy. No
+            done/checkmark styling here — that's tracked in the overview's
+            own prose instead, to avoid two competing "progress" signals. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
+          <span style={{ color: 'var(--line)', fontSize: 11, flexShrink: 0 }}>→</span>
           <button onClick={() => setShowOverview(true)} style={{
             flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
             padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
@@ -242,21 +244,19 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
           {GUIDED_SEGMENTS.map((seg, idx) => {
             const active = !showOverview && idx === activeIdx
             return (
-              <span key={seg.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                <span style={{ color: 'var(--line)', fontSize: 11 }}>→</span>
-                <button onClick={() => { setShowOverview(false); setActiveIdx(idx) }} style={{
-                  flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
-                  padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
-                  border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
-                  background: active ? 'rgba(190,91,29,.15)' : 'transparent',
-                  color: active ? 'var(--accent)' : 'var(--text-muted)',
-                  fontFamily: 'monospace', fontSize: 10.5, whiteSpace: 'nowrap',
-                }}>
-                  {seg.label}
-                </button>
-              </span>
+              <button key={seg.key} onClick={() => { setShowOverview(false); setActiveIdx(idx) }} style={{
+                flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
+                padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
+                border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
+                background: active ? 'rgba(190,91,29,.15)' : 'transparent',
+                color: active ? 'var(--accent)' : 'var(--text-muted)',
+                fontFamily: 'monospace', fontSize: 10.5, whiteSpace: 'nowrap',
+              }}>
+                {seg.label}
+              </button>
             )
           })}
+          <span style={{ color: 'var(--line)', fontSize: 11, flexShrink: 0 }}>→</span>
         </div>
       </header>
 
