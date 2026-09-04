@@ -42,6 +42,7 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
   const [segRows, setSegRows] = useState({}) // segment_key -> { photo_url, ai_suggestions, notes }
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
+  const [showOverview, setShowOverview] = useState(true)
   const [activeIdx, setActiveIdx] = useState(0)
   const [photoDraft, setPhotoDraft] = useState(null)
   const [analyzing, setAnalyzing] = useState(false)
@@ -184,6 +185,12 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <ThemeToggle />
+              <button
+                onClick={() => setShowOverview(true)}
+                style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--header-text)', opacity: 0.7, background: 'none', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+              >
+                Overview
+              </button>
               {previewMode ? (
                 <button
                   onClick={() => router.push(`/manage/${propertyId}`)}
@@ -203,24 +210,26 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
           </div>
         </div>
 
-        {/* Step nav */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-          {GUIDED_SEGMENTS.map((seg, idx) => {
-            const done = !!(segRows[seg.key]?.photo_url || segRows[seg.key]?.notes?.trim())
-            return (
-              <button key={seg.key} onClick={() => setActiveIdx(idx)} style={{
-                flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
-                padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
-                border: `1px solid ${idx === activeIdx ? 'var(--accent)' : 'var(--line)'}`,
-                background: idx === activeIdx ? 'rgba(190,91,29,.15)' : 'transparent',
-                color: idx === activeIdx ? 'var(--accent)' : (done ? 'var(--ok)' : 'var(--text-muted)'),
-                fontFamily: 'monospace', fontSize: 10.5, whiteSpace: 'nowrap',
-              }}>
-                {done ? '✓ ' : ''}{seg.label}
-              </button>
-            )
-          })}
-        </div>
+        {/* Step nav — hidden on the overview screen, nothing to jump to yet */}
+        {!showOverview && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
+            {GUIDED_SEGMENTS.map((seg, idx) => {
+              const done = !!(segRows[seg.key]?.photo_url || segRows[seg.key]?.notes?.trim())
+              return (
+                <button key={seg.key} onClick={() => setActiveIdx(idx)} style={{
+                  flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
+                  padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
+                  border: `1px solid ${idx === activeIdx ? 'var(--accent)' : 'var(--line)'}`,
+                  background: idx === activeIdx ? 'rgba(190,91,29,.15)' : 'transparent',
+                  color: idx === activeIdx ? 'var(--accent)' : (done ? 'var(--ok)' : 'var(--text-muted)'),
+                  fontFamily: 'monospace', fontSize: 10.5, whiteSpace: 'nowrap',
+                }}>
+                  {done ? '✓ ' : ''}{seg.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
       </header>
 
       <div style={{ maxWidth: CONTENT_WIDTH, margin: '0 auto', padding: '20px 16px' }}>
@@ -230,6 +239,58 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
           </div>
         )}
 
+        {showOverview ? (
+          <>
+            <h2 style={{ fontSize: 21, fontWeight: 700, color: 'var(--text)', margin: '0 0 8px' }}>
+              {doneCount > 0 ? 'Welcome back' : "Let's document your property"}
+            </h2>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 20 }}>
+              {doneCount > 0
+                ? `You've captured ${doneCount} of ${GUIDED_SEGMENTS.length} sides so far. Pick up where you left off, or jump to any side below.`
+                : "No inspector visit needed — you'll walk your property yourself, one side at a time, with an assistant checking your photos as you go."}
+            </p>
+
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, padding: 16, marginBottom: 16 }}>
+              <span style={{ display: 'block', fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 10 }}>
+                How it works
+              </span>
+              <ol style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <li style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>Take one wide photo of each side of your property, plus a couple of specific areas (vegetation, detached structures).</li>
+                <li style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>An assistant checks each photo right away and tells you, in plain language, if anything&apos;s worth a closer look — or asks you a quick question if it can&apos;t quite tell.</li>
+                <li style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>Add a note anywhere you want to point something out.</li>
+                <li style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>Save and come back anytime — nothing is timed, and your progress is kept. When you&apos;re done, send it to your inspector for the formal report.</li>
+              </ol>
+            </div>
+
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, padding: 16, marginBottom: 24 }}>
+              <span style={{ display: 'block', fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 10 }}>
+                What you&apos;ll cover
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {GUIDED_SEGMENTS.map(seg => {
+                  const done = !!(segRows[seg.key]?.photo_url || segRows[seg.key]?.notes?.trim())
+                  return (
+                    <div key={seg.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: done ? 'var(--text-muted)' : 'var(--text)' }}>
+                      <span style={{
+                        width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+                        border: `1px solid ${done ? 'var(--ok)' : 'var(--line)'}`,
+                        background: done ? 'var(--ok)' : 'transparent',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 9, color: '#FFFFFF',
+                      }}>{done ? '✓' : ''}</span>
+                      {seg.label}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            <Button onClick={() => setShowOverview(false)} style={{ width: '100%' }}>
+              {doneCount > 0 ? 'Continue Walkthrough' : 'Start Walkthrough'}
+            </Button>
+          </>
+        ) : (
+          <>
         <h2 style={{ fontSize: 19, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>{activeSegment.label}</h2>
         <p style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 16 }}>{activeSegment.instructions}</p>
 
@@ -297,6 +358,8 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
             {finishing ? 'Sending…' : "I'm Done — Send to My Inspector"}
           </Button>
         </div>
+          </>
+        )}
       </div>
     </div>
   )
