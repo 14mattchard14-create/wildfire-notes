@@ -11,6 +11,15 @@ function resolvePropertyId(request, profile) {
   return url.searchParams.get('propertyId') || null
 }
 
+// PostgREST phrases a missing column differently depending on whether it's
+// a read (raw Postgres error, "column ... does not exist") or a write
+// (its own schema-cache validation, "Could not find the 'X' column ...
+// in the schema cache") — same root cause, two different message shapes.
+function isMissingNotesColumnError(error) {
+  if (!error?.message?.includes('notes')) return false
+  return error.message.includes('does not exist') || error.message.includes('schema cache')
+}
+
 export async function GET(request) {
   const { user, profile } = await getAuthedUser(request)
   if (!user) return Response.json({ error: 'Not signed in' }, { status: 401 })
@@ -37,7 +46,7 @@ export async function GET(request) {
   // fall back to selecting without it rather than 500ing the whole page,
   // so the core photo/AI-gap-check loop still works before that migration
   // is applied. Remove this fallback once 009 has actually been run.
-  if (error?.message?.includes('notes') && error?.message?.includes('does not exist')) {
+  if (isMissingNotesColumnError(error)) {
     notesColumnMissing = true
     ;({ data: segments, error } = await supabaseAdmin
       .from('guided_segments')
@@ -72,7 +81,7 @@ export async function POST(request) {
       updated_at: new Date().toISOString(),
     }, { onConflict: 'property_id,segment_key' })
 
-  if (error?.message?.includes('notes') && error?.message?.includes('does not exist')) {
+  if (isMissingNotesColumnError(error)) {
     return Response.json({ error: 'Notes aren\'t set up on this database yet — run migration 009_guided_segment_notes.sql, then try again.' }, { status: 500 })
   }
   if (error) return Response.json({ error: error.message }, { status: 500 })
