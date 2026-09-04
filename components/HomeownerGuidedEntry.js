@@ -44,7 +44,6 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
   const [loadError, setLoadError] = useState(null)
   const [showOverview, setShowOverview] = useState(true)
   const [activeIdx, setActiveIdx] = useState(0)
-  const [checklistOpen, setChecklistOpen] = useState(false)
   const [photoDraft, setPhotoDraft] = useState(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [notesDraft, setNotesDraft] = useState('')
@@ -86,7 +85,6 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
     notesDirty.current = false
     setNotesDraft(segRows[activeSegment.key]?.notes ?? '')
     setPhotoDraft(null)
-    setChecklistOpen(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeIdx, segRows[activeSegment.key]?.notes])
 
@@ -225,8 +223,12 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
           <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--header-text)', opacity: 0.6 }}>{user?.user_metadata?.full_name || user?.email}</span>
         </div>
 
-        {/* Step nav — Overview is the first tab, not a separate header button */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
+        {/* Step nav — Overview is the first tab, not a separate header button.
+            Arrow separators signal this is a sequence to click through, not
+            a set of independent options. No done/checkmark styling here —
+            that's tracked in the overview's own prose instead, to avoid two
+            competing "progress" signals. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflowX: 'auto', padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
           <button onClick={() => setShowOverview(true)} style={{
             flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
             padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
@@ -238,19 +240,21 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
             Overview
           </button>
           {GUIDED_SEGMENTS.map((seg, idx) => {
-            const done = !!(segRows[seg.key]?.photo_url || segRows[seg.key]?.notes?.trim())
             const active = !showOverview && idx === activeIdx
             return (
-              <button key={seg.key} onClick={() => { setShowOverview(false); setActiveIdx(idx) }} style={{
-                flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
-                padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
-                border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
-                background: active ? 'rgba(190,91,29,.15)' : 'transparent',
-                color: active ? 'var(--accent)' : (done ? 'var(--ok)' : 'var(--text-muted)'),
-                fontFamily: 'monospace', fontSize: 10.5, whiteSpace: 'nowrap',
-              }}>
-                {done ? '✓ ' : ''}{seg.label}
-              </button>
+              <span key={seg.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                <span style={{ color: 'var(--line)', fontSize: 11 }}>→</span>
+                <button onClick={() => { setShowOverview(false); setActiveIdx(idx) }} style={{
+                  flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
+                  padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
+                  border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
+                  background: active ? 'rgba(190,91,29,.15)' : 'transparent',
+                  color: active ? 'var(--accent)' : 'var(--text-muted)',
+                  fontFamily: 'monospace', fontSize: 10.5, whiteSpace: 'nowrap',
+                }}>
+                  {seg.label}
+                </button>
+              </span>
             )
           })}
         </div>
@@ -276,8 +280,6 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
             activeIdx={activeIdx}
             activeRow={activeRow}
             propertyId={propertyId}
-            checklistOpen={checklistOpen}
-            setChecklistOpen={setChecklistOpen}
             photoDraft={photoDraft}
             setPhotoDraft={setPhotoDraft}
             analyzing={analyzing}
@@ -320,6 +322,24 @@ function shortLabel(label) {
   return label.replace(/^.*? — /, '')
 }
 
+function CollapsibleSection({ title, defaultOpen = true, children }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, padding: 14, marginBottom: 16 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+      >
+        <span style={{ fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)' }}>
+          {title}
+        </span>
+        <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)' }}>{open ? '▲ Hide' : '▼ Show'}</span>
+      </button>
+      {open && <div style={{ marginTop: 10 }}>{children}</div>}
+    </div>
+  )
+}
+
 function OverviewScreen({ property, segRows, doneCount, onStart }) {
   return (
     <>
@@ -332,22 +352,22 @@ function OverviewScreen({ property, segRows, doneCount, onStart }) {
           : "No inspector visit needed. You'll walk your property yourself, one side at a time, while an assistant checks your photos as you go."}
       </p>
 
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, padding: 16, marginBottom: 16 }}>
-        <span style={{ display: 'block', fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 10 }}>
-          How it works
-        </span>
+      <CollapsibleSection title="About this inspection">
+        <p style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6, margin: 0 }}>
+          CharredGuard evaluates homes for wildfire risk, the kind of assessment fire agencies and insurers use to judge how prepared a property actually is. This walkthrough checks your property&apos;s defensible space, vents, roofing, siding, and access against Wildfire Prepared Home (WPH) criteria, a published national standard, not a generic checklist. You do it yourself with your phone; no on-site visit is required. When you&apos;re done, your inspector reviews everything and puts together a written report showing where you stand and what to prioritize.
+        </p>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="How it works">
         <ol style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <li style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>Take one wide photo of each side of your property, plus a couple of specific areas (vegetation, detached structures).</li>
           <li style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>An assistant checks each photo right away. If anything needs a closer look, it&apos;ll ask you about it one question at a time.</li>
           <li style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>Answer with a quick note, or add a follow-up photo for anything you want a second check on.</li>
           <li style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>Everything saves automatically. Come back anytime, and send it to your inspector when you&apos;re done.</li>
         </ol>
-      </div>
+      </CollapsibleSection>
 
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, padding: 16, marginBottom: 24 }}>
-        <span style={{ display: 'block', fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 10 }}>
-          What you&apos;ll cover
-        </span>
+      <CollapsibleSection title="What you'll cover">
         <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column' }}>
           {GUIDED_SEGMENTS.map((seg, i) => (
             <li key={seg.key} style={{ fontSize: 13, color: 'var(--text)', padding: '7px 0', borderTop: i === 0 ? 'none' : '1px solid var(--line)' }}>
@@ -355,9 +375,9 @@ function OverviewScreen({ property, segRows, doneCount, onStart }) {
             </li>
           ))}
         </ul>
-      </div>
+      </CollapsibleSection>
 
-      <Button onClick={onStart} style={{ width: '100%' }}>
+      <Button onClick={onStart} style={{ width: '100%', marginTop: 8 }}>
         {doneCount > 0 ? 'Continue Walkthrough' : 'Start Walkthrough'}
       </Button>
     </>
@@ -365,7 +385,7 @@ function OverviewScreen({ property, segRows, doneCount, onStart }) {
 }
 
 function SegmentScreen({
-  activeSegment, activeRow, propertyId, checklistOpen, setChecklistOpen,
+  activeSegment, activeRow, propertyId,
   photoDraft, setPhotoDraft, analyzing, analyzeSegment, unansweredCount, openConsiderations,
   notesDraft, onNotesChange, notesStatus, notePlaceholder,
   onPrev, onNext, isFirst, isLast, doneCount, finish, finishing,
@@ -379,31 +399,20 @@ function SegmentScreen({
       <h2 style={{ fontSize: 19, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>{activeSegment.label}</h2>
       <p style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 16 }}>{activeSegment.instructions}</p>
 
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, padding: 14, marginBottom: 16 }}>
-        <button
-          onClick={() => setChecklistOpen(o => !o)}
-          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-        >
-          <span style={{ fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)' }}>
-            What to look for here ({activeSegment.items.length})
-          </span>
-          <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)' }}>{checklistOpen ? '▲ Hide' : '▼ Show'}</span>
-        </button>
-        {checklistOpen && (
-          <ul style={{ margin: '10px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {activeSegment.items.map(item => (
-              <li key={item.label} style={{ fontSize: 12, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 12, padding: '4px 10px' }}>
-                {shortLabel(item.label)}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {/* Keyed by segment so switching sides resets each section back to
+          its own default open/closed state, rather than carrying over
+          whatever was expanded on the last side. */}
+      <CollapsibleSection key={`checklist-${activeSegment.key}`} title={`What to look for here (${activeSegment.items.length})`} defaultOpen={false}>
+        <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {activeSegment.items.map(item => (
+            <li key={item.label} style={{ fontSize: 12, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 12, padding: '4px 10px' }}>
+              {shortLabel(item.label)}
+            </li>
+          ))}
+        </ul>
+      </CollapsibleSection>
 
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, padding: 14, marginBottom: 16 }}>
-        <span style={{ display: 'block', fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 8 }}>
-          Your photo
-        </span>
+      <CollapsibleSection key={`photo-${activeSegment.key}`} title="Your photo">
         <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: '0 0 10px' }}>
           One wide shot of this whole side, then check it.
         </p>
@@ -424,13 +433,10 @@ function SegmentScreen({
               : `Review ${considerations.length} consideration${considerations.length === 1 ? '' : 's'}`}
           </button>
         )}
-      </div>
+      </CollapsibleSection>
 
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, padding: 14, marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontSize: 12, fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)' }}>
-            Notes
-          </span>
+      <CollapsibleSection key={`notes-${activeSegment.key}`} title="Notes">
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
           <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--text-muted)' }}>
             {notesStatus === 'saving' ? 'Saving…' : notesStatus === 'saved' ? '✓ Saved' : ''}
           </span>
@@ -442,7 +448,7 @@ function SegmentScreen({
           rows={3}
           style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text)', fontSize: 14, padding: '10px 12px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box', minHeight: 76, resize: 'vertical' }}
         />
-      </div>
+      </CollapsibleSection>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
         <button onClick={onPrev} disabled={isFirst} style={{ flex: 1, padding: '12px', background: 'transparent', border: '1px solid var(--line)', borderRadius: 4, color: isFirst ? 'var(--line)' : 'var(--text-muted)', fontSize: 12.5, fontFamily: 'monospace', cursor: isFirst ? 'default' : 'pointer' }}>
