@@ -314,14 +314,6 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
   )
 }
 
-// Segment items are often labeled "Front — windows" to disambiguate which
-// side within lib/criteria.js's shared data (used by the inspector tool
-// too) — but the side is already the page heading here, so strip that
-// prefix for display rather than repeating it and showing a dash.
-function shortLabel(label) {
-  return label.replace(/^.*? — /, '')
-}
-
 function CollapsibleSection({ title, defaultOpen = true, children }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
@@ -397,25 +389,15 @@ function SegmentScreen({
   return (
     <>
       <h2 style={{ fontSize: 19, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>{activeSegment.label}</h2>
-      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 16 }}>{activeSegment.instructions}</p>
+      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 4 }}>{activeSegment.instructions}</p>
+      <p style={{ fontSize: 12.5, color: 'var(--text)', lineHeight: 1.5, marginBottom: 16, fontWeight: 600 }}>
+        Take one wide photo of this whole side, then check it below. We&apos;ll flag anything worth a closer look.
+      </p>
 
-      {/* Keyed by segment so switching sides resets each section back to
-          its own default open/closed state, rather than carrying over
-          whatever was expanded on the last side. */}
-      <CollapsibleSection key={`checklist-${activeSegment.key}`} title={`What to look for here (${activeSegment.items.length})`} defaultOpen={false}>
-        <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {activeSegment.items.map(item => (
-            <li key={item.label} style={{ fontSize: 12, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 12, padding: '4px 10px' }}>
-              {shortLabel(item.label)}
-            </li>
-          ))}
-        </ul>
-      </CollapsibleSection>
-
+      {/* Keyed by segment so switching sides resets back to its own
+          default open/closed state, rather than carrying over whatever
+          was expanded on the last side. */}
       <CollapsibleSection key={`photo-${activeSegment.key}`} title="Your photo">
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: '0 0 10px' }}>
-          One wide shot of this whole side, then check it.
-        </p>
         <PhotoUpload key={activeSegment.key} propertyId={propertyId} onPhotoUrl={setPhotoDraft} initialUrl={activeRow?.photo_url} />
         {hasPhoto && (
           <button onClick={analyzeSegment} disabled={analyzing} style={{ marginTop: 10, fontSize: 11.5, fontFamily: 'monospace', color: 'var(--accent)', background: 'transparent', border: '1px solid var(--accent)', borderRadius: 4, padding: '7px 12px', cursor: 'pointer', opacity: analyzing ? 0.5 : 1 }}>
