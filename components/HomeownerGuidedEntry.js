@@ -7,7 +7,7 @@ import { authFetch } from '@/lib/authFetch'
 import { GUIDED_SEGMENTS } from '@/lib/criteria'
 import PhotoUpload from './PhotoUpload'
 import { Button } from '@/components/ui/button'
-import { X } from 'lucide-react'
+import { X, RefreshCw } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialogProvider'
 
 // Homeowner-facing guided walkthrough. This is the real self-guided
@@ -224,13 +224,14 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
         </div>
 
         {/* Step nav — Overview is the first tab, not a separate header button.
-            A single arrow bookends each end of the row to signal this is a
-            sequence to click through, not a set of independent options —
-            no arrow between every pair, that read as too busy. No
-            done/checkmark styling here — that's tracked in the overview's
-            own prose instead, to avoid two competing "progress" signals. */}
+            Leading arrow is a real back button (browser history); trailing
+            arrow just bookends the row to signal this is a sequence to
+            click through, not a set of independent options — no arrow
+            between every pair, that read as too busy. No done/checkmark
+            styling here — that's tracked in the overview's own prose
+            instead, to avoid two competing "progress" signals. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-          <span style={{ color: 'var(--line)', fontSize: 11, flexShrink: 0 }}>→</span>
+          <button onClick={() => router.back()} aria-label="Back" style={{ flexShrink: 0, background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', padding: '4px 2px' }}>←</button>
           <button onClick={() => setShowOverview(true)} style={{
             flexShrink: 0, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box',
             padding: '6px 10px', borderRadius: 14, cursor: 'pointer', lineHeight: 1.3,
@@ -399,21 +400,33 @@ function SegmentScreen({
           was expanded on the last side. */}
       <CollapsibleSection key={`photo-${activeSegment.key}`} title="Your photo">
         <PhotoUpload key={activeSegment.key} propertyId={propertyId} onPhotoUrl={setPhotoDraft} initialUrl={activeRow?.photo_url} />
-        {hasPhoto && (
+
+        {hasPhoto && !alreadyChecked && (
           <button onClick={analyzeSegment} disabled={analyzing} style={{ marginTop: 10, fontSize: 11.5, fontFamily: 'monospace', color: 'var(--accent)', background: 'transparent', border: '1px solid var(--accent)', borderRadius: 4, padding: '7px 12px', cursor: 'pointer', opacity: analyzing ? 0.5 : 1 }}>
-            {analyzing ? 'Checking…' : alreadyChecked ? 'Check Again' : 'Check My Photo'}
+            {analyzing ? 'Checking…' : 'Check My Photo'}
           </button>
         )}
 
-        {alreadyChecked && considerations.length === 0 && (
-          <p style={{ marginTop: 10, fontSize: 12.5, color: 'var(--text-muted)' }}>Nothing else to flag here.</p>
-        )}
-        {considerations.length > 0 && (
-          <button onClick={openConsiderations} style={{ marginTop: 10, display: 'block', fontSize: 12.5, fontFamily: 'monospace', color: unansweredCount > 0 ? 'var(--accent)' : 'var(--text-muted)', background: 'transparent', border: `1px solid ${unansweredCount > 0 ? 'var(--accent)' : 'var(--line)'}`, borderRadius: 4, padding: '8px 12px', cursor: 'pointer' }}>
-            {unansweredCount > 0
-              ? `Review ${considerations.length} consideration${considerations.length === 1 ? '' : 's'} (${unansweredCount} unanswered)`
-              : `Review ${considerations.length} consideration${considerations.length === 1 ? '' : 's'}`}
-          </button>
+        {/* Once checked, re-checking becomes a small icon next to the
+            considerations summary rather than its own text button — and
+            that summary itself flips to a clear "addressed" state once
+            nothing's left unanswered, instead of still reading like an
+            open task. */}
+        {alreadyChecked && (
+          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+            {considerations.length === 0 ? (
+              <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: 0 }}>Nothing to flag here.</p>
+            ) : (
+              <button onClick={openConsiderations} style={{ fontSize: 12.5, fontFamily: 'monospace', color: unansweredCount > 0 ? 'var(--accent)' : 'var(--ok)', background: 'transparent', border: `1px solid ${unansweredCount > 0 ? 'var(--accent)' : 'var(--ok)'}`, borderRadius: 4, padding: '8px 12px', cursor: 'pointer' }}>
+                {unansweredCount > 0
+                  ? `Review ${considerations.length} consideration${considerations.length === 1 ? '' : 's'} (${unansweredCount} unanswered)`
+                  : `✓ All ${considerations.length} consideration${considerations.length === 1 ? '' : 's'} addressed`}
+              </button>
+            )}
+            <button onClick={analyzeSegment} disabled={analyzing} title="Check photo again" aria-label="Check photo again" style={{ flexShrink: 0, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid var(--line)', borderRadius: '50%', color: 'var(--text-muted)', cursor: 'pointer', opacity: analyzing ? 0.5 : 1 }}>
+              <RefreshCw size={13} className={analyzing ? 'animate-spin' : ''} />
+            </button>
+          </div>
         )}
       </CollapsibleSection>
 
@@ -513,9 +526,14 @@ function ConsiderationModal({ modal, setModal, propertyId, segmentKey, onUpdate 
   if (!current) return null
 
   return (
-    <div onClick={() => goTo(considerations.length)} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 12px 20px' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, width: '100%', maxWidth: 520, maxHeight: '85vh', overflowY: 'auto', padding: '22px 22px 24px', boxShadow: '0 8px 48px rgba(0,0,0,0.5)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+    <div onClick={() => goTo(considerations.length)} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
+      {/* Fixed height (not maxHeight) so the dialog stays the same size and
+          in the same place across every consideration, instead of
+          growing/shrinking (and visually jumping) based on how much
+          content each one has. Content that's shorter than the fixed
+          height just leaves empty space; longer content scrolls inside. */}
+      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, width: '100%', maxWidth: 520, height: 'min(620px, 90vh)', display: 'flex', flexDirection: 'column', padding: '22px 22px 24px', boxShadow: '0 8px 48px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexShrink: 0 }}>
           <span style={{ fontSize: 10.5, fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
             Consideration {index + 1} of {considerations.length}
           </span>
@@ -524,40 +542,44 @@ function ConsiderationModal({ modal, setModal, propertyId, segmentKey, onUpdate 
           </Button>
         </div>
 
-        <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 16, flexShrink: 0 }}>
           {considerations.map((c, i) => (
             <div key={c.id} style={{ flex: 1, height: 3, borderRadius: 2, background: i <= index ? 'var(--accent)' : 'var(--line)' }} />
           ))}
         </div>
 
-        <p style={{ fontSize: 15, color: 'var(--text)', lineHeight: 1.5, marginBottom: 16 }}>{current.text}</p>
+        {/* Scrollable body — header/progress above and Back/Next below stay
+            put; only this middle section scrolls if content runs long. */}
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          <p style={{ fontSize: 15, color: 'var(--text)', lineHeight: 1.5, marginBottom: 16 }}>{current.text}</p>
 
-        {current.isQuestion && (
-          <textarea
-            value={answerDraft}
-            onChange={e => { answerDirty.current = true; setAnswerDraft(e.target.value) }}
-            placeholder="Your answer…"
-            rows={2}
-            style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text)', fontSize: 14, padding: '10px 12px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box', minHeight: 60, resize: 'vertical', marginBottom: 12 }}
-          />
-        )}
+          {current.isQuestion && (
+            <textarea
+              value={answerDraft}
+              onChange={e => { answerDirty.current = true; setAnswerDraft(e.target.value) }}
+              placeholder="Your answer…"
+              rows={2}
+              style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text)', fontSize: 14, padding: '10px 12px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box', minHeight: 60, resize: 'vertical', marginBottom: 12 }}
+            />
+          )}
 
-        <div style={{ marginBottom: 16 }}>
-          <span style={{ display: 'block', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)', marginBottom: 6 }}>Or add a closer photo</span>
-          <PhotoUpload key={current.id} propertyId={propertyId} onPhotoUrl={setFollowUpPhoto} initialUrl={current.followUpPhotoUrl} />
-          {(followUpPhoto || current.followUpPhotoUrl) && !current.followUpResponse && (
-            <button onClick={() => runFollowUp(followUpPhoto || current.followUpPhotoUrl)} disabled={checkingFollowUp} style={{ marginTop: 8, fontSize: 11.5, fontFamily: 'monospace', color: 'var(--accent)', background: 'transparent', border: '1px solid var(--accent)', borderRadius: 4, padding: '7px 12px', cursor: 'pointer', opacity: checkingFollowUp ? 0.5 : 1 }}>
-              {checkingFollowUp ? 'Checking…' : 'Check This Photo'}
-            </button>
-          )}
-          {current.followUpResponse && (
-            <div style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 6, padding: '10px 12px', marginTop: 10, fontSize: 12.5, color: 'var(--text)', lineHeight: 1.5 }}>
-              {current.followUpResponse}
-            </div>
-          )}
+          <div style={{ marginBottom: 4 }}>
+            <span style={{ display: 'block', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)', marginBottom: 6 }}>Or add a closer photo</span>
+            <PhotoUpload key={current.id} propertyId={propertyId} onPhotoUrl={setFollowUpPhoto} initialUrl={current.followUpPhotoUrl} />
+            {(followUpPhoto || current.followUpPhotoUrl) && !current.followUpResponse && (
+              <button onClick={() => runFollowUp(followUpPhoto || current.followUpPhotoUrl)} disabled={checkingFollowUp} style={{ marginTop: 8, fontSize: 11.5, fontFamily: 'monospace', color: 'var(--accent)', background: 'transparent', border: '1px solid var(--accent)', borderRadius: 4, padding: '7px 12px', cursor: 'pointer', opacity: checkingFollowUp ? 0.5 : 1 }}>
+                {checkingFollowUp ? 'Checking…' : 'Check This Photo'}
+              </button>
+            )}
+            {current.followUpResponse && (
+              <div style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 6, padding: '10px 12px', marginTop: 10, fontSize: 12.5, color: 'var(--text)', lineHeight: 1.5 }}>
+                {current.followUpResponse}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0, paddingTop: 16 }}>
           <button onClick={() => goTo(index - 1)} disabled={index === 0} style={{ flex: 1, padding: '11px', background: 'transparent', border: '1px solid var(--line)', borderRadius: 4, color: index === 0 ? 'var(--line)' : 'var(--text-muted)', fontSize: 12.5, fontFamily: 'monospace', cursor: index === 0 ? 'default' : 'pointer' }}>
             Back
           </button>
