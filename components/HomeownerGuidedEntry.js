@@ -82,11 +82,14 @@ export default function HomeownerGuidedEntry({ user, propertyId = null, previewM
   // Keep the active tab scrolled into view in the tab row whenever it
   // changes — via the arrows, "Next Side", or tapping a tab directly —
   // so stepping forward/back never leaves the highlighted tab off-screen
-  // on narrow widths.
+  // on narrow widths. behavior: 'smooth' silently no-ops in some browser
+  // contexts (confirmed live, independent of React — likely a
+  // prefers-reduced-motion path) where 'instant' works every time, so
+  // use 'instant' rather than something that can fail invisibly.
   useEffect(() => {
     const key = showOverview ? 'overview' : activeSegment.key
     const el = tabScrollRef.current?.querySelector(`[data-tab-key="${key}"]`)
-    el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+    el?.scrollIntoView({ behavior: 'instant', inline: 'center', block: 'nearest' })
   }, [showOverview, activeIdx, activeSegment.key])
 
   // Re-sync the notes draft whenever the active segment changes, or after
